@@ -103,7 +103,7 @@ Google：Google Cloud Console → APIs & Services → Credentials → Create OAu
 
 - Authorized redirect URI：`https://inu-space-pass.<你的子域>.workers.dev/api/auth/oauth/google/callback`
 
-本地调试时把域名换成 `http://127.0.0.1:8787`，并在 GitHub / Google 各加一条本地回调。
+本地调试时把回调换成 `http://127.0.0.1:8787/api/auth/oauth/<provider>/callback`。GitHub OAuth App 只允许一个回调地址，需要临时替换；Google 可以同时添加多个 Redirect URI。
 
 ### 2. 配置密钥
 
