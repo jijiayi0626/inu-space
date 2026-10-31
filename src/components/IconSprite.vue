@@ -172,6 +172,28 @@
     <symbol id="i-google" viewBox="0 0 24 24">
       <path fill="currentColor" d="M12.48 10.92v3.28h7.84c-.24 1.84-.85 3.19-1.79 4.13-1.15 1.15-2.93 2.4-6.05 2.4-4.83 0-8.6-3.89-8.6-8.72s3.77-8.72 8.6-8.72c2.6 0 4.51 1.03 5.91 2.35l2.31-2.31C18.75 1.44 16.13 0 12.48 0 5.87 0 .31 5.39.31 12s5.56 12 12.17 12c3.57 0 6.27-1.17 8.37-3.36 2.16-2.16 2.84-5.21 2.84-7.67 0-.76-.05-1.47-.17-2.05H12.48z"/>
     </symbol>
+    <symbol id="i-key" viewBox="0 0 24 24">
+      <g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="8.1" cy="8.1" r="4.2"/>
+        <path d="M11.1 11.1 20 20M16.1 15.7l2.1-2.1M18.7 18.3l2.1-2.1"/>
+      </g>
+    </symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24">
+      <g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="8.4" y="8.4" width="11.2" height="11.2" rx="2.2"/>
+        <path d="M15.6 8.4V6.2a2 2 0 0 0-2-2H6.2a2 2 0 0 0-2 2v7.4a2 2 0 0 0 2 2h2.2"/>
+      </g>
+    </symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24">
+      <g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4.2 7h15.6M9.4 7V4.4h5.2V7M6.6 7l.9 12.2h9l.9-12.2M10.2 10.8v4.9M13.8 10.8v4.9"/>
+      </g>
+    </symbol>
+    <symbol id="i-plug" viewBox="0 0 24 24">
+      <g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 3.2v5M15 3.2v5M6.2 8.2h11.6v3.4a5.8 5.8 0 0 1-11.6 0zM12 17.4v3.4"/>
+      </g>
+    </symbol>
   </defs>
 </svg>
 </template>

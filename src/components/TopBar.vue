@@ -116,6 +116,9 @@ onBeforeUnmount(() => {
               <RouterLink class="avatar-menu-item" to="/devices" role="menuitem">
                 <AppIcon name="device" /><span>星际终端</span>
               </RouterLink>
+              <RouterLink v-if="user.isAdmin" class="avatar-menu-item admin" to="/admin" role="menuitem">
+                <AppIcon name="key" /><span>超级管理台</span>
+              </RouterLink>
               <button class="avatar-menu-item danger" type="button" role="menuitem" @click="handleLogout">
                 <AppIcon name="x" /><span>退出登录</span>
               </button>

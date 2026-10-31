@@ -166,6 +166,7 @@ function serializeUser(row) {
     starEnergyCents: row.star_energy_cents,
     miles: row.miles,
     verified: Boolean(row.verified),
+    isAdmin: Boolean(row.is_admin),
     phone: row.phone || '',
     twoFa: Boolean(row.two_fa),
     guards: {
@@ -269,12 +270,127 @@ function safeRedirect(value, origin) {
   }
 }
 
-function oauthConfig(c, id) {
+const SETTING_PREFIX = 'social.';
+
+function base64UrlToBytes(value) {
+  const pad = value.length % 4 ? '='.repeat(4 - (value.length % 4)) : '';
+  const binary = atob(value.replace(/-/g, '+').replace(/_/g, '/') + pad);
+  return Uint8Array.from(binary, (ch) => ch.charCodeAt(0));
+}
+
+async function configCryptoKey(c) {
+  if (!c.env.CONFIG_KEY) return null;
+  const digest = await crypto.subtle.digest('SHA-256', encoder.encode(String(c.env.CONFIG_KEY)));
+  return crypto.subtle.importKey('raw', digest, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+}
+
+async function encryptConfig(c, value) {
+  const key = await configCryptoKey(c);
+  if (!key) throw new Error('config_key_missing');
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoder.encode(value));
+  return `v1.${bytesToBase64Url(iv)}.${bytesToBase64Url(new Uint8Array(cipher))}`;
+}
+
+async function decryptConfig(c, stored) {
+  const key = await configCryptoKey(c);
+  if (!key) throw new Error('config_key_missing');
+  const [version, ivPart, dataPart] = String(stored).split('.');
+  if (version !== 'v1' || !ivPart || !dataPart) throw new Error('invalid_secret');
+  const plain = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: base64UrlToBytes(ivPart) },
+    key,
+    base64UrlToBytes(dataPart),
+  );
+  return new TextDecoder().decode(plain);
+}
+
+async function readSettings(db, prefix = '') {
+  const statement = prefix
+    ? db.prepare('SELECT key, value FROM app_settings WHERE key LIKE ?').bind(`${prefix}%`)
+    : db.prepare('SELECT key, value FROM app_settings');
+  const rows = await statement.all();
+  return Object.fromEntries(rows.results.map((row) => [row.key, row.value]));
+}
+
+async function saveSetting(db, key, value) {
+  await db
+    .prepare(
+      `INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+    )
+    .bind(key, String(value), nowIso())
+    .run();
+}
+
+async function socialConfigMap(c) {
+  const settings = await readSettings(c.env.DB, SETTING_PREFIX);
+  const map = {};
+
+  for (const id of Object.keys(OAUTH_PROVIDERS)) {
+    const provider = OAUTH_PROVIDERS[id];
+    const prefix = `${SETTING_PREFIX}${id}.`;
+    const hasDbConfig = Object.keys(settings).some((key) => key.startsWith(prefix));
+
+    let clientId = '';
+    let clientSecret = '';
+    let enabled = false;
+    let secretError = false;
+
+    if (hasDbConfig) {
+      clientId = String(settings[`${prefix}client_id`] || '').trim() || String(c.env[provider.clientIdEnv] || '');
+      enabled = settings[`${prefix}enabled`] === '1';
+      const stored = settings[`${prefix}client_secret`] || '';
+      if (stored) {
+        try {
+          clientSecret = await decryptConfig(c, stored);
+        } catch {
+          secretError = true;
+        }
+      }
+      if (!clientSecret) clientSecret = String(c.env[provider.clientSecretEnv] || '');
+    } else {
+      clientId = String(c.env[provider.clientIdEnv] || '');
+      clientSecret = String(c.env[provider.clientSecretEnv] || '');
+      enabled = Boolean(clientId && clientSecret);
+    }
+
+    const configured = Boolean(clientId && clientSecret);
+    map[id] = {
+      provider,
+      clientId,
+      clientSecret,
+      enabled: enabled && configured,
+      configured,
+      source: hasDbConfig ? 'db' : configured ? 'env' : 'none',
+      secretError,
+    };
+  }
+
+  return map;
+}
+
+async function oauthConfig(c, id) {
   const provider = OAUTH_PROVIDERS[id];
   if (!provider) return null;
-  const clientId = c.env[provider.clientIdEnv];
-  const clientSecret = c.env[provider.clientSecretEnv];
-  return { provider, clientId, clientSecret, enabled: Boolean(clientId && clientSecret) };
+  const map = await socialConfigMap(c);
+  return map[id];
+}
+
+function serializeSocialProvider(c, info) {
+  const origin = new URL(c.req.url).origin;
+  return {
+    id: info.provider.id,
+    label: info.provider.label,
+    backup: Boolean(info.provider.backup),
+    enabled: info.enabled,
+    configured: info.configured,
+    source: info.source,
+    clientId: info.clientId,
+    hasSecret: Boolean(info.clientSecret),
+    secretError: info.secretError,
+    callbackUrl: `${origin}/api/auth/oauth/${info.provider.id}/callback`,
+  };
 }
 
 function readOAuthCookie(c) {
@@ -511,6 +627,22 @@ async function createSessionForUser(c, user, event = '登录成功') {
   };
 }
 
+async function ensureAdminAccess(c, user) {
+  if (user.is_admin) return user;
+  const emails = String(c.env.ADMIN_EMAILS || '')
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+  if (!emails.includes(String(user.email || '').toLowerCase())) return user;
+
+  await c.env.DB.prepare(
+    "INSERT OR IGNORE INTO admin_users (user_id, granted_by, created_at) VALUES (?, 'ADMIN_EMAILS', ?)",
+  )
+    .bind(user.id, nowIso())
+    .run();
+  return { ...user, is_admin: 1 };
+}
+
 /* ------------------------------------------------------------------ */
 /* 会话                                                                 */
 /* ------------------------------------------------------------------ */
@@ -526,29 +658,52 @@ async function requireSession(c, next) {
     return next();
   }
 
-  const token = getCookie(c, SESSION_COOKIE);
-  if (!token) return jsonError(c, 401, 'UNAUTHORIZED', '登录状态已失效，请重新进入星际通行证');
-
-  const tokenHash = await sha256Hex(token);
-  const user = await c.env.DB.prepare(
-    `SELECT u.* FROM sessions s
-     JOIN users u ON u.id = s.user_id
-     WHERE s.token_hash = ? AND s.expires_at > ?`,
-  )
-    .bind(tokenHash, nowIso())
-    .first();
-
+  const user = await getSessionUser(c);
   if (!user) {
     deleteCookie(c, SESSION_COOKIE, { path: '/' });
     return jsonError(c, 401, 'UNAUTHORIZED', '登录状态已失效，请重新进入星际通行证');
   }
 
   c.set('userRow', user);
-  c.set('tokenHash', tokenHash);
   return next();
 }
 
+async function getSessionUser(c) {
+  const token = getCookie(c, SESSION_COOKIE);
+  if (!token) return null;
+
+  const tokenHash = await sha256Hex(token);
+  const user = await c.env.DB.prepare(
+    `SELECT u.*, CASE WHEN a.user_id IS NULL THEN 0 ELSE 1 END AS is_admin
+     FROM sessions s
+     JOIN users u ON u.id = s.user_id
+     LEFT JOIN admin_users a ON a.user_id = u.id
+     WHERE s.token_hash = ? AND s.expires_at > ?`,
+  )
+    .bind(tokenHash, nowIso())
+    .first();
+
+  if (user) c.set('tokenHash', tokenHash);
+  return user || null;
+}
+
 app.use('/api/*', requireSession);
+
+app.use('/api/admin', async (c, next) => {
+  const user = c.get('userRow');
+  if (!user?.is_admin) {
+    return jsonError(c, 403, 'ADMIN_REQUIRED', '需要超级管理员权限才能访问管理台');
+  }
+  return next();
+});
+
+app.use('/api/admin/*', async (c, next) => {
+  const user = c.get('userRow');
+  if (!user?.is_admin) {
+    return jsonError(c, 403, 'ADMIN_REQUIRED', '需要超级管理员权限才能访问管理台');
+  }
+  return next();
+});
 
 app.use('/api/*', async (c, next) => {
   await next();
@@ -604,23 +759,25 @@ app.post('/api/auth/login', async (c) => {
   }
 
   await db.prepare('DELETE FROM login_guards WHERE email = ?').bind(email).run();
-  const sessionUser = await createSessionForUser(c, user);
+  let sessionUser = await createSessionForUser(c, user);
+  sessionUser = await ensureAdminAccess(c, sessionUser);
   return ok(c, { user: serializeUser(sessionUser) });
 });
 
-app.get('/api/auth/providers', (c) => {
-  const providers = Object.values(OAUTH_PROVIDERS).map((provider) => ({
-    id: provider.id,
-    label: provider.label,
-    backup: Boolean(provider.backup),
-    enabled: oauthConfig(c, provider.id).enabled,
+app.get('/api/auth/providers', async (c) => {
+  const map = await socialConfigMap(c);
+  const providers = Object.values(map).map((info) => ({
+    id: info.provider.id,
+    label: info.provider.label,
+    backup: Boolean(info.provider.backup),
+    enabled: info.enabled,
   }));
   return ok(c, { providers });
 });
 
 app.get('/api/auth/oauth/:provider/start', async (c) => {
   const id = c.req.param('provider');
-  const cfg = oauthConfig(c, id);
+  const cfg = await oauthConfig(c, id);
   if (!cfg) return jsonError(c, 404, 'UNKNOWN_PROVIDER', '未知的第三方登录方式');
   if (!cfg.enabled) return jsonError(c, 503, 'OAUTH_NOT_CONFIGURED', '该第三方登录尚未配置');
 
@@ -662,7 +819,7 @@ app.get('/api/auth/oauth/:provider/start', async (c) => {
 
 app.get('/api/auth/oauth/:provider/callback', async (c) => {
   const id = c.req.param('provider');
-  const cfg = oauthConfig(c, id);
+  const cfg = await oauthConfig(c, id);
   if (!cfg || !cfg.enabled) return oauthErrorRedirect(c, 'provider_unavailable', id);
 
   const origin = new URL(c.req.url).origin;
@@ -703,9 +860,1017 @@ app.post('/api/auth/logout', async (c) => {
   return ok(c, { ok: true });
 });
 
-app.get('/api/me', (c) => {
-  const user = c.get('userRow');
+app.get('/api/me', async (c) => {
+  const user = await ensureAdminAccess(c, c.get('userRow'));
   return ok(c, { user: serializeUser(user), dateLabel: dateLabel() });
+});
+
+/* ------------------------------------------------------------------ */
+/* INU OAuth 2.0 身份提供方                                             */
+/* ------------------------------------------------------------------ */
+
+const INU_OAUTH_SCOPES = [
+  { key: 'profile', label: '星际档案', description: '昵称、INU ID、轨道编号、会员等级与头像字符' },
+  { key: 'email', label: '邮箱地址', description: '星际通行证邮箱与认证状态' },
+];
+const INU_OAUTH_SCOPE_KEYS = INU_OAUTH_SCOPES.map((item) => item.key);
+const INU_OAUTH_CODE_TTL_MS = 5 * 60 * 1000;
+const INU_OAUTH_TOKEN_TTL_MS = 60 * 60 * 1000;
+
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Max-Age': '86400',
+};
+
+function tokenJson(c, payload, status = 200, headers = {}) {
+  return c.json(payload, status, {
+    ...CORS_HEADERS,
+    'Cache-Control': 'no-store',
+    Pragma: 'no-cache',
+    ...headers,
+  });
+}
+
+function oauthJsonError(c, status, error, description, headers = {}) {
+  return tokenJson(c, { error, error_description: description }, status, headers);
+}
+
+function parseScopeList(value) {
+  return Array.from(new Set(String(value || '').split(/\s+/).filter(Boolean)));
+}
+
+function normalizeScopes(value, fallback = 'profile') {
+  const requested = parseScopeList(value || fallback);
+  if (!requested.length) return { scopes: [fallback], error: null };
+  const unknown = requested.find((scope) => !INU_OAUTH_SCOPE_KEYS.includes(scope));
+  if (unknown) return { scopes: [], error: unknown };
+  return { scopes: INU_OAUTH_SCOPE_KEYS.filter((scope) => requested.includes(scope)), error: null };
+}
+
+function isAllowedRedirectUri(value) {
+  try {
+    const url = new URL(String(value));
+    if (url.hash) return false;
+    if (url.username || url.password) return false;
+    if (url.protocol === 'https:') return true;
+    if (url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function parseRedirectUris(row) {
+  try {
+    const list = JSON.parse(row.redirect_uris || '[]');
+    return Array.isArray(list) ? list.filter((item) => typeof item === 'string' && item) : [];
+  } catch {
+    return [];
+  }
+}
+
+function serializeClient(row) {
+  return {
+    id: row.id,
+    clientId: row.client_id,
+    name: row.name,
+    description: row.description || '',
+    homepageUrl: row.homepage_url || '',
+    redirectUris: parseRedirectUris(row),
+    scopes: parseScopeList(row.scopes),
+    isPublic: Boolean(row.is_public),
+    enabled: Boolean(row.enabled),
+    createdAt: row.created_at,
+    lastUsedAt: row.last_used_at,
+  };
+}
+
+function oauthRedirectWith(redirectUri, params) {
+  const url = new URL(redirectUri);
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, String(value));
+  }
+  return url.toString();
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (ch) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  })[ch]);
+}
+
+function oauthErrorPage(c, title, message) {
+  const html = `<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${escapeHtml(title)} · INU 星际通行证</title>
+<style>
+  :root{color-scheme:dark}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{min-height:100vh;display:grid;place-items:center;padding:24px;background:#070d1a;color:#e8edf7;
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+    background-image:radial-gradient(520px 320px at 82% -6%,rgba(139,92,246,.28),transparent 62%),
+      radial-gradient(460px 300px at 8% 18%,rgba(6,182,212,.2),transparent 62%)}
+  .card{width:min(440px,100%);padding:34px 30px;border-radius:22px;border:1px solid rgba(255,255,255,.1);
+    background:linear-gradient(160deg,rgba(21,32,54,.96),rgba(11,18,32,.98));
+    box-shadow:0 28px 70px rgba(0,0,0,.5);text-align:center}
+  .mark{width:52px;height:52px;margin:0 auto 18px;border-radius:16px;display:grid;place-items:center;
+    background:linear-gradient(135deg,#165DFF,#8B5CF6);box-shadow:0 10px 26px rgba(22,93,255,.4);font-size:22px;font-weight:800}
+  h1{font-size:21px;letter-spacing:.02em;margin-bottom:10px}
+  p{font-size:13.5px;line-height:1.8;color:#a7b4cb}
+  .tag{display:inline-block;margin-top:20px;padding:6px 12px;border-radius:999px;font-size:11px;
+    letter-spacing:.14em;color:#8fb6ff;background:rgba(77,141,255,.14);border:1px solid rgba(77,141,255,.24)}
+</style>
+</head>
+<body>
+  <main class="card">
+    <div class="mark">INU</div>
+    <h1>${escapeHtml(title)}</h1>
+    <p>${escapeHtml(message)}</p>
+    <span class="tag">INU IDENTITY PROVIDER</span>
+  </main>
+</body>
+</html>`;
+  return c.html(html, 400, {
+    'Cache-Control': 'no-store',
+    'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+    'X-Content-Type-Options': 'nosniff',
+  });
+}
+
+function authInputFromQuery(c) {
+  return {
+    clientId: c.req.query('client_id') || '',
+    redirectUri: c.req.query('redirect_uri') || '',
+    responseType: c.req.query('response_type') || '',
+    scope: c.req.query('scope') || '',
+    state: c.req.query('state') || '',
+    challenge: c.req.query('code_challenge') || '',
+    challengeMethod: c.req.query('code_challenge_method') || '',
+    prompt: c.req.query('prompt') || '',
+  };
+}
+
+async function validateAuthRequest(c, input) {
+  const client = input.clientId
+    ? await c.env.DB.prepare('SELECT * FROM oauth_clients WHERE client_id = ?').bind(input.clientId).first()
+    : null;
+
+  if (!client) {
+    return {
+      pageError: ['未找到该应用', 'client_id 不存在，请确认应用是否已在 INU 超级管理台注册。'],
+    };
+  }
+  if (!client.enabled) {
+    return { pageError: ['应用已停用', '该应用目前无法使用 INU 登录，请联系应用管理员。'] };
+  }
+
+  const redirectUris = parseRedirectUris(client);
+  if (!input.redirectUri || !redirectUris.includes(input.redirectUri)) {
+    return {
+      pageError: ['回调地址不匹配', 'redirect_uri 必须与应用登记的回调地址完全一致。'],
+    };
+  }
+
+  const fail = (error, description) => ({
+    redirect: oauthRedirectWith(input.redirectUri, {
+      error,
+      error_description: description,
+      state: input.state,
+    }),
+  });
+
+  if (input.responseType !== 'code') {
+    return fail('unsupported_response_type', '仅支持 response_type=code');
+  }
+  if (input.state.length > 512) {
+    return fail('invalid_request', 'state 参数过长');
+  }
+
+  const normalized = normalizeScopes(input.scope, 'profile');
+  if (normalized.error) {
+    return fail('invalid_scope', `不支持的 scope：${normalized.error}`);
+  }
+
+  if (Boolean(client.is_public)) {
+    if (!input.challenge || input.challengeMethod !== 'S256') {
+      return fail('invalid_request', '公开客户端必须使用 PKCE，并提供 code_challenge_method=S256');
+    }
+  }
+  if (input.challenge && input.challengeMethod !== 'S256') {
+    return fail('invalid_request', '仅支持 code_challenge_method=S256');
+  }
+  if (input.challenge && (input.challenge.length < 43 || input.challenge.length > 128)) {
+    return fail('invalid_request', 'code_challenge 长度不合法');
+  }
+
+  return {
+    client,
+    redirectUri: input.redirectUri,
+    scopes: normalized.scopes,
+    state: input.state,
+    challenge: input.challenge,
+    challengeMethod: input.challenge ? input.challengeMethod : '',
+    forceConsent: input.prompt === 'consent',
+  };
+}
+
+app.get('/oauth/authorize', async (c) => {
+  const result = await validateAuthRequest(c, authInputFromQuery(c));
+  if (result.pageError) return oauthErrorPage(c, result.pageError[0], result.pageError[1]);
+  if (result.redirect) {
+    c.header('Cache-Control', 'no-store');
+    return c.redirect(result.redirect, 302);
+  }
+
+  const user = await getSessionUser(c);
+  const search = new URL(c.req.url).search;
+  const origin = new URL(c.req.url).origin;
+
+  if (!user) {
+    const login = new URL('/login', origin);
+    login.searchParams.set('redirect', `/consent${search}`);
+    c.header('Cache-Control', 'no-store');
+    return c.redirect(login.toString(), 302);
+  }
+
+  c.header('Cache-Control', 'no-store');
+  return c.redirect(`/consent${search}`, 302);
+});
+
+app.get('/api/oauth/authorize/context', async (c) => {
+  const input = authInputFromQuery(c);
+  const result = await validateAuthRequest(c, input);
+  if (result.pageError) {
+    return jsonError(c, 400, 'INVALID_AUTHORIZATION_REQUEST', result.pageError[1]);
+  }
+  if (result.redirect) return ok(c, { redirect: result.redirect });
+
+  const user = c.get('userRow');
+  const consent = await c.env.DB.prepare(
+    'SELECT scopes FROM oauth_consents WHERE user_id = ? AND client_id = ?',
+  )
+    .bind(user.id, result.client.client_id)
+    .first();
+  const granted = consent ? parseScopeList(consent.scopes) : [];
+  const approved =
+    !result.forceConsent && result.scopes.every((scope) => granted.includes(scope));
+
+  return ok(c, {
+    client: {
+      clientId: result.client.client_id,
+      name: result.client.name,
+      description: result.client.description || '',
+      homepageUrl: result.client.homepage_url || '',
+      isPublic: Boolean(result.client.is_public),
+      redirectHost: new URL(result.redirectUri).host,
+    },
+    user: {
+      name: user.display_name,
+      inuId: user.inu_id,
+      email: user.email,
+      avatarText: user.avatar_text,
+      tierLabel: tierOf(user).label,
+    },
+    scopes: INU_OAUTH_SCOPES.filter((scope) => result.scopes.includes(scope.key)),
+    approved,
+    forceConsent: result.forceConsent,
+  });
+});
+
+app.post('/api/oauth/authorize/decision', async (c) => {
+  const origin = new URL(c.req.url).origin;
+  const requestOrigin = c.req.header('Origin');
+  if (requestOrigin && requestOrigin !== origin) {
+    return jsonError(c, 403, 'ORIGIN_MISMATCH', '跨站授权请求已被拒绝');
+  }
+  const fetchSite = c.req.header('Sec-Fetch-Site');
+  if (fetchSite && fetchSite !== 'same-origin') {
+    return jsonError(c, 403, 'ORIGIN_MISMATCH', '跨站授权请求已被拒绝');
+  }
+
+  const body = await readJson(c);
+  if (!body) return jsonError(c, 400, 'INVALID_INPUT', '请求内容无法解析');
+
+  const input = {
+    clientId: String(body.client_id || ''),
+    redirectUri: String(body.redirect_uri || ''),
+    responseType: String(body.response_type || ''),
+    scope: String(body.scope || ''),
+    state: String(body.state || ''),
+    challenge: String(body.code_challenge || ''),
+    challengeMethod: String(body.code_challenge_method || ''),
+    prompt: String(body.prompt || ''),
+  };
+  const result = await validateAuthRequest(c, input);
+  if (result.pageError) {
+    return jsonError(c, 400, 'INVALID_AUTHORIZATION_REQUEST', result.pageError[1]);
+  }
+  if (result.redirect) return ok(c, { redirect: result.redirect });
+
+  const decision = String(body.decision || '');
+  if (decision === 'deny') {
+    return ok(c, {
+      redirect: oauthRedirectWith(result.redirectUri, {
+        error: 'access_denied',
+        error_description: '用户拒绝了本次授权请求',
+        state: result.state,
+      }),
+    });
+  }
+  if (decision !== 'approve') {
+    return jsonError(c, 400, 'INVALID_DECISION', '未知的授权结果');
+  }
+
+  const user = c.get('userRow');
+  const code = `inu_ac_${randomBase64Url(32)}`;
+  const codeHash = await sha256Hex(code);
+  const now = nowIso();
+  const scopes = result.scopes.join(' ');
+
+  await c.env.DB.prepare('DELETE FROM oauth_authorization_codes WHERE expires_at <= ?').bind(now).run();
+  await c.env.DB.prepare(
+    `INSERT INTO oauth_authorization_codes
+       (code_hash, client_id, user_id, redirect_uri, scopes, code_challenge, code_challenge_method, expires_at, used_at, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
+  )
+    .bind(
+      codeHash,
+      result.client.client_id,
+      user.id,
+      result.redirectUri,
+      scopes,
+      result.challenge || null,
+      result.challengeMethod || null,
+      new Date(Date.now() + INU_OAUTH_CODE_TTL_MS).toISOString(),
+      now,
+    )
+    .run();
+
+  await c.env.DB.prepare(
+    `INSERT INTO oauth_consents (user_id, client_id, scopes, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(user_id, client_id) DO UPDATE SET scopes = excluded.scopes, updated_at = excluded.updated_at`,
+  )
+    .bind(user.id, result.client.client_id, scopes, now, now)
+    .run();
+
+  try {
+    await addActivity(
+      c.env.DB,
+      user.id,
+      '授权第三方应用',
+      `${result.client.name} · ${result.scopes.join(' / ')}`,
+      'blue',
+      'i-globe',
+    );
+  } catch {
+    /* 活动记录失败不影响授权 */
+  }
+
+  return ok(c, {
+    redirect: oauthRedirectWith(result.redirectUri, { code, state: result.state }),
+  });
+});
+
+function readOAuthBody(c) {
+  const type = c.req.header('Content-Type') || '';
+  if (type.includes('application/json')) return readJson(c);
+  return c.req.parseBody().catch(() => ({}));
+}
+
+function decodeBasicCredentials(value) {
+  try {
+    const binary = atob(value);
+    const decoded = new TextDecoder().decode(Uint8Array.from(binary, (ch) => ch.charCodeAt(0)));
+    const index = decoded.indexOf(':');
+    if (index < 0) return null;
+    const decode = (part) => {
+      try {
+        return decodeURIComponent(part);
+      } catch {
+        return part;
+      }
+    };
+    return { clientId: decode(decoded.slice(0, index)), clientSecret: decode(decoded.slice(index + 1)) };
+  } catch {
+    return null;
+  }
+}
+
+function clientCredentialsFromRequest(c, body) {
+  let clientId = String(body.client_id || '').trim();
+  let clientSecret = String(body.client_secret || '');
+  const authorization = c.req.header('Authorization') || '';
+  const usedBasic = authorization.startsWith('Basic ');
+  if (usedBasic) {
+    const decoded = decodeBasicCredentials(authorization.slice(6).trim());
+    if (decoded) {
+      clientId = decoded.clientId.trim();
+      clientSecret = decoded.clientSecret;
+    }
+  }
+  return { clientId, clientSecret, usedBasic };
+}
+
+async function authenticateOAuthClient(c, clientId, clientSecret) {
+  if (!clientId) return { error: 'invalid_client' };
+  const client = await c.env.DB.prepare('SELECT * FROM oauth_clients WHERE client_id = ?')
+    .bind(clientId)
+    .first();
+  if (!client || !client.enabled) return { error: 'invalid_client' };
+
+  if (client.is_public) {
+    if (clientSecret) return { error: 'invalid_client' };
+    return { client };
+  }
+  if (!clientSecret || !client.client_secret_hash) return { error: 'invalid_client' };
+  const hash = await sha256Hex(clientSecret);
+  if (!safeEqual(hash, client.client_secret_hash)) return { error: 'invalid_client' };
+  return { client };
+}
+
+app.options('/oauth/token', (c) => c.body(null, 204, CORS_HEADERS));
+app.options('/oauth/userinfo', (c) => c.body(null, 204, CORS_HEADERS));
+app.options('/oauth/revoke', (c) => c.body(null, 204, CORS_HEADERS));
+
+app.post('/oauth/token', async (c) => {
+  const body = (await readOAuthBody(c)) || {};
+  const grantType = String(body.grant_type || '');
+  if (grantType !== 'authorization_code') {
+    return oauthJsonError(c, 400, 'unsupported_grant_type', '仅支持 authorization_code');
+  }
+
+  const { clientId, clientSecret, usedBasic } = clientCredentialsFromRequest(c, body);
+  const auth = await authenticateOAuthClient(c, clientId, clientSecret);
+  if (auth.error) {
+    return oauthJsonError(c, 401, 'invalid_client', '客户端认证失败', {
+      'WWW-Authenticate': `Basic realm="inu-oauth"${usedBasic ? ', charset="UTF-8"' : ''}`,
+    });
+  }
+  const client = auth.client;
+
+  const code = String(body.code || '');
+  const redirectUri = String(body.redirect_uri || '');
+  if (!code || !redirectUri) {
+    return oauthJsonError(c, 400, 'invalid_request', '缺少 code 或 redirect_uri');
+  }
+
+  const codeHash = await sha256Hex(code);
+  const record = await c.env.DB.prepare('SELECT * FROM oauth_authorization_codes WHERE code_hash = ?')
+    .bind(codeHash)
+    .first();
+
+  if (
+    !record ||
+    record.client_id !== client.client_id ||
+    record.redirect_uri !== redirectUri ||
+    record.used_at ||
+    new Date(record.expires_at).getTime() <= Date.now()
+  ) {
+    return oauthJsonError(c, 400, 'invalid_grant', '授权码无效、已使用或已过期');
+  }
+
+  const verifier = String(body.code_verifier || '');
+  if (record.code_challenge) {
+    if (!verifier) return oauthJsonError(c, 400, 'invalid_grant', '缺少 code_verifier');
+    const computed = await sha256Base64Url(verifier);
+    if (!safeEqual(computed, record.code_challenge)) {
+      return oauthJsonError(c, 400, 'invalid_grant', 'code_verifier 与 code_challenge 不匹配');
+    }
+  } else if (client.is_public) {
+    return oauthJsonError(c, 400, 'invalid_grant', '公开客户端必须使用 PKCE');
+  }
+
+  const marked = await c.env.DB.prepare(
+    'UPDATE oauth_authorization_codes SET used_at = ? WHERE code_hash = ? AND used_at IS NULL',
+  )
+    .bind(nowIso(), codeHash)
+    .run();
+  if (!marked.meta?.changes) {
+    return oauthJsonError(c, 400, 'invalid_grant', '授权码已被使用');
+  }
+
+  const token = `inu_at_${randomBase64Url(32)}`;
+  const tokenHash = await sha256Hex(token);
+  const createdAt = nowIso();
+  const expiresAt = new Date(Date.now() + INU_OAUTH_TOKEN_TTL_MS).toISOString();
+
+  await c.env.DB.prepare(
+    `INSERT INTO oauth_tokens (token_hash, client_id, user_id, scopes, expires_at, created_at, last_used_at, revoked_at)
+     VALUES (?, ?, ?, ?, ?, ?, NULL, NULL)`,
+  )
+    .bind(tokenHash, client.client_id, record.user_id, record.scopes, expiresAt, createdAt)
+    .run();
+  await c.env.DB.prepare('UPDATE oauth_clients SET last_used_at = ? WHERE client_id = ?')
+    .bind(createdAt, client.client_id)
+    .run();
+  await c.env.DB.prepare('DELETE FROM oauth_tokens WHERE expires_at <= ?').bind(createdAt).run();
+
+  return tokenJson(c, {
+    access_token: token,
+    token_type: 'Bearer',
+    expires_in: Math.floor(INU_OAUTH_TOKEN_TTL_MS / 1000),
+    scope: record.scopes,
+  });
+});
+
+app.get('/oauth/userinfo', async (c) => {
+  const authorization = c.req.header('Authorization') || '';
+  const token = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
+  if (!token) {
+    return tokenJson(c, { error: 'invalid_token', error_description: '缺少 Bearer Token' }, 401, {
+      'WWW-Authenticate': 'Bearer realm="inu-oauth"',
+    });
+  }
+
+  const tokenHash = await sha256Hex(token);
+  const user = await c.env.DB.prepare(
+    `SELECT t.scopes AS token_scopes, u.*
+     FROM oauth_tokens t
+     JOIN users u ON u.id = t.user_id
+     WHERE t.token_hash = ? AND t.revoked_at IS NULL AND t.expires_at > ?`,
+  )
+    .bind(tokenHash, nowIso())
+    .first();
+
+  if (!user) {
+    return tokenJson(c, { error: 'invalid_token', error_description: 'Token 无效或已过期' }, 401, {
+      'WWW-Authenticate': 'Bearer realm="inu-oauth", error="invalid_token"',
+    });
+  }
+
+  await c.env.DB.prepare('UPDATE oauth_tokens SET last_used_at = ? WHERE token_hash = ?')
+    .bind(nowIso(), tokenHash)
+    .run();
+
+  const scopes = parseScopeList(user.token_scopes);
+  const payload = { sub: user.inu_id };
+  if (scopes.includes('profile')) {
+    payload.name = user.display_name;
+    payload.preferred_username = user.display_name;
+    payload.inu_id = user.inu_id;
+    payload.orbit = user.orbit_code;
+    payload.avatar_text = user.avatar_text;
+    payload.tier = user.member_tier;
+    payload.tier_label = tierOf(user).label;
+  }
+  if (scopes.includes('email')) {
+    payload.email = user.email;
+    payload.email_verified = Boolean(user.verified);
+  }
+  return tokenJson(c, payload);
+});
+
+app.post('/oauth/revoke', async (c) => {
+  const body = (await readOAuthBody(c)) || {};
+  const { clientId, clientSecret, usedBasic } = clientCredentialsFromRequest(c, body);
+  const auth = await authenticateOAuthClient(c, clientId, clientSecret);
+  if (auth.error) {
+    return oauthJsonError(c, 401, 'invalid_client', '客户端认证失败', {
+      'WWW-Authenticate': `Basic realm="inu-oauth"${usedBasic ? ', charset="UTF-8"' : ''}`,
+    });
+  }
+
+  const token = String(body.token || '');
+  if (token) {
+    const tokenHash = await sha256Hex(token);
+    await c.env.DB.prepare(
+      'UPDATE oauth_tokens SET revoked_at = ? WHERE token_hash = ? AND client_id = ? AND revoked_at IS NULL',
+    )
+      .bind(nowIso(), tokenHash, auth.client.client_id)
+      .run();
+  }
+  return tokenJson(c, { ok: true });
+});
+
+app.get('/.well-known/oauth-authorization-server', (c) => {
+  const origin = new URL(c.req.url).origin;
+  return c.json(
+    {
+      issuer: origin,
+      authorization_endpoint: `${origin}/oauth/authorize`,
+      token_endpoint: `${origin}/oauth/token`,
+      userinfo_endpoint: `${origin}/oauth/userinfo`,
+      revocation_endpoint: `${origin}/oauth/revoke`,
+      scopes_supported: INU_OAUTH_SCOPE_KEYS,
+      response_types_supported: ['code'],
+      grant_types_supported: ['authorization_code'],
+      token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post', 'none'],
+      revocation_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post', 'none'],
+      code_challenge_methods_supported: ['S256'],
+      service_documentation: `${origin}/admin`,
+    },
+    200,
+    {
+      ...CORS_HEADERS,
+      'Cache-Control': 'public, max-age=300',
+    },
+  );
+});
+
+/* ------------------------------------------------------------------ */
+/* 超级管理台 API                                                       */
+/* ------------------------------------------------------------------ */
+
+async function addAdminAudit(c, action, detail) {
+  try {
+    const user = c.get('userRow');
+    await c.env.DB.prepare(
+      'INSERT INTO admin_audit_logs (admin_id, action, detail, ip, created_at) VALUES (?, ?, ?, ?, ?)',
+    )
+      .bind(user.id, action, detail, clientIp(c), nowIso())
+      .run();
+  } catch {
+    /* 审计写入失败不阻断管理操作 */
+  }
+}
+
+async function adminList(c) {
+  const rows = await c.env.DB.prepare(
+    `SELECT a.user_id, a.granted_by, a.created_at AS granted_at, u.email, u.display_name, u.inu_id
+     FROM admin_users a JOIN users u ON u.id = a.user_id
+     ORDER BY a.created_at ASC`,
+  ).all();
+  return rows.results.map((row) => ({
+    userId: row.user_id,
+    email: row.email,
+    name: row.display_name,
+    inuId: row.inu_id,
+    grantedBy: row.granted_by,
+    grantedAt: row.granted_at,
+  }));
+}
+
+app.get('/api/admin', async (c) => {
+  const db = c.env.DB;
+  const now = nowIso();
+  const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+  const origin = new URL(c.req.url).origin;
+
+  const [users, verified, clientsStats, clients, activeTokens, issued, consents, admins, audit, providerMap] =
+    await Promise.all([
+      db.prepare('SELECT COUNT(*) AS count FROM users').first(),
+      db.prepare('SELECT COUNT(*) AS count FROM users WHERE verified = 1').first(),
+      db.prepare(
+        'SELECT COUNT(*) AS total, COALESCE(SUM(CASE WHEN enabled = 1 THEN 1 ELSE 0 END), 0) AS enabled FROM oauth_clients',
+      ).first(),
+      db.prepare('SELECT * FROM oauth_clients ORDER BY created_at DESC LIMIT 50').all(),
+      db.prepare('SELECT COUNT(*) AS count FROM oauth_tokens WHERE revoked_at IS NULL AND expires_at > ?')
+        .bind(now)
+        .first(),
+      db.prepare('SELECT COUNT(*) AS count FROM oauth_tokens WHERE created_at >= ?').bind(weekAgo).first(),
+      db.prepare('SELECT COUNT(*) AS count FROM oauth_consents').first(),
+      adminList(c),
+      db.prepare(
+        `SELECT l.id, l.action, l.detail, l.ip, l.created_at, u.display_name AS admin_name
+         FROM admin_audit_logs l LEFT JOIN users u ON u.id = l.admin_id
+         ORDER BY l.created_at DESC LIMIT 20`,
+      ).all(),
+      socialConfigMap(c),
+    ]);
+
+  return ok(c, {
+    stats: {
+      users: users?.count || 0,
+      verifiedUsers: verified?.count || 0,
+      clients: clientsStats?.total || 0,
+      enabledClients: clientsStats?.enabled || 0,
+      activeTokens: activeTokens?.count || 0,
+      issued7d: issued?.count || 0,
+      consents: consents?.count || 0,
+    },
+    providers: Object.values(providerMap).map((info) => serializeSocialProvider(c, info)),
+    clients: clients.results.map(serializeClient),
+    admins,
+    audit: audit.results.map((row) => ({
+      id: row.id,
+      action: row.action,
+      detail: row.detail,
+      ip: row.ip,
+      adminName: row.admin_name || '系统',
+      createdAt: row.created_at,
+    })),
+    endpoints: {
+      issuer: origin,
+      authorization: `${origin}/oauth/authorize`,
+      token: `${origin}/oauth/token`,
+      userinfo: `${origin}/oauth/userinfo`,
+      revocation: `${origin}/oauth/revoke`,
+      discovery: `${origin}/.well-known/oauth-authorization-server`,
+    },
+    scopes: INU_OAUTH_SCOPES,
+    config: {
+      secretKeyReady: Boolean(c.env.CONFIG_KEY),
+      envAdminCount: String(c.env.ADMIN_EMAILS || '').split(',').map((item) => item.trim()).filter(Boolean).length,
+    },
+  });
+});
+
+app.patch('/api/admin/providers/:id', async (c) => {
+  const id = c.req.param('id');
+  const provider = OAUTH_PROVIDERS[id];
+  if (!provider) return jsonError(c, 404, 'UNKNOWN_PROVIDER', '未知的第三方登录方式');
+
+  const body = await readJson(c);
+  if (!body) return jsonError(c, 400, 'INVALID_INPUT', '请求内容无法解析');
+
+  const clientId = String(body.clientId ?? '').trim();
+  const clientSecret = String(body.clientSecret ?? '');
+  const enabled = Boolean(body.enabled);
+  const clearSecret = Boolean(body.clearSecret);
+
+  if (clientId.length > 300) return jsonError(c, 400, 'INVALID_CLIENT_ID', 'Client ID 过长');
+  if (clientSecret.length > 1000) return jsonError(c, 400, 'INVALID_CLIENT_SECRET', 'Client Secret 过长');
+  if (clientSecret && !c.env.CONFIG_KEY) {
+    return jsonError(
+      c,
+      400,
+      'CONFIG_KEY_MISSING',
+      '未配置 CONFIG_KEY，无法加密保存 Client Secret。请先为 Worker 设置 CONFIG_KEY 密钥',
+    );
+  }
+
+  const current = (await socialConfigMap(c))[id];
+  const effectiveClientId = clientId || current.clientId;
+  const effectiveSecret = clearSecret
+    ? String(c.env[provider.clientSecretEnv] || '')
+    : clientSecret || current.clientSecret;
+  if (enabled && (!effectiveClientId || !effectiveSecret)) {
+    return jsonError(c, 400, 'INCOMPLETE_CONFIG', '启用前请填写 Client ID 与 Client Secret');
+  }
+
+  const prefix = `${SETTING_PREFIX}${id}.`;
+  await saveSetting(c.env.DB, `${prefix}client_id`, clientId);
+  if (clientSecret) {
+    await saveSetting(c.env.DB, `${prefix}client_secret`, await encryptConfig(c, clientSecret));
+  } else if (clearSecret) {
+    await c.env.DB.prepare('DELETE FROM app_settings WHERE key = ?').bind(`${prefix}client_secret`).run();
+  }
+  await saveSetting(c.env.DB, `${prefix}enabled`, enabled ? '1' : '0');
+
+  await addAdminAudit(
+    c,
+    '更新第三方登录',
+    `${provider.label} · ${enabled ? '已启用' : '已停用'}${clientSecret ? ' · 已更新密钥' : ''}`,
+  );
+
+  const updated = (await socialConfigMap(c))[id];
+  return ok(c, { provider: serializeSocialProvider(c, updated) });
+});
+
+function normalizeRedirectUris(value) {
+  const source = Array.isArray(value) ? value : String(value || '').split(/\r?\n/);
+  const seen = new Set();
+  const list = [];
+  for (const item of source) {
+    const uri = String(item || '').trim();
+    if (!uri || seen.has(uri)) continue;
+    seen.add(uri);
+    list.push(uri);
+  }
+  return list;
+}
+
+app.post('/api/admin/oauth-clients', async (c) => {
+  const body = await readJson(c);
+  if (!body) return jsonError(c, 400, 'INVALID_INPUT', '请求内容无法解析');
+
+  const name = String(body.name || '').trim();
+  if ([...name].length < 2 || [...name].length > 40) {
+    return jsonError(c, 400, 'INVALID_NAME', '应用名称需为 2–40 个字符');
+  }
+  const description = String(body.description || '').trim().slice(0, 200);
+  const homepageUrl = String(body.homepageUrl || '').trim();
+  if (homepageUrl && !/^https?:\/\//i.test(homepageUrl)) {
+    return jsonError(c, 400, 'INVALID_HOMEPAGE', '应用主页需以 http:// 或 https:// 开头');
+  }
+
+  const redirectUris = normalizeRedirectUris(body.redirectUris);
+  if (!redirectUris.length || redirectUris.length > 10) {
+    return jsonError(c, 400, 'INVALID_REDIRECT_URIS', '请填写 1–10 个回调地址');
+  }
+  const invalidUri = redirectUris.find((uri) => !isAllowedRedirectUri(uri));
+  if (invalidUri) {
+    return jsonError(
+      c,
+      400,
+      'INVALID_REDIRECT_URI',
+      `回调地址不合法：${invalidUri}（需为 https，或 localhost 的 http）`,
+    );
+  }
+
+  const normalized = normalizeScopes(
+    Array.isArray(body.scopes) ? body.scopes.join(' ') : body.scopes || 'profile email',
+    'profile email',
+  );
+  if (normalized.error) return jsonError(c, 400, 'INVALID_SCOPE', `不支持的 scope：${normalized.error}`);
+
+  const isPublic = Boolean(body.isPublic);
+  const enabled = body.enabled === undefined ? true : Boolean(body.enabled);
+  const clientId = `inu_${randomBase64Url(18)}`;
+  const clientSecret = isPublic ? '' : `inu_sk_${randomBase64Url(32)}`;
+  const clientSecretHash = clientSecret ? await sha256Hex(clientSecret) : null;
+  const createdAt = nowIso();
+
+  const inserted = await c.env.DB.prepare(
+    `INSERT INTO oauth_clients
+       (client_id, client_secret_hash, name, description, homepage_url, redirect_uris, scopes,
+        is_public, enabled, created_by, created_at, last_used_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+  )
+    .bind(
+      clientId,
+      clientSecretHash,
+      name,
+      description,
+      homepageUrl,
+      JSON.stringify(redirectUris),
+      normalized.scopes.join(' '),
+      isPublic ? 1 : 0,
+      enabled ? 1 : 0,
+      c.get('userRow').id,
+      createdAt,
+    )
+    .run();
+
+  const row = await c.env.DB.prepare('SELECT * FROM oauth_clients WHERE id = ?')
+    .bind(inserted.meta?.last_row_id)
+    .first();
+  await addAdminAudit(c, '创建 OAuth 应用', `${name} · ${clientId}`);
+  return ok(c, { client: serializeClient(row), clientSecret: clientSecret || null });
+});
+
+app.patch('/api/admin/oauth-clients/:id', async (c) => {
+  const id = Number(c.req.param('id'));
+  const row = await c.env.DB.prepare('SELECT * FROM oauth_clients WHERE id = ?').bind(id).first();
+  if (!row) return jsonError(c, 404, 'NOT_FOUND', '未找到该应用');
+
+  const body = await readJson(c);
+  if (!body) return jsonError(c, 400, 'INVALID_INPUT', '请求内容无法解析');
+  if (body.isPublic !== undefined && Boolean(body.isPublic) !== Boolean(row.is_public)) {
+    return jsonError(c, 400, 'IMMUTABLE_CLIENT_TYPE', '应用类型创建后不可修改，请新建应用');
+  }
+
+  const name = body.name === undefined ? row.name : String(body.name).trim();
+  if ([...name].length < 2 || [...name].length > 40) {
+    return jsonError(c, 400, 'INVALID_NAME', '应用名称需为 2–40 个字符');
+  }
+  const description =
+    body.description === undefined ? row.description : String(body.description).trim().slice(0, 200);
+  const homepageUrl = body.homepageUrl === undefined ? row.homepage_url : String(body.homepageUrl).trim();
+  if (homepageUrl && !/^https?:\/\//i.test(homepageUrl)) {
+    return jsonError(c, 400, 'INVALID_HOMEPAGE', '应用主页需以 http:// 或 https:// 开头');
+  }
+
+  const redirectUris =
+    body.redirectUris === undefined ? parseRedirectUris(row) : normalizeRedirectUris(body.redirectUris);
+  if (!redirectUris.length || redirectUris.length > 10) {
+    return jsonError(c, 400, 'INVALID_REDIRECT_URIS', '请填写 1–10 个回调地址');
+  }
+  const invalidUri = redirectUris.find((uri) => !isAllowedRedirectUri(uri));
+  if (invalidUri) {
+    return jsonError(c, 400, 'INVALID_REDIRECT_URI', `回调地址不合法：${invalidUri}`);
+  }
+
+  let scopes = parseScopeList(row.scopes);
+  if (body.scopes !== undefined) {
+    const normalized = normalizeScopes(
+      Array.isArray(body.scopes) ? body.scopes.join(' ') : body.scopes,
+      'profile',
+    );
+    if (normalized.error) return jsonError(c, 400, 'INVALID_SCOPE', `不支持的 scope：${normalized.error}`);
+    scopes = normalized.scopes;
+  }
+
+  const enabled = body.enabled === undefined ? Boolean(row.enabled) : Boolean(body.enabled);
+
+  await c.env.DB.prepare(
+    `UPDATE oauth_clients
+     SET name = ?, description = ?, homepage_url = ?, redirect_uris = ?, scopes = ?, enabled = ?
+     WHERE id = ?`,
+  )
+    .bind(
+      name,
+      description,
+      homepageUrl,
+      JSON.stringify(redirectUris),
+      scopes.join(' '),
+      enabled ? 1 : 0,
+      id,
+    )
+    .run();
+
+  if (!enabled) {
+    await c.env.DB.prepare('UPDATE oauth_tokens SET revoked_at = ? WHERE client_id = ? AND revoked_at IS NULL')
+      .bind(nowIso(), row.client_id)
+      .run();
+  }
+
+  const updated = await c.env.DB.prepare('SELECT * FROM oauth_clients WHERE id = ?').bind(id).first();
+  await addAdminAudit(c, '更新 OAuth 应用', `${name} · ${enabled ? '已启用' : '已停用'}`);
+  return ok(c, { client: serializeClient(updated) });
+});
+
+app.post('/api/admin/oauth-clients/:id/rotate-secret', async (c) => {
+  const id = Number(c.req.param('id'));
+  const row = await c.env.DB.prepare('SELECT * FROM oauth_clients WHERE id = ?').bind(id).first();
+  if (!row) return jsonError(c, 404, 'NOT_FOUND', '未找到该应用');
+  if (row.is_public) return jsonError(c, 400, 'PUBLIC_CLIENT', '公开客户端没有 Client Secret');
+
+  const clientSecret = `inu_sk_${randomBase64Url(32)}`;
+  const clientSecretHash = await sha256Hex(clientSecret);
+  await c.env.DB.prepare('UPDATE oauth_clients SET client_secret_hash = ? WHERE id = ?')
+    .bind(clientSecretHash, id)
+    .run();
+  await addAdminAudit(c, '轮换 OAuth 密钥', `${row.name} · ${row.client_id}`);
+  return ok(c, { client: serializeClient(row), clientSecret });
+});
+
+app.delete('/api/admin/oauth-clients/:id', async (c) => {
+  const id = Number(c.req.param('id'));
+  const row = await c.env.DB.prepare('SELECT * FROM oauth_clients WHERE id = ?').bind(id).first();
+  if (!row) return jsonError(c, 404, 'NOT_FOUND', '未找到该应用');
+
+  await c.env.DB.batch([
+    c.env.DB.prepare('DELETE FROM oauth_authorization_codes WHERE client_id = ?').bind(row.client_id),
+    c.env.DB.prepare('DELETE FROM oauth_tokens WHERE client_id = ?').bind(row.client_id),
+    c.env.DB.prepare('DELETE FROM oauth_consents WHERE client_id = ?').bind(row.client_id),
+    c.env.DB.prepare('DELETE FROM oauth_clients WHERE id = ?').bind(id),
+  ]);
+  await addAdminAudit(c, '删除 OAuth 应用', `${row.name} · ${row.client_id}`);
+  return ok(c, { ok: true });
+});
+
+app.get('/api/admin/audit', async (c) => {
+  const limit = Math.max(1, Math.min(100, Number(c.req.query('limit')) || 50));
+  const rows = await c.env.DB.prepare(
+    `SELECT l.id, l.action, l.detail, l.ip, l.created_at, u.display_name AS admin_name
+     FROM admin_audit_logs l LEFT JOIN users u ON u.id = l.admin_id
+     ORDER BY l.created_at DESC LIMIT ?`,
+  )
+    .bind(limit)
+    .all();
+  return ok(c, {
+    logs: rows.results.map((row) => ({
+      id: row.id,
+      action: row.action,
+      detail: row.detail,
+      ip: row.ip,
+      adminName: row.admin_name || '系统',
+      createdAt: row.created_at,
+    })),
+  });
+});
+
+app.post('/api/admin/admins', async (c) => {
+  const body = await readJson(c);
+  const email = String(body?.email || '').trim().toLowerCase();
+  if (!email) return jsonError(c, 400, 'INVALID_INPUT', '请输入要授权的账号邮箱');
+
+  const user = await c.env.DB.prepare('SELECT * FROM users WHERE email = ?').bind(email).first();
+  if (!user) return jsonError(c, 404, 'USER_NOT_FOUND', '该邮箱尚未注册 INU 通行证');
+  const exists = await c.env.DB.prepare('SELECT 1 AS hit FROM admin_users WHERE user_id = ?')
+    .bind(user.id)
+    .first();
+  if (exists) return jsonError(c, 409, 'ALREADY_ADMIN', '该账号已经是超级管理员');
+
+  await c.env.DB.prepare('INSERT INTO admin_users (user_id, granted_by, created_at) VALUES (?, ?, ?)')
+    .bind(user.id, `admin:${c.get('userRow').id}`, nowIso())
+    .run();
+  await addAdminAudit(c, '授予管理员', `${user.display_name} · ${user.email}`);
+  return ok(c, { admins: await adminList(c) });
+});
+
+app.delete('/api/admin/admins/:userId', async (c) => {
+  const userId = Number(c.req.param('userId'));
+  const current = c.get('userRow');
+  if (userId === current.id) {
+    return jsonError(c, 400, 'SELF_REMOVE', '不能移除自己的管理员权限');
+  }
+
+  const exists = await c.env.DB.prepare('SELECT 1 AS hit FROM admin_users WHERE user_id = ?')
+    .bind(userId)
+    .first();
+  if (!exists) return jsonError(c, 404, 'NOT_FOUND', '该账号不是管理员');
+
+  const count = await c.env.DB.prepare('SELECT COUNT(*) AS count FROM admin_users').first();
+  if ((count?.count || 0) <= 1) {
+    return jsonError(c, 400, 'LAST_ADMIN', '至少需要保留一位超级管理员');
+  }
+
+  const user = await c.env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(userId).first();
+  await c.env.DB.prepare('DELETE FROM admin_users WHERE user_id = ?').bind(userId).run();
+  await addAdminAudit(c, '移除管理员', user ? `${user.display_name} · ${user.email}` : `用户 #${userId}`);
+  return ok(c, { admins: await adminList(c) });
 });
 
 /* ------------------------------------------------------------------ */
@@ -1429,19 +2594,30 @@ app.patch('/api/supply/address', async (c) => {
 /* ------------------------------------------------------------------ */
 
 app.notFound((c) => {
-  if (c.req.path.startsWith('/api/')) {
-    return c.json({ error: { code: 'NOT_FOUND', message: '接口不存在' } }, 404, { 'Cache-Control': 'no-store' });
+  if (
+    c.req.path.startsWith('/api/') ||
+    c.req.path.startsWith('/oauth/') ||
+    c.req.path.startsWith('/.well-known/')
+  ) {
+    return c.json({ error: { code: 'NOT_FOUND', message: '接口不存在' } }, 404, {
+      ...CORS_HEADERS,
+      'Cache-Control': 'no-store',
+    });
   }
   return c.env.ASSETS.fetch(c.req.raw);
 });
 
 app.onError((error, c) => {
   console.error('worker error', error);
-  if (c.req.path.startsWith('/api/')) {
+  if (
+    c.req.path.startsWith('/api/') ||
+    c.req.path.startsWith('/oauth/') ||
+    c.req.path.startsWith('/.well-known/')
+  ) {
     return c.json(
       { error: { code: 'INTERNAL', message: '星际网络暂时波动，请稍后重试' } },
       500,
-      { 'Cache-Control': 'no-store' },
+      { ...CORS_HEADERS, 'Cache-Control': 'no-store' },
     );
   }
   return c.env.ASSETS.fetch(c.req.raw);

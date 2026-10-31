@@ -9,8 +9,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "worker:dev": "wrangler dev --local --port 8787",
-    "db:local": "wrangler d1 execute inu-space-db --local --file=./migrations/0001_schema.sql && wrangler d1 execute inu-space-db --local --file=./migrations/0002_seed.sql && wrangler d1 execute inu-space-db --local --file=./migrations/0003_oauth.sql",
-    "db:remote": "wrangler d1 execute inu-space-db --remote --file=./migrations/0001_schema.sql && wrangler d1 execute inu-space-db --remote --file=./migrations/0002_seed.sql && wrangler d1 execute inu-space-db --remote --file=./migrations/0003_oauth.sql",
+    "db:local": "wrangler d1 execute inu-space-db --local --file=./migrations/0001_schema.sql && wrangler d1 execute inu-space-db --local --file=./migrations/0002_seed.sql && wrangler d1 execute inu-space-db --local --file=./migrations/0003_oauth.sql && wrangler d1 execute inu-space-db --local --file=./migrations/0004_admin_oauth.sql",
+    "db:remote": "wrangler d1 execute inu-space-db --remote --file=./migrations/0001_schema.sql && wrangler d1 execute inu-space-db --remote --file=./migrations/0002_seed.sql && wrangler d1 execute inu-space-db --remote --file=./migrations/0003_oauth.sql && wrangler d1 execute inu-space-db --remote --file=./migrations/0004_admin_oauth.sql",
     "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {

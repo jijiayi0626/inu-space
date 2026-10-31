@@ -2,6 +2,11 @@
 
 Vue 3 + Cloudflare Workers + D1 实现的「INU 无限宇宙」账号中心。包含 8 个账号业务页面、登录鉴权、真实的 D1 数据读写、会员/协议/补给站业务流程，以及一套可直接部署到 Cloudflare 的工程结构。
 
+在此之上还实现了：
+
+- **超级管理台** `/admin`：配置 GitHub / Google 登录方式、管理第三方 OAuth 应用、查看审计日志与管理员。
+- **INU OAuth 2.0 身份提供方**：其他应用可以用「使用 INU 账号登录」接入，支持授权码模式、PKCE、userinfo 与令牌撤销。
+
 演示账号：`xiaoyiyi@inu.space` / `inu2026`
 
 ## 技术栈
@@ -24,6 +29,8 @@ Vue 3 + Cloudflare Workers + D1 实现的「INU 无限宇宙」账号中心。�
 - **会员中心**：等级进度、四档会员权益、粒子流水。
 - **协议中心**：协议列表、待签署提醒、签署后发放 50 INU 粒子。
 - **补给站**：会员价商品、星能兑换下单、订单记录、收货坐标。
+- **超级管理台**：登录方式配置、OAuth 应用与密钥管理、接入指引、审计日志、管理员授权。
+- **INU 授权登录**：第三方应用通过 `/oauth/authorize` 获取授权码，兑换令牌后读取用户资料。
 
 > 演示环境中的「星际公民认证」为模拟核验，会直接解锁补给站下单能力；生产环境请接入真实的实名/活体核验服务。
 
@@ -32,7 +39,14 @@ Vue 3 + Cloudflare Workers + D1 实现的「INU 无限宇宙」账号中心。�
 ```bash
 npm install
 
-# 初始化本地 D1（建表 + 演示数据）
+# 本地环境变量：填写 CONFIG_KEY（管理台密钥加密用）
+# 需要超级管理员时再填 ADMIN_EMAILS
+cp .dev.vars.example .dev.vars
+
+# 生成本地 CONFIG_KEY
+openssl rand -base64 32
+
+# 初始化本地 D1（建表 + 演示数据 + OAuth + 管理台）
 npm run db:local
 
 # 构建前端，再由 Worker 同时托管静态资源与 /api
@@ -40,6 +54,8 @@ npm run build
 npm run worker:dev
 # http://127.0.0.1:8787
 ```
+
+本地把 `ADMIN_EMAILS=xiaoyiyi@inu.space` 写入 `.dev.vars` 后，演示账号登录即拥有超级管理员权限；不要把演示账号用作生产管理员。
 
 前后端分离调试（可选）：
 
@@ -71,13 +87,44 @@ npm run dev          # 终端 B，Vite 在 5173，/api 已代理到 8787
    npm run db:remote
    ```
 
-4. 构建并部署：
+4. 配置 Worker 密钥：
+
+   ```bash
+   # 管理台保存第三方登录密钥时需要，缺失将无法在后台保存 Secret
+   npx wrangler secret put CONFIG_KEY
+
+   # 可选：生产环境直接授予超级管理员的邮箱（逗号分隔）
+   npx wrangler secret put ADMIN_EMAILS
+
+   # 可选：不希望在管理台填写时，也可继续用环境变量提供社交登录
+   npx wrangler secret put GITHUB_CLIENT_ID
+   npx wrangler secret put GITHUB_CLIENT_SECRET
+   npx wrangler secret put GOOGLE_CLIENT_ID
+   npx wrangler secret put GOOGLE_CLIENT_SECRET
+   ```
+
+   `CONFIG_KEY` 用于 AES-GCM 加密保存在 D1 的 Client Secret，生成方式：
+   `openssl rand -base64 32`。部署后也可在管理台「登录方式」里填写 GitHub / Google 的 Client ID 与 Secret，保存后立即生效，无需重新部署。
+
+5. 构建并部署：
 
    ```bash
    npm run deploy
    ```
 
-5. 打开 `https://inu-space-pass.<你的子域>.workers.dev`。如需自定义域名，在
+6. 首次进入 `/admin` 需要超级管理员。二选一：
+
+   - 部署前设置 `ADMIN_EMAILS`，对应邮箱注册/登录后自动获得权限；
+   - 或登录一次后，在 D1 中手动授权：
+
+     ```sql
+     INSERT OR IGNORE INTO admin_users (user_id, granted_by, created_at)
+     SELECT id, 'manual', datetime('now') FROM users WHERE email = 'you@example.com';
+     ```
+
+   **不要**把演示账号 `xiaoyiyi@inu.space` 设为生产管理员。
+
+7. 打开 `https://inu-space-pass.<你的子域>.workers.dev`。如需自定义域名，在
    Cloudflare 控制台 → Workers & Pages → `inu-space-pass` → Settings → Domains & Routes 绑定。
 
 ### 上线前必做
@@ -88,44 +135,89 @@ npm run dev          # 终端 B，Vite 在 5173，/api 已代理到 8787
   `100000` 以上（哈希串内已记录迭代次数，调整后旧密码仍可验证，用户下次改密时自动升级）。
 - 为生产邮箱/短信/支付接入真实服务；当前相关按钮为演示提示。
 
-## 第三方登录（GitHub / Google）
+## 超级管理台
 
-登录页支持 GitHub（主）与 Google（备用）OAuth。未配置的提供方会自动隐藏，邮箱密码登录不受影响。
+访问 `/admin`，只有超级管理员可见入口。管理员来源有两类：
 
-### 1. 创建 OAuth 应用
+- `ADMIN_EMAILS` 环境变量中的邮箱，登录或访问 `/api/me` 时自动写入 `admin_users`；
+- 已登录的管理员在「管理员」分区按邮箱授予，或直接在 D1 的 `admin_users` 中插入。
 
-GitHub：Settings → Developer settings → OAuth Apps → New OAuth App
+管理台包含：
 
-- Homepage URL：`https://inu-space-pass.<你的子域>.workers.dev`
-- Authorization callback URL：`https://inu-space-pass.<你的子域>.workers.dev/api/auth/oauth/github/callback`
+| 分区 | 能力 |
+| --- | --- |
+| 登录方式 | 配置 GitHub / Google 的 Client ID、Client Secret、启用状态，保存即生效 |
+| 应用接入 | 创建、编辑、停用、删除 OAuth 应用，重置 Client Secret，配置回调地址与权限范围 |
+| 接入指引 | 展示端点、scope、接入步骤和服务端示例代码 |
+| 审计日志 | 记录创建/删除应用、重置密钥、修改登录方式、授予/移除管理员等操作 |
+| 管理员 | 按邮箱授予或移除超级管理员，内置「至少保留一名管理员」与禁止自我移除保护 |
 
-Google：Google Cloud Console → APIs & Services → Credentials → Create OAuth client ID → Web application
+保存在 D1 的社交登录 Secret 使用 `CONFIG_KEY` 派生的 AES-GCM 密钥加密，管理接口永远不会回传明文。未设置 `CONFIG_KEY` 时，管理台只能保留已有密钥，不能写入新的 Secret。第三方应用的 Client Secret 只在创建和轮换时显示一次，D1 仅保存 SHA-256 摘要。
 
-- Authorized redirect URI：`https://inu-space-pass.<你的子域>.workers.dev/api/auth/oauth/google/callback`
+## 用 INU 账号登录（OAuth 2.0 身份提供方）
 
-本地调试时把回调换成 `http://127.0.0.1:8787/api/auth/oauth/<provider>/callback`。GitHub OAuth App 只允许一个回调地址，需要临时替换；Google 可以同时添加多个 Redirect URI。
+INU 同时是一个标准的 OAuth 2.0 授权服务器。第三方应用把用户引导到 `/oauth/authorize`，用户同意后应用用授权码换取 `access_token`，再调用 `/oauth/userinfo` 获取资料。
 
-### 2. 配置密钥
+### 端点
 
-```bash
-npx wrangler secret put GITHUB_CLIENT_ID
-npx wrangler secret put GITHUB_CLIENT_SECRET
-npx wrangler secret put GOOGLE_CLIENT_ID
-npx wrangler secret put GOOGLE_CLIENT_SECRET
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/oauth/authorize` | 授权入口，校验 client、redirect_uri、scope、PKCE 后跳转同意页 |
+| POST | `/oauth/token` | 用授权码换令牌，支持 `client_secret_basic` / `client_secret_post` |
+| GET | `/oauth/userinfo` | Bearer Token 读取用户资料 |
+| POST | `/oauth/revoke` | 撤销 access_token |
+| GET | `/.well-known/oauth-authorization-server` | 授权服务器元数据 |
+
+### 接入步骤
+
+1. 在管理台「应用接入」创建应用，填写回调地址和 scope，保存返回的 `client_id` 与 `client_secret`（Secret 只显示一次）。
+2. 生成 `state` 与 PKCE 参数，把用户引导到：
+
+   ```text
+   /oauth/authorize?response_type=code&client_id=...&redirect_uri=...&scope=profile%20email&state=...&code_challenge=...&code_challenge_method=S256
+   ```
+
+3. 用户同意后回调到 `redirect_uri?code=...&state=...`。服务端用授权码换令牌：
+
+   ```bash
+   curl -X POST https://<你的域名>/oauth/token \
+     -u "$CLIENT_ID:$CLIENT_SECRET" \
+     -d grant_type=authorization_code \
+     -d code="$CODE" \
+     -d redirect_uri="$REDIRECT_URI" \
+     -d code_verifier="$CODE_VERIFIER"
+   ```
+
+4. 用 `Authorization: Bearer <access_token>` 请求 `/oauth/userinfo`。
+
+### 规则
+
+- 授权码有效期 5 分钟，只能使用一次；`access_token` 有效期 1 小时，不提供 refresh token。
+- 机密客户端可使用 Client Secret 认证；公开客户端（SPA、移动应用）不保存 Secret，必须使用 PKCE `S256`。
+- `redirect_uri` 必须与管理台登记的地址完全一致；仅允许 `https://`，本地调试可用 `http://localhost` / `http://127.0.0.1`。
+- scope 目前支持 `profile`（昵称、INU ID、轨道编号、会员等级、头像字符）与 `email`（邮箱和认证状态）。
+- 已授权过的应用默认跳过同意页；使用 `prompt=consent` 可强制重新展示。
+- `userinfo` 的 `sub` 是 INU 用户 ID；`email_verified` 表示该账号已通过 INU 的星际公民认证，不表示邮箱控制权验证。
+
+## GitHub / Google 登录（登录 INU 用）
+
+登录页支持 GitHub（主）与 Google（备用）。未配置的提供方会自动隐藏，邮箱密码登录不受影响。
+
+回调地址：
+
+```text
+https://<你的域名>/api/auth/oauth/github/callback
+https://<你的域名>/api/auth/oauth/google/callback
 ```
 
-本地写入 `.dev.vars`（已在 `.gitignore` 中，可参考 `.dev.vars.example`）：
+本地调试使用 `http://127.0.0.1:8787/api/auth/oauth/<provider>/callback`。GitHub OAuth App 只允许一个回调地址，本地调试时需要临时替换；Google 可同时添加多个。
 
-```dotenv
-GITHUB_CLIENT_ID=...
-GITHUB_CLIENT_SECRET=...
-GOOGLE_CLIENT_ID=...
-GOOGLE_CLIENT_SECRET=...
-```
+配置方式二选一：
 
-设置后刷新登录页即可看到按钮；`GET /api/auth/providers` 会返回各提供方的启用状态。
+- 部署后进入 `/admin` →「登录方式」填写并启用，保存立即生效；
+- 或在 Worker 环境变量中设置 `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` / `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`。
 
-### 3. 行为说明
+行为说明：
 
 - 只接受提供方返回的**已验证邮箱**；没有验证邮箱会拒绝登录。
 - 邮箱已存在时自动绑定到该用户，不重复建号；否则创建新用户（无可用密码，只能走第三方登录）。
@@ -134,15 +226,15 @@ GOOGLE_CLIENT_SECRET=...
 
 ## API
 
-所有 `/api/*` 响应均为 `private, no-store`，需要登录态。
+所有 `/api/*` 响应均为 `private, no-store`。除登录、社交登录回调、提供方状态等公开端点外，其余接口都需要登录态；`/api/admin/*` 还需要超级管理员权限。
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | POST | `/api/auth/login` | 邮箱密码登录，失败 5 次锁定 15 分钟 |
 | POST | `/api/auth/logout` | 退出并清除会话 |
-| GET | `/api/auth/providers` | 第三方登录提供方启用状态（公开） |
-| GET | `/api/auth/oauth/:provider/start` | 发起 OAuth 授权（公开，302 到提供方） |
-| GET | `/api/auth/oauth/:provider/callback` | OAuth 回调，登录/建号后 302 回应用（公开） |
+| GET | `/api/auth/providers` | 社交登录提供方启用状态（公开） |
+| GET | `/api/auth/oauth/:provider/start` | 发起 GitHub / Google 登录（公开） |
+| GET | `/api/auth/oauth/:provider/callback` | 社交登录回调（公开） |
 | GET | `/api/me` | 当前用户 |
 | GET | `/api/overview` | 总览聚合数据 |
 | GET / PATCH | `/api/profile` | 读取 / 更新资料 |
@@ -163,6 +255,15 @@ GOOGLE_CLIENT_SECRET=...
 | GET | `/api/supply` | 补给站聚合数据 |
 | POST | `/api/supply/orders` | 星能兑换下单 |
 | PATCH | `/api/supply/address` | 保存收货坐标 |
+| GET | `/api/oauth/authorize/context` | 读取授权请求、用户与 scope（需登录） |
+| POST | `/api/oauth/authorize/decision` | 同意 / 拒绝授权并签发授权码 |
+| GET | `/api/admin` | 管理台聚合数据（管理员） |
+| PATCH | `/api/admin/providers/:id` | 保存 GitHub / Google 登录配置（管理员） |
+| POST | `/api/admin/oauth-clients` | 创建 OAuth 应用（管理员） |
+| PATCH / DELETE | `/api/admin/oauth-clients/:id` | 编辑 / 删除 OAuth 应用（管理员） |
+| POST | `/api/admin/oauth-clients/:id/rotate-secret` | 重置 Client Secret（管理员） |
+| GET | `/api/admin/audit` | 审计日志（管理员） |
+| POST / DELETE | `/api/admin/admins`、`/api/admin/admins/:userId` | 授予 / 移除管理员（管理员） |
 
 ## 请求次数优化
 
@@ -171,7 +272,7 @@ GOOGLE_CLIENT_SECRET=...
 - GET 结果内存缓存 30 秒；
 - 并发相同请求自动合并（in-flight dedupe）；
 - 任意写操作后清空缓存，保证数据一致；
-- 通过 `run_worker_first: ["/api/*"]` 让静态资源留在边缘，不消耗 Worker 调用；
+- 通过 `run_worker_first: ["/api/*", "/oauth/*", "/.well-known/*"]` 让 API 与 OAuth 端点进入 Worker，其余静态资源留在边缘；
 - D1 为会话、日志、设备、订单、粒子流水等查询建立索引。
 
 这些措施能显著降低 Function 调用与 D1 读取次数。若流量继续增长，正确做法是升级 **Workers Paid**（以及按需的 D1 付费额度），而不是拆分多个 Cloudflare 账号。
@@ -193,16 +294,18 @@ inu-cloud/
 │  ├─ index.js          # Hono API、鉴权、业务逻辑
 │  └─ data.js           # 会员等级、商品、通知类型等静态数据
 ├─ migrations/
-│  ├─ 0001_schema.sql   # D1 表结构与索引
-│  ├─ 0002_seed.sql     # 演示账号与演示数据
-│  └─ 0003_oauth.sql    # 第三方登录绑定表
+│  ├─ 0001_schema.sql       # D1 表结构与索引
+│  ├─ 0002_seed.sql         # 演示账号与演示数据
+│  ├─ 0003_oauth.sql        # GitHub / Google 登录绑定表
+│  └─ 0004_admin_oauth.sql  # 管理台、OAuth 应用、授权码/令牌/同意记录
 ├─ src/
-│  ├─ views/            # 8 个业务页面 + 登录页
-│  ├─ components/       # AppShell、TopBar、SideBar、Modal、Toast 等
-│  ├─ lib/              # API 客户端、session、格式化、主题、toast
-│  ├─ assets/base.css   # 设计系统与页面样式
+│  ├─ views/                # 8 个业务页面 + 登录 / 管理台 / 授权同意页
+│  ├─ components/           # AppShell、TopBar、SideBar、Modal、Toast 等
+│  ├─ lib/                  # API 客户端、session、格式化、主题、toast
+│  ├─ assets/base.css       # 设计系统与页面样式
 │  ├─ router.js
 │  └─ main.js
+├─ .dev.vars.example        # 本地环境变量模板
 ├─ wrangler.jsonc
 └─ vite.config.js
 ```

@@ -9,7 +9,7 @@ defineEmits(['close']);
 const route = useRoute();
 const user = computed(() => session.user || {});
 
-const groups = [
+const baseGroups = [
   {
     label: '账号中心',
     links: [
@@ -28,6 +28,17 @@ const groups = [
     ],
   },
 ];
+
+const groups = computed(() => {
+  if (!user.value.isAdmin) return baseGroups;
+  return [
+    ...baseGroups,
+    {
+      label: '超级管理台',
+      links: [{ to: '/admin', icon: 'key', label: '控制中枢', key: 'admin' }],
+    },
+  ];
+});
 
 function isActive(key) {
   return route.meta.side === key;

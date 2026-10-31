@@ -66,6 +66,14 @@ function fillDemo() {
   error.value = '';
 }
 
+function navigateAfterLogin(target) {
+  if (target.startsWith('/oauth/') || target.startsWith('/.well-known/')) {
+    window.location.assign(target);
+    return;
+  }
+  router.replace(target);
+}
+
 async function submit() {
   if (loading.value) return;
   error.value = '';
@@ -79,7 +87,7 @@ async function submit() {
   try {
     const user = await login(email.value.trim(), password.value);
     toast(`欢迎回来，${user.name}`);
-    router.replace(redirect.value);
+    navigateAfterLogin(redirect.value);
   } catch (err) {
     error.value = err.message || '登录失败，请稍后重试';
   } finally {

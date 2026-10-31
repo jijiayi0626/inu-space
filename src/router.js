@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
-import { ensureSession } from './lib/session';
+import { ensureSession, session } from './lib/session';
 import { toast } from './lib/toast';
 
 const routes = [
@@ -8,6 +8,18 @@ const routes = [
     name: 'login',
     component: () => import('./views/LoginView.vue'),
     meta: { public: true, title: '进入星际通行证' },
+  },
+  {
+    path: '/consent',
+    name: 'consent',
+    component: () => import('./views/ConsentView.vue'),
+    meta: { public: true, title: '授权登录' },
+  },
+  {
+    path: '/admin',
+    name: 'admin',
+    component: () => import('./views/AdminView.vue'),
+    meta: { title: '超级管理台', top: '', side: 'admin', admin: true },
   },
   {
     path: '/',
@@ -71,6 +83,19 @@ const router = createRouter({
 });
 
 router.beforeEach(async (to) => {
+  if (to.name === 'consent') {
+    try {
+      const signedIn = await ensureSession();
+      if (!signedIn) {
+        return { name: 'login', query: { redirect: to.fullPath } };
+      }
+    } catch (error) {
+      toast(error.message || '无法连接星际网络', 'error');
+      return { name: 'login', query: { redirect: to.fullPath } };
+    }
+    return true;
+  }
+
   if (to.meta.public) {
     if (to.name === 'login') {
       try {
@@ -87,6 +112,10 @@ router.beforeEach(async (to) => {
     const signedIn = await ensureSession();
     if (!signedIn) {
       return { name: 'login', query: { redirect: to.fullPath } };
+    }
+    if (to.meta.admin && !session.user?.isAdmin) {
+      toast('需要超级管理员权限才能进入管理台', 'error');
+      return { name: 'overview' };
     }
   } catch (error) {
     toast(error.message || '无法连接星际网络', 'error');

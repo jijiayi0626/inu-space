@@ -827,6 +827,10 @@ body.modal-open{overflow:hidden}
 .avatar-menu-item .icon{width:16px;height:16px;color:var(--text-mute);transition:color .16s}
 .avatar-menu-item:hover{background:var(--primary-light);color:var(--primary)}
 .avatar-menu-item:hover .icon{color:var(--primary)}
+.avatar-menu-item.admin{color:var(--accent)}
+.avatar-menu-item.admin .icon{color:var(--accent)}
+.avatar-menu-item.admin:hover{background:rgba(139,92,246,.12);color:var(--accent)}
+.avatar-menu-item.admin:hover .icon{color:var(--accent)}
 .avatar-menu-item.danger:hover{background:rgba(245,63,63,.09);color:var(--danger)}
 .avatar-menu-item.danger:hover .icon{color:var(--danger)}
 .menu-enter-active,.menu-leave-active{transition:opacity .16s ease,transform .16s ease}

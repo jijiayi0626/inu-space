@@ -6,3 +6,10 @@ GITHUB_CLIENT_SECRET=
 # Google OAuth Client：Google Cloud Console → Credentials → OAuth client ID
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
+
+# 管理台配置加密密钥（用于加密保存在 D1 的第三方登录 Client Secret）
+# 生成方式：openssl rand -base64 32
+CONFIG_KEY=
+
+# 可选：启动时自动授予这些邮箱超级管理员权限（逗号分隔）
+ADMIN_EMAILS=
