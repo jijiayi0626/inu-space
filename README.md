@@ -84,7 +84,11 @@ npm run dev          # 终端 B，Vite 在 5173，/api 已代理到 8787
 3. 初始化远程库：
 
    ```bash
+   # 首次部署：建表 + 演示数据 + OAuth + 管理台
    npm run db:remote
+
+   # 已有数据的库升级：只执行建表 / OAuth / 管理台迁移，不会重置演示账号
+   npm run db:migrate:remote
    ```
 
 4. 配置 Worker 密钥：
