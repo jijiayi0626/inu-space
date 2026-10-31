@@ -14,6 +14,7 @@ const { data, reload } = useAsyncData(({ force }) => api.get('/admin', { force, 
 const tab = ref('providers');
 const tabs = [
   { key: 'providers', label: '登录方式', icon: 'shield' },
+  { key: 'settings', label: '站点设置', icon: 'grid' },
   { key: 'clients', label: '应用接入', icon: 'plug' },
   { key: 'access', label: '接入指引', icon: 'file' },
   { key: 'audit', label: '审计日志', icon: 'clock' },
@@ -28,6 +29,97 @@ const audit = computed(() => data.value?.audit || []);
 const endpoints = computed(() => data.value?.endpoints || {});
 const scopes = computed(() => data.value?.scopes || []);
 const configReady = computed(() => Boolean(data.value?.config?.secretKeyReady));
+
+/* ---------- 站点设置 ---------- */
+
+const siteForm = reactive({
+  demoVisible: false,
+  demoReadOnly: true,
+  noticeEnabled: false,
+  noticeText: '',
+  noticeLevel: 'info',
+  footerText: '',
+  loginWelcome: '',
+  saving: false,
+});
+
+watch(
+  () => data.value?.settings,
+  (settings) => {
+    if (!settings) return;
+    siteForm.demoVisible = Boolean(settings.demoVisible);
+    siteForm.demoReadOnly = Boolean(settings.demoReadOnly);
+    siteForm.noticeEnabled = Boolean(settings.noticeEnabled);
+    siteForm.noticeText = settings.noticeText || '';
+    siteForm.noticeLevel = settings.noticeLevel || 'info';
+    siteForm.footerText = settings.footerText || '';
+    siteForm.loginWelcome = settings.loginWelcome || '';
+  },
+  { immediate: true },
+);
+
+async function saveSiteSettings() {
+  if (siteForm.saving) return;
+  if (siteForm.noticeEnabled && !siteForm.noticeText.trim()) {
+    toast('开启公告前请填写公告内容', 'error');
+    return;
+  }
+  siteForm.saving = true;
+  try {
+    await api.patch('/admin/settings', {
+      demoVisible: siteForm.demoVisible,
+      demoReadOnly: siteForm.demoReadOnly,
+      noticeEnabled: siteForm.noticeEnabled,
+      noticeText: siteForm.noticeText.trim(),
+      noticeLevel: siteForm.noticeLevel,
+      footerText: siteForm.footerText.trim(),
+      loginWelcome: siteForm.loginWelcome.trim(),
+    });
+    toast('站点设置已保存，刷新页面后生效');
+    await reload({ silent: true });
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    siteForm.saving = false;
+  }
+}
+
+/* ---------- AI 接入文档 ---------- */
+
+async function readIntegrationDoc() {
+  const response = await fetch('/inu-oauth-integration.md', { cache: 'no-store' });
+  if (!response.ok) throw new Error('接入文档读取失败，请确认已部署最新版本');
+  const template = await response.text();
+  const origin = endpoints.value.issuer || window.location.origin;
+  return template.split('{{INU_ORIGIN}}').join(origin);
+}
+
+async function downloadIntegrationDoc() {
+  try {
+    const text = await readIntegrationDoc();
+    const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'inu-oauth-integration.md';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast('AI 接入文档已下载');
+  } catch (error) {
+    toast(error.message || '下载失败', 'error');
+  }
+}
+
+async function copyIntegrationDoc() {
+  try {
+    const text = await readIntegrationDoc();
+    await copyText(text, '接入文档已复制，可直接粘贴给 AI');
+  } catch (error) {
+    toast(error.message || '复制失败', 'error');
+  }
+}
 
 const providerForms = reactive({
   github: { clientId: '', clientSecret: '', enabled: false, saving: false },
@@ -329,7 +421,7 @@ function sourceLabel(source) {
 </script>
 
 <template>
-  <PageHeader title="超级管理台" sub="配置第三方登录、管理 OAuth 应用与审计记录。">
+  <PageHeader title="超级管理台" sub="配置第三方登录、站点设置、OAuth 应用与审计记录。">
     <template #meta>
       <span class="badge badge-blue">SUPER ADMIN</span>
       <span class="head-date">仅超级管理员可见</span>
@@ -345,7 +437,7 @@ function sourceLabel(source) {
       <div class="admin-banner-copy">
         <span class="admin-kicker"><span class="pulse-dot" />INU IDENTITY CONTROL</span>
         <h2>一张通行证，连接整个星际生态。</h2>
-        <p>让第三方应用通过 INU 账号登录，同时统一管理 GitHub / Google 登录入口。</p>
+        <p>让第三方应用通过 INU 账号登录，同时统一管理登录入口、站点呈现与访问权限。</p>
       </div>
       <div class="admin-orbit" aria-hidden="true">
         <span class="admin-ring ring-one" />
@@ -487,6 +579,120 @@ function sourceLabel(source) {
       </div>
     </section>
 
+    <!-- 站点设置 -->
+    <section v-if="tab === 'settings'" class="admin-section">
+      <div class="admin-section-head">
+        <div>
+          <h2>站点设置</h2>
+          <p>控制演示账号入口、只读模式与全站文案，保存后立即写入 D1。</p>
+        </div>
+      </div>
+
+      <div class="settings-grid">
+        <article class="card settings-card">
+          <div class="settings-head">
+            <span class="settings-icon is-orange"><AppIcon name="idcard" /></span>
+            <div><strong>演示账号</strong><span>{{ data.settings.demoEmail }}</span></div>
+          </div>
+
+          <label class="setting-row">
+            <span>
+              <strong>在登录页展示演示入口</strong>
+              <em>关闭后登录页不再显示演示账号与密码，但手动输入仍可登录。</em>
+            </span>
+            <span class="switch">
+              <input v-model="siteForm.demoVisible" type="checkbox" />
+              <span class="track" />
+              <span class="thumb" />
+            </span>
+          </label>
+
+          <label class="setting-row">
+            <span>
+              <strong>演示账号只读</strong>
+              <em>开启后，演示账号的所有写操作都会被服务端拒绝，只保留浏览、登录与授权。</em>
+            </span>
+            <span class="switch">
+              <input v-model="siteForm.demoReadOnly" type="checkbox" />
+              <span class="track" />
+              <span class="thumb" />
+            </span>
+          </label>
+
+          <div class="settings-cred">
+            <span>演示凭据</span>
+            <code>{{ data.settings.demoEmail }} · {{ data.settings.demoPassword }}</code>
+          </div>
+        </article>
+
+        <article class="card settings-card">
+          <div class="settings-head">
+            <span class="settings-icon is-blue"><AppIcon name="message" /></span>
+            <div><strong>站点公告</strong><span>同时显示在登录页与登录后的页面顶部</span></div>
+          </div>
+
+          <label class="setting-row">
+            <span>
+              <strong>启用站点公告</strong>
+              <em>适合发布维护通知、活动提醒或重要变更。</em>
+            </span>
+            <span class="switch">
+              <input v-model="siteForm.noticeEnabled" type="checkbox" />
+              <span class="track" />
+              <span class="thumb" />
+            </span>
+          </label>
+
+          <div class="field">
+            <label for="notice-text">公告内容</label>
+            <textarea
+              id="notice-text"
+              v-model="siteForm.noticeText"
+              class="input modal-textarea"
+              rows="3"
+              maxlength="200"
+              placeholder="例如：今晚 23:00 进行星际网络维护，预计 30 分钟。"
+            />
+          </div>
+
+          <div class="field">
+            <label for="notice-level">公告级别</label>
+            <select id="notice-level" v-model="siteForm.noticeLevel" class="input">
+              <option value="info">信息 · 蓝色</option>
+              <option value="success">完成 · 绿色</option>
+              <option value="warn">提醒 · 橙色</option>
+            </select>
+          </div>
+        </article>
+
+        <article class="card settings-card settings-card-wide">
+          <div class="settings-head">
+            <span class="settings-icon is-purple"><AppIcon name="pen" /></span>
+            <div><strong>页面文案</strong><span>自定义登录页欢迎语与全站页脚</span></div>
+          </div>
+
+          <div class="settings-fields">
+            <div class="field">
+              <label for="login-welcome">登录页欢迎语</label>
+              <input id="login-welcome" v-model="siteForm.loginWelcome" class="input" maxlength="120" placeholder="使用你的 INU 星际档案继续旅程。" />
+            </div>
+            <div class="field">
+              <label for="footer-text">页脚文案</label>
+              <input id="footer-text" v-model="siteForm.footerText" class="input" maxlength="120" placeholder="© 2026 INU 无限宇宙 · 星际通行证" />
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <div class="settings-foot">
+        <p class="hint">保存后写入 D1：新的登录页立即生效；已登录页面刷新后同步最新公告与页脚。</p>
+        <button class="btn btn-primary" type="button" :disabled="siteForm.saving" @click="saveSiteSettings">
+          <span v-if="siteForm.saving" class="spinner" />
+          <span>{{ siteForm.saving ? '保存中…' : '保存站点设置' }}</span>
+        </button>
+      </div>
+    </section>
+
     <!-- 应用接入 -->
     <section v-if="tab === 'clients'" class="admin-section">
       <div class="admin-section-head">
@@ -570,6 +776,21 @@ function sourceLabel(source) {
 
     <!-- 接入指引 -->
     <section v-if="tab === 'access'" class="admin-section">
+      <div class="card doc-card">
+        <span class="doc-card-mark"><AppIcon name="file" /></span>
+        <div class="doc-card-copy">
+          <strong>AI 接入文档</strong>
+          <p>端点、PKCE 流程、令牌交换、错误处理与安全检查已整理成 Markdown，下载后可直接交给其他项目的 AI 执行接入。</p>
+        </div>
+        <div class="doc-card-actions">
+          <button class="btn btn-primary btn-sm" type="button" @click="downloadIntegrationDoc">
+            <AppIcon name="file" />
+            <span>下载 MD</span>
+          </button>
+          <button class="btn btn-ghost btn-sm" type="button" @click="copyIntegrationDoc">复制全文</button>
+        </div>
+      </div>
+
       <div class="card">
         <div class="card-head">
           <h2>OAuth 2.0 接入端点</h2>
@@ -910,6 +1131,47 @@ const profile = await fetch(endpoints.userinfo, {
 .provider-note .icon{width:17px;height:17px;color:var(--primary);margin-top:2px;flex:none}
 .provider-note p{font-size:12px;line-height:1.7;color:var(--text-sub)}
 
+.settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.settings-card{padding:20px;display:flex;flex-direction:column;gap:14px}
+.settings-card-wide{grid-column:1/-1}
+.settings-head{display:flex;align-items:center;gap:11px}
+.settings-icon{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;flex:none}
+.settings-icon .icon{width:18px;height:18px}
+.settings-icon.is-orange{color:var(--warning);background:rgba(255,125,0,.12)}
+.settings-icon.is-blue{color:var(--primary);background:var(--primary-light)}
+.settings-icon.is-purple{color:var(--accent);background:rgba(139,92,246,.12)}
+.settings-head div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.settings-head strong{font-size:14px;font-weight:700}
+.settings-head span{font-size:11.5px;color:var(--text-mute);word-break:break-all}
+.setting-row{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:12px;
+  border-radius:10px;background:var(--soft);border:1px solid var(--border-soft);cursor:pointer;
+}
+.setting-row>span:first-child{display:flex;flex-direction:column;gap:2px;min-width:0}
+.setting-row strong{font-size:12.5px;font-weight:600}
+.setting-row em{font-style:normal;font-size:11px;color:var(--text-mute);line-height:1.6}
+.setting-row .switch{flex:none;margin-top:2px}
+.settings-cred{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:11px;color:var(--text-mute)}
+.settings-cred code{
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--text-sub);
+  padding:5px 8px;border-radius:7px;background:var(--soft);border:1px solid var(--border-soft);
+}
+.settings-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.settings-fields .field{min-width:0}
+.settings-foot{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.settings-foot .hint{margin:0;flex:1;min-width:220px}
+
+.doc-card{display:flex;align-items:center;gap:16px;padding:20px;flex-wrap:wrap}
+.doc-card-mark{
+  width:44px;height:44px;border-radius:12px;display:grid;place-items:center;flex:none;
+  color:#fff;background:linear-gradient(135deg,#165DFF,#8B5CF6);box-shadow:0 8px 20px rgba(22,93,255,.24);
+}
+.doc-card-mark .icon{width:21px;height:21px}
+.doc-card-copy{flex:1;min-width:220px;display:flex;flex-direction:column;gap:3px}
+.doc-card-copy strong{font-size:14.5px;font-weight:700}
+.doc-card-copy p{font-size:12px;line-height:1.65;color:var(--text-mute)}
+.doc-card-actions{display:flex;gap:8px;flex-wrap:wrap}
+
 .admin-section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}
 .admin-section-head h2{font-size:17px;font-weight:700}
 .admin-section-head p{font-size:12.5px;color:var(--text-mute);margin-top:4px}
@@ -1040,6 +1302,8 @@ const profile = await fetch(endpoints.userinfo, {
 @media(max-width:960px){
   .admin-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
   .provider-grid{grid-template-columns:1fr}
+  .settings-grid{grid-template-columns:1fr}
+  .settings-card-wide{grid-column:auto}
   .access-grid{grid-template-columns:1fr}
   .admin-orbit{display:none}
 }
@@ -1061,5 +1325,9 @@ const profile = await fetch(endpoints.userinfo, {
   .admin-grant{flex-direction:column;align-items:stretch}
   .scope-picker{grid-template-columns:1fr}
   .audit-meta{display:none}
+  .settings-fields{grid-template-columns:1fr}
+  .doc-card{align-items:flex-start}
+  .doc-card-actions{width:100%}
+  .doc-card-actions .btn{flex:1}
 }
 </style>

@@ -147,7 +147,7 @@ function tierOf(userRow) {
   return TIER_MAP[userRow.member_tier] || TIERS[0];
 }
 
-function serializeUser(row) {
+function serializeUser(row, options = {}) {
   const tier = tierOf(row);
   return {
     id: row.id,
@@ -167,6 +167,8 @@ function serializeUser(row) {
     miles: row.miles,
     verified: Boolean(row.verified),
     isAdmin: Boolean(row.is_admin),
+    isDemo: row.email === DEMO_EMAIL,
+    readOnly: Boolean(options.readOnly),
     phone: row.phone || '',
     twoFa: Boolean(row.two_fa),
     guards: {
@@ -271,6 +273,21 @@ function safeRedirect(value, origin) {
 }
 
 const SETTING_PREFIX = 'social.';
+const SITE_PREFIX = 'site.';
+const DEMO_EMAIL = 'xiaoyiyi@inu.space';
+const DEMO_PASSWORD = 'inu2026';
+
+const SITE_DEFAULTS = {
+  demoVisible: false,
+  demoReadOnly: true,
+  noticeEnabled: false,
+  noticeText: '',
+  noticeLevel: 'info',
+  footerText: '© 2026 INU 无限宇宙 · 星际通行证',
+  loginWelcome: '使用你的 INU 星际档案继续旅程。',
+};
+
+const SITE_NOTICE_LEVELS = ['info', 'success', 'warn'];
 
 function base64UrlToBytes(value) {
   const pad = value.length % 4 ? '='.repeat(4 - (value.length % 4)) : '';
@@ -321,6 +338,69 @@ async function saveSetting(db, key, value) {
     )
     .bind(key, String(value), nowIso())
     .run();
+}
+
+async function siteSettings(c) {
+  const cached = c.get('siteSettings');
+  if (cached) return cached;
+
+  let stored = {};
+  try {
+    stored = await readSettings(c.env.DB, SITE_PREFIX);
+  } catch {
+    stored = {};
+  }
+
+  const raw = (key) => stored[`${SITE_PREFIX}${key}`];
+  const bool = (key, fallback) => {
+    const value = raw(key);
+    if (value === undefined || value === null || value === '') return fallback;
+    return value === '1' || value === 'true';
+  };
+  const text = (key, fallback, max) => {
+    const value = raw(key);
+    return String(value === undefined || value === null ? fallback : value).slice(0, max);
+  };
+
+  const level = String(raw('notice_level') || '');
+  const settings = {
+    demoVisible: bool('demo_visible', SITE_DEFAULTS.demoVisible),
+    demoReadOnly: bool('demo_readonly', SITE_DEFAULTS.demoReadOnly),
+    noticeEnabled: bool('notice_enabled', SITE_DEFAULTS.noticeEnabled),
+    noticeText: text('notice_text', SITE_DEFAULTS.noticeText, 200),
+    noticeLevel: SITE_NOTICE_LEVELS.includes(level) ? level : SITE_DEFAULTS.noticeLevel,
+    footerText: text('footer_text', SITE_DEFAULTS.footerText, 120),
+    loginWelcome: text('login_welcome', SITE_DEFAULTS.loginWelcome, 120),
+  };
+
+  c.set('siteSettings', settings);
+  return settings;
+}
+
+function publicSiteSettings(settings) {
+  return {
+    demoVisible: settings.demoVisible,
+    demoReadOnly: settings.demoReadOnly,
+    demo: settings.demoVisible ? { email: DEMO_EMAIL, password: DEMO_PASSWORD } : null,
+    notice: {
+      enabled: settings.noticeEnabled,
+      text: settings.noticeText,
+      level: settings.noticeLevel,
+    },
+    footerText: settings.footerText,
+    loginWelcome: settings.loginWelcome,
+  };
+}
+
+function adminSiteSettings(settings) {
+  return { ...settings, demoEmail: DEMO_EMAIL, demoPassword: DEMO_PASSWORD };
+}
+
+async function serializeUserFor(c, row) {
+  if (!row) return null;
+  if (row.email !== DEMO_EMAIL) return serializeUser(row);
+  const settings = await siteSettings(c);
+  return serializeUser(row, { readOnly: settings.demoReadOnly });
 }
 
 async function socialConfigMap(c) {
@@ -689,6 +769,22 @@ async function getSessionUser(c) {
 
 app.use('/api/*', requireSession);
 
+const DEMO_SAFE_WRITE_PATHS = new Set(['/api/auth/logout', '/api/oauth/authorize/decision']);
+
+app.use('/api/*', async (c, next) => {
+  const method = c.req.method.toUpperCase();
+  if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return next();
+
+  const user = c.get('userRow');
+  if (!user || user.email !== DEMO_EMAIL || user.is_admin) return next();
+  if (DEMO_SAFE_WRITE_PATHS.has(c.req.path)) return next();
+
+  const settings = await siteSettings(c);
+  if (!settings.demoReadOnly) return next();
+
+  return jsonError(c, 403, 'DEMO_READONLY', '演示账号为只读模式，无法修改数据');
+});
+
 async function requireAdmin(c, next) {
   const user = c.get('userRow');
   if (!user?.is_admin) {
@@ -767,7 +863,10 @@ app.post('/api/auth/login', async (c) => {
   await db.prepare('DELETE FROM login_guards WHERE email = ?').bind(email).run();
   let sessionUser = await createSessionForUser(c, user);
   sessionUser = await ensureAdminAccess(c, sessionUser);
-  return ok(c, { user: serializeUser(sessionUser) });
+  return ok(c, {
+    user: await serializeUserFor(c, sessionUser),
+    site: publicSiteSettings(await siteSettings(c)),
+  });
 });
 
 app.get('/api/auth/providers', async (c) => {
@@ -778,7 +877,7 @@ app.get('/api/auth/providers', async (c) => {
     backup: Boolean(info.provider.backup),
     enabled: info.enabled,
   }));
-  return ok(c, { providers });
+  return ok(c, { providers, site: publicSiteSettings(await siteSettings(c)) });
 });
 
 app.get('/api/auth/oauth/:provider/start', async (c) => {
@@ -868,7 +967,11 @@ app.post('/api/auth/logout', async (c) => {
 
 app.get('/api/me', async (c) => {
   const user = await ensureAdminAccess(c, c.get('userRow'));
-  return ok(c, { user: serializeUser(user), dateLabel: dateLabel() });
+  return ok(c, {
+    user: await serializeUserFor(c, user),
+    dateLabel: dateLabel(),
+    site: publicSiteSettings(await siteSettings(c)),
+  });
 });
 
 /* ------------------------------------------------------------------ */
@@ -1522,7 +1625,7 @@ app.get('/api/admin', async (c) => {
   const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
   const origin = new URL(c.req.url).origin;
 
-  const [users, verified, clientsStats, clients, activeTokens, issued, consents, admins, audit, providerMap] =
+  const [users, verified, clientsStats, clients, activeTokens, issued, consents, admins, audit, providerMap, site] =
     await Promise.all([
       db.prepare('SELECT COUNT(*) AS count FROM users').first(),
       db.prepare('SELECT COUNT(*) AS count FROM users WHERE verified = 1').first(),
@@ -1542,6 +1645,7 @@ app.get('/api/admin', async (c) => {
          ORDER BY l.created_at DESC LIMIT 20`,
       ).all(),
       socialConfigMap(c),
+      siteSettings(c),
     ]);
 
   return ok(c, {
@@ -1565,6 +1669,7 @@ app.get('/api/admin', async (c) => {
       adminName: row.admin_name || '系统',
       createdAt: row.created_at,
     })),
+    settings: adminSiteSettings(site),
     endpoints: {
       issuer: origin,
       authorization: `${origin}/oauth/authorize`,
@@ -1579,6 +1684,69 @@ app.get('/api/admin', async (c) => {
       envAdminCount: String(c.env.ADMIN_EMAILS || '').split(',').map((item) => item.trim()).filter(Boolean).length,
     },
   });
+});
+
+app.patch('/api/admin/settings', async (c) => {
+  const body = await readJson(c);
+  if (!body) return jsonError(c, 400, 'INVALID_INPUT', '请求内容无法解析');
+
+  const current = await siteSettings(c);
+  const next = { ...current };
+
+  for (const key of ['demoVisible', 'demoReadOnly', 'noticeEnabled']) {
+    if (body[key] !== undefined) next[key] = Boolean(body[key]);
+  }
+
+  if (body.noticeText !== undefined) {
+    const text = String(body.noticeText).trim();
+    if ([...text].length > 200) return jsonError(c, 400, 'INVALID_NOTICE', '公告内容最多 200 个字符');
+    next.noticeText = text;
+  }
+
+  if (body.noticeLevel !== undefined) {
+    const level = String(body.noticeLevel || '');
+    if (!SITE_NOTICE_LEVELS.includes(level)) {
+      return jsonError(c, 400, 'INVALID_NOTICE_LEVEL', '公告级别只能是 info / success / warn');
+    }
+    next.noticeLevel = level;
+  }
+
+  if (body.footerText !== undefined) {
+    const text = String(body.footerText).trim();
+    if (!text) return jsonError(c, 400, 'INVALID_FOOTER', '页脚文案不能为空');
+    if ([...text].length > 120) return jsonError(c, 400, 'INVALID_FOOTER', '页脚文案最多 120 个字符');
+    next.footerText = text;
+  }
+
+  if (body.loginWelcome !== undefined) {
+    const text = String(body.loginWelcome).trim();
+    if (!text) return jsonError(c, 400, 'INVALID_LOGIN_WELCOME', '登录页欢迎语不能为空');
+    if ([...text].length > 120) return jsonError(c, 400, 'INVALID_LOGIN_WELCOME', '登录页欢迎语最多 120 个字符');
+    next.loginWelcome = text;
+  }
+
+  if (next.noticeEnabled && !next.noticeText) {
+    return jsonError(c, 400, 'NOTICE_TEXT_REQUIRED', '开启站点公告前请填写公告内容');
+  }
+
+  await Promise.all([
+    saveSetting(c.env.DB, `${SITE_PREFIX}demo_visible`, next.demoVisible ? '1' : '0'),
+    saveSetting(c.env.DB, `${SITE_PREFIX}demo_readonly`, next.demoReadOnly ? '1' : '0'),
+    saveSetting(c.env.DB, `${SITE_PREFIX}notice_enabled`, next.noticeEnabled ? '1' : '0'),
+    saveSetting(c.env.DB, `${SITE_PREFIX}notice_text`, next.noticeText),
+    saveSetting(c.env.DB, `${SITE_PREFIX}notice_level`, next.noticeLevel),
+    saveSetting(c.env.DB, `${SITE_PREFIX}footer_text`, next.footerText),
+    saveSetting(c.env.DB, `${SITE_PREFIX}login_welcome`, next.loginWelcome),
+  ]);
+
+  c.set('siteSettings', next);
+  await addAdminAudit(
+    c,
+    '更新站点设置',
+    `演示入口${next.demoVisible ? '开启' : '关闭'} · 演示只读${next.demoReadOnly ? '开启' : '关闭'} · 站点公告${next.noticeEnabled ? '开启' : '关闭'}`,
+  );
+
+  return ok(c, { settings: adminSiteSettings(next) });
 });
 
 app.patch('/api/admin/providers/:id', async (c) => {
@@ -1905,7 +2073,7 @@ app.get('/api/overview', async (c) => {
   ]);
 
   return ok(c, {
-    user: serializeUser(user),
+    user: await serializeUserFor(c, user),
     dateLabel: dateLabel(),
     wallet: { balanceCents: user.star_energy_cents, cardLast4: '0721' },
     counts: {
@@ -1946,7 +2114,7 @@ app.get('/api/profile', async (c) => {
   ]);
 
   return ok(c, {
-    user: serializeUser(user),
+    user: await serializeUserFor(c, user),
     joinedDays: daysSince(user.created_at),
     counts: {
       devices: devices?.count || 0,
@@ -1991,14 +2159,14 @@ app.patch('/api/profile', async (c) => {
     .run();
 
   const updated = await db.prepare('SELECT * FROM users WHERE id = ?').bind(user.id).first();
-  return ok(c, { user: serializeUser(updated) });
+  return ok(c, { user: await serializeUserFor(c, updated) });
 });
 
 app.post('/api/profile/verify', async (c) => {
   const db = c.env.DB;
   const user = c.get('userRow');
   if (user.verified) {
-    return ok(c, { user: serializeUser(user), message: '星际公民身份已认证' });
+    return ok(c, { user: await serializeUserFor(c, user), message: '星际公民身份已认证' });
   }
 
   await db.prepare('UPDATE users SET verified = 1 WHERE id = ?').bind(user.id).run();
@@ -2006,7 +2174,7 @@ app.post('/api/profile/verify', async (c) => {
   await addActivity(db, user.id, '完成星际公民认证', '补给站下单与星能提现已解锁', 'purple', 'i-idcard');
 
   const updated = await db.prepare('SELECT * FROM users WHERE id = ?').bind(user.id).first();
-  return ok(c, { user: serializeUser(updated) });
+  return ok(c, { user: await serializeUserFor(c, updated) });
 });
 
 /* ------------------------------------------------------------------ */
@@ -2024,7 +2192,7 @@ app.get('/api/security', async (c) => {
   const score = 82 + (user.two_fa ? 8 : 0) + (user.phone ? 6 : 0);
 
   return ok(c, {
-    user: serializeUser(user),
+    user: await serializeUserFor(c, user),
     score,
     scoreLabel: score >= 90 ? '防护严密' : '仍有提升空间',
     percentile: '高于 78% 星际公民',
@@ -2466,7 +2634,7 @@ app.get('/api/supply', async (c) => {
   ]);
 
   return ok(c, {
-    user: serializeUser(user),
+    user: await serializeUserFor(c, user),
     wallet: { balanceCents: user.star_energy_cents, cardLast4: '0721' },
     counts: {
       transit: transit?.count || 0,
@@ -2599,6 +2767,14 @@ app.patch('/api/supply/address', async (c) => {
 /* ------------------------------------------------------------------ */
 /* 静态资源与错误处理                                                   */
 /* ------------------------------------------------------------------ */
+
+app.get('/inu-oauth-integration.md', async (c) => {
+  const asset = await c.env.ASSETS.fetch(c.req.raw);
+  const headers = new Headers(asset.headers);
+  headers.set('Content-Type', 'text/markdown; charset=utf-8');
+  headers.set('Cache-Control', 'public, max-age=300');
+  return new Response(asset.body, { status: asset.status, headers });
+});
 
 app.notFound((c) => {
   if (

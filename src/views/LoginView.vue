@@ -9,15 +9,23 @@ import { toast } from '../lib/toast';
 const route = useRoute();
 const router = useRouter();
 
-const email = ref('xiaoyiyi@inu.space');
-const password = ref('inu2026');
+const email = ref('');
+const password = ref('');
 const showPassword = ref(false);
 const loading = ref(false);
 const error = ref('');
 const providers = ref([]);
+const site = ref(null);
 const oauthLoading = ref('');
 
 const enabledProviders = computed(() => providers.value.filter((provider) => provider.enabled));
+const demoVisible = computed(() => Boolean(site.value?.demoVisible && site.value?.demo?.email));
+const notice = computed(() => {
+  const value = site.value?.notice;
+  return value?.enabled && value?.text ? value : null;
+});
+const loginWelcome = computed(() => site.value?.loginWelcome || '使用你的 INU 星际档案继续旅程。');
+const footerText = computed(() => site.value?.footerText || '© 2026 INU 无限宇宙 · 星际通行证');
 
 const OAUTH_ERRORS = {
   cancelled: '已取消第三方登录',
@@ -38,6 +46,11 @@ onMounted(async () => {
   try {
     const data = await api.get('/auth/providers', { ttl: 0 });
     providers.value = Array.isArray(data.providers) ? data.providers : [];
+    site.value = data.site || null;
+    if (site.value?.demoVisible && site.value?.demo) {
+      email.value = site.value.demo.email;
+      password.value = site.value.demo.password;
+    }
   } catch {
     providers.value = [];
   }
@@ -61,8 +74,9 @@ function startOAuth(id) {
 }
 
 function fillDemo() {
-  email.value = 'xiaoyiyi@inu.space';
-  password.value = 'inu2026';
+  if (!site.value?.demo) return;
+  email.value = site.value.demo.email;
+  password.value = site.value.demo.password;
   error.value = '';
 }
 
@@ -139,7 +153,7 @@ async function submit() {
         </ul>
       </div>
 
-      <p class="login-visual-foot">© 2026 INU 无限宇宙 · 星际通行证</p>
+      <p class="login-visual-foot">{{ footerText }}</p>
     </section>
 
     <section class="login-panel">
@@ -148,7 +162,12 @@ async function submit() {
           <span class="login-card-mark"><AppIcon name="orbit" /></span>
           <p class="login-eyebrow">WELCOME BACK</p>
           <h2>进入星际通行证</h2>
-          <p class="login-sub">使用你的 INU 星际档案继续旅程。</p>
+          <p class="login-sub">{{ loginWelcome }}</p>
+        </div>
+
+        <div v-if="notice" class="login-notice" :class="`is-${notice.level}`">
+          <AppIcon name="spark" />
+          <span>{{ notice.text }}</span>
         </div>
 
         <form class="login-form" novalidate @submit.prevent="submit">
@@ -235,11 +254,11 @@ async function submit() {
           </div>
         </div>
 
-        <button type="button" class="demo-fill" @click="fillDemo">
+        <button v-if="demoVisible" type="button" class="demo-fill" @click="fillDemo">
           <span class="demo-fill-icon"><AppIcon name="idcard" /></span>
           <span class="demo-fill-copy">
             <strong>使用演示星际档案</strong>
-            <em>xiaoyiyi@inu.space · inu2026</em>
+            <em>{{ site.demo.email }} · {{ site.demo.password }}</em>
           </span>
           <AppIcon name="chevron" class="demo-fill-chev" />
         </button>
@@ -262,3 +281,14 @@ async function submit() {
     </section>
   </div>
 </template>
+
+<style scoped>
+.login-notice{
+  display:flex;align-items:flex-start;gap:9px;margin:16px 0 0;
+  padding:10px 12px;border-radius:10px;font-size:12px;line-height:1.65;
+  color:var(--primary);background:var(--primary-light);border:1px solid rgba(22,93,255,.16);
+}
+.login-notice .icon{width:15px;height:15px;margin-top:2px;flex:none}
+.login-notice.is-success{color:var(--success);background:rgba(0,180,42,.08);border-color:rgba(0,180,42,.18)}
+.login-notice.is-warn{color:var(--warning);background:rgba(255,125,0,.08);border-color:rgba(255,125,0,.2)}
+</style>

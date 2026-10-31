@@ -4,10 +4,10 @@ Vue 3 + Cloudflare Workers + D1 实现的「INU 无限宇宙」账号中心。�
 
 在此之上还实现了：
 
-- **超级管理台** `/admin`：配置 GitHub / Google 登录方式、管理第三方 OAuth 应用、查看审计日志与管理员。
+- **超级管理台** `/admin`：配置 GitHub / Google 登录方式、管理第三方 OAuth 应用、演示账号与站点文案、查看审计日志与管理员。
 - **INU OAuth 2.0 身份提供方**：其他应用可以用「使用 INU 账号登录」接入，支持授权码模式、PKCE、userinfo 与令牌撤销。
 
-演示账号：`xiaoyiyi@inu.space` / `inu2026`
+演示账号：`xiaoyiyi@inu.space` / `inu2026`（默认不在登录页展示，且为只读模式；可在管理台调整）
 
 ## 技术栈
 
@@ -29,7 +29,7 @@ Vue 3 + Cloudflare Workers + D1 实现的「INU 无限宇宙」账号中心。�
 - **会员中心**：等级进度、四档会员权益、粒子流水。
 - **协议中心**：协议列表、待签署提醒、签署后发放 50 INU 粒子。
 - **补给站**：会员价商品、星能兑换下单、订单记录、收货坐标。
-- **超级管理台**：登录方式配置、OAuth 应用与密钥管理、接入指引、审计日志、管理员授权。
+- **超级管理台**：登录方式配置、OAuth 应用与密钥管理、演示账号与站点设置、接入指引、审计日志、管理员授权。
 - **INU 授权登录**：第三方应用通过 `/oauth/authorize` 获取授权码，兑换令牌后读取用户资料。
 
 > 演示环境中的「星际公民认证」为模拟核验，会直接解锁补给站下单能力；生产环境请接入真实的实名/活体核验服务。
@@ -133,7 +133,7 @@ npm run dev          # 终端 B，Vite 在 5173，/api 已代理到 8787
 
 ### 上线前必做
 
-- 修改演示账号密码，或替换 `migrations/0002_seed.sql` 中的账号数据。
+- 演示账号默认不在登录页展示且为只读模式；如不需要，可继续隐藏入口，或修改密码 / 删除演示账号。
 - 如面向公网，考虑关闭演示认证接口 `/api/profile/verify`，接入真实实名服务。
 - 在 Workers Paid 方案下，将 `worker/index.js` 的 `PBKDF2_ITERATIONS` 提高到
   `100000` 以上（哈希串内已记录迭代次数，调整后旧密码仍可验证，用户下次改密时自动升级）。
@@ -151,12 +151,29 @@ npm run dev          # 终端 B，Vite 在 5173，/api 已代理到 8787
 | 分区 | 能力 |
 | --- | --- |
 | 登录方式 | 配置 GitHub / Google 的 Client ID、Client Secret、启用状态，保存即生效 |
+| 站点设置 | 演示账号入口显隐、演示账号只读、站点公告（内容与级别）、登录页欢迎语、页脚文案 |
 | 应用接入 | 创建、编辑、停用、删除 OAuth 应用，重置 Client Secret，配置回调地址与权限范围 |
-| 接入指引 | 展示端点、scope、接入步骤和服务端示例代码 |
-| 审计日志 | 记录创建/删除应用、重置密钥、修改登录方式、授予/移除管理员等操作 |
+| 接入指引 | 展示端点、scope、接入步骤和服务端示例代码，可下载 / 复制 AI 可直接执行的 Markdown 接入文档 |
+| 审计日志 | 记录创建/删除应用、重置密钥、修改登录方式、更新站点设置、授予/移除管理员等操作 |
 | 管理员 | 按邮箱授予或移除超级管理员，内置「至少保留一名管理员」与禁止自我移除保护 |
 
 保存在 D1 的社交登录 Secret 使用 `CONFIG_KEY` 派生的 AES-GCM 密钥加密，管理接口永远不会回传明文。未设置 `CONFIG_KEY` 时，管理台只能保留已有密钥，不能写入新的 Secret。第三方应用的 Client Secret 只在创建和轮换时显示一次，D1 仅保存 SHA-256 摘要。
+
+### 站点设置与演示账号
+
+站点设置保存在 `app_settings` 表的 `site.*` 键中，无需新增迁移。默认值：
+
+| 键 | 默认 | 说明 |
+| --- | --- | --- |
+| `site.demo_visible` | `0` | 登录页不展示演示入口；手动输入演示账号仍可登录 |
+| `site.demo_readonly` | `1` | 演示账号的所有写操作由服务端拒绝，仅允许浏览、登录、退出与 OAuth 授权 |
+| `site.notice_enabled` | `0` | 站点公告开关 |
+| `site.notice_text` | 空 | 公告内容，最多 200 字 |
+| `site.notice_level` | `info` | `info` / `success` / `warn` |
+| `site.footer_text` | `© 2026 INU 无限宇宙 · 星际通行证` | 登录页与内页页脚 |
+| `site.login_welcome` | `使用你的 INU 星际档案继续旅程。` | 登录页欢迎语 |
+
+演示密码不会写进前端静态包：只有 `site.demo_visible=1` 时，`/api/auth/providers` 才会返回演示凭据供登录页预填；关闭后接口与页面都不再出现演示密码。只读模式下服务端对演示账号的非 GET 请求返回 `403 DEMO_READONLY`，并在页面顶部展示只读提示。
 
 ## 用 INU 账号登录（OAuth 2.0 身份提供方）
 
@@ -202,6 +219,12 @@ INU 同时是一个标准的 OAuth 2.0 授权服务器。第三方应用把用�
 - scope 目前支持 `profile`（昵称、INU ID、轨道编号、会员等级、头像字符）与 `email`（邮箱和认证状态）。
 - 已授权过的应用默认跳过同意页；使用 `prompt=consent` 可强制重新展示。
 - `userinfo` 的 `sub` 是 INU 用户 ID；`email_verified` 表示该账号已通过 INU 的星际公民认证，不表示邮箱控制权验证。
+
+### AI 接入文档
+
+管理台「接入指引」提供「下载 MD / 复制全文」，会把实际授权服务器地址写入 `public/inu-oauth-integration.md` 后导出为 Markdown。文档覆盖端点、PKCE、令牌交换、userinfo 字段、错误处理、安全清单、验收标准，以及 Node.js / Next.js / FastAPI 参考实现，可直接交给其他项目的 AI 执行接入。
+
+原始模板位于 `public/inu-oauth-integration.md`，构建后会随静态资源一起部署，也可直接访问 `/inu-oauth-integration.md`。模板中的 `{{INU_ORIGIN}}` 会在管理台下载时替换为当前站点地址。
 
 ## GitHub / Google 登录（登录 INU 用）
 
@@ -262,6 +285,7 @@ https://<你的域名>/api/auth/oauth/google/callback
 | GET | `/api/oauth/authorize/context` | 读取授权请求、用户与 scope（需登录） |
 | POST | `/api/oauth/authorize/decision` | 同意 / 拒绝授权并签发授权码 |
 | GET | `/api/admin` | 管理台聚合数据（管理员） |
+| PATCH | `/api/admin/settings` | 保存演示账号、站点公告与页面文案设置（管理员） |
 | PATCH | `/api/admin/providers/:id` | 保存 GitHub / Google 登录配置（管理员） |
 | POST | `/api/admin/oauth-clients` | 创建 OAuth 应用（管理员） |
 | PATCH / DELETE | `/api/admin/oauth-clients/:id` | 编辑 / 删除 OAuth 应用（管理员） |
@@ -309,6 +333,8 @@ inu-cloud/
 │  ├─ assets/base.css       # 设计系统与页面样式
 │  ├─ router.js
 │  └─ main.js
+├─ public/
+│  └─ inu-oauth-integration.md  # 可交给 AI 执行的 OAuth 接入指南模板
 ├─ .dev.vars.example        # 本地环境变量模板
 ├─ wrangler.jsonc
 └─ vite.config.js

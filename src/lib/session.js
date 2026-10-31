@@ -3,18 +3,21 @@ import { api, clearApiCache } from './api';
 
 export const session = reactive({
   user: null,
+  site: null,
   ready: false,
   pending: null,
 });
 
-export function setUser(user) {
+export function setUser(user, site = null) {
   session.user = user;
+  if (site) session.site = site;
   session.ready = true;
   session.pending = null;
 }
 
 export function clearSession() {
   session.user = null;
+  session.site = null;
   session.ready = true;
   session.pending = null;
   clearApiCache();
@@ -28,6 +31,7 @@ export async function ensureSession({ force = false } = {}) {
     try {
       const data = await api.get('/me', { ttl: 0, force: true });
       session.user = data.user;
+      if (data.site) session.site = data.site;
       return true;
     } catch (error) {
       if (error.status === 401) {
@@ -46,7 +50,7 @@ export async function ensureSession({ force = false } = {}) {
 
 export async function login(email, password) {
   const data = await api.post('/auth/login', { email, password });
-  setUser(data.user);
+  setUser(data.user, data.site);
   return data.user;
 }
 
