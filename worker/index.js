@@ -689,21 +689,27 @@ async function getSessionUser(c) {
 
 app.use('/api/*', requireSession);
 
-app.use('/api/admin', async (c, next) => {
+async function requireAdmin(c, next) {
   const user = c.get('userRow');
   if (!user?.is_admin) {
     return jsonError(c, 403, 'ADMIN_REQUIRED', '需要超级管理员权限才能访问管理台');
   }
+  if (c.req.method !== 'GET') {
+    const origin = new URL(c.req.url).origin;
+    const requestOrigin = c.req.header('Origin');
+    if (requestOrigin && requestOrigin !== origin) {
+      return jsonError(c, 403, 'CROSS_ORIGIN', '拒绝跨站管理操作');
+    }
+    const fetchSite = c.req.header('Sec-Fetch-Site');
+    if (fetchSite && fetchSite !== 'same-origin') {
+      return jsonError(c, 403, 'CROSS_ORIGIN', '拒绝跨站管理操作');
+    }
+  }
   return next();
-});
+}
 
-app.use('/api/admin/*', async (c, next) => {
-  const user = c.get('userRow');
-  if (!user?.is_admin) {
-    return jsonError(c, 403, 'ADMIN_REQUIRED', '需要超级管理员权限才能访问管理台');
-  }
-  return next();
-});
+app.use('/api/admin', requireAdmin);
+app.use('/api/admin/*', requireAdmin);
 
 app.use('/api/*', async (c, next) => {
   await next();
@@ -1584,9 +1590,12 @@ app.patch('/api/admin/providers/:id', async (c) => {
   if (!body) return jsonError(c, 400, 'INVALID_INPUT', '请求内容无法解析');
 
   const clientId = String(body.clientId ?? '').trim();
+  const hasClientId = body.clientId !== undefined;
   const clientSecret = String(body.clientSecret ?? '');
-  const enabled = Boolean(body.enabled);
   const clearSecret = Boolean(body.clearSecret);
+  const current = (await socialConfigMap(c))[id];
+  const effectiveClientId = hasClientId ? clientId : current.clientId;
+  const enabled = body.enabled === undefined ? current.enabled : Boolean(body.enabled);
 
   if (clientId.length > 300) return jsonError(c, 400, 'INVALID_CLIENT_ID', 'Client ID 过长');
   if (clientSecret.length > 1000) return jsonError(c, 400, 'INVALID_CLIENT_SECRET', 'Client Secret 过长');
@@ -1599,8 +1608,6 @@ app.patch('/api/admin/providers/:id', async (c) => {
     );
   }
 
-  const current = (await socialConfigMap(c))[id];
-  const effectiveClientId = clientId || current.clientId;
   const effectiveSecret = clearSecret
     ? String(c.env[provider.clientSecretEnv] || '')
     : clientSecret || current.clientSecret;
@@ -1609,7 +1616,7 @@ app.patch('/api/admin/providers/:id', async (c) => {
   }
 
   const prefix = `${SETTING_PREFIX}${id}.`;
-  await saveSetting(c.env.DB, `${prefix}client_id`, clientId);
+  await saveSetting(c.env.DB, `${prefix}client_id`, effectiveClientId);
   if (clientSecret) {
     await saveSetting(c.env.DB, `${prefix}client_secret`, await encryptConfig(c, clientSecret));
   } else if (clearSecret) {
