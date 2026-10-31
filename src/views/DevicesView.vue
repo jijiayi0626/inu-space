@@ -12,8 +12,19 @@ import { useAsyncData } from '../lib/useAsyncData';
 const { data, reload } = useAsyncData(({ force }) => api.get('/devices', { force }));
 
 const devices = computed(() => data.value?.devices || []);
-const current = computed(() => data.value?.current || devices.value.find((item) => item.current) || null);
-const currentMeta = computed(() => current.value || {});
+const sessions = computed(() => data.value?.sessions || []);
+const currentSession = computed(() => sessions.value.find((item) => item.current) || null);
+const current = computed(
+  () => data.value?.current || devices.value.find((item) => item.current) || currentSession.value || null,
+);
+const currentMeta = computed(() => {
+  const value = current.value || {};
+  return {
+    ...value,
+    lastActiveAt: value.lastActiveAt || value.createdAt || '',
+    method: value.method || '通行证会话',
+  };
+});
 
 const detailOpen = ref(false);
 const selected = ref(null);
@@ -23,9 +34,11 @@ const confirmType = ref('unbind');
 const confirmTarget = ref(null);
 const confirmLoading = ref(false);
 
-const confirmTitle = computed(() =>
-  confirmType.value === 'logout' ? '退出其余星际终端' : '解绑星际终端',
-);
+const confirmTitle = computed(() => {
+  if (confirmType.value === 'logout') return '退出其余星际终端';
+  if (confirmType.value === 'session') return '退出该登录会话';
+  return '解绑星际终端';
+});
 
 function iconFor(kind) {
   return kind === 'phone' ? 'phone' : kind === 'tablet' ? 'tablet' : 'laptop';
@@ -42,6 +55,12 @@ function askUnbind(device) {
   confirmOpen.value = true;
 }
 
+function askRevokeSession(item) {
+  confirmType.value = 'session';
+  confirmTarget.value = item;
+  confirmOpen.value = true;
+}
+
 function askLogoutOthers() {
   confirmType.value = 'logout';
   confirmTarget.value = null;
@@ -54,6 +73,9 @@ async function confirmAction() {
     if (confirmType.value === 'unbind') {
       await api.post(`/devices/${confirmTarget.value.id}/unbind`);
       toast('已发送解绑请求，该终端已退出星际网络');
+    } else if (confirmType.value === 'session') {
+      const result = await api.post(`/devices/sessions/${confirmTarget.value.id}/revoke`);
+      toast(result.message || '该会话已退出');
     } else {
       const result = await api.post('/devices/logout-others');
       toast(result.removed ? `已退出其余 ${result.removed} 个终端` : '当前没有其它在线终端');
@@ -183,6 +205,47 @@ async function openAllLogs() {
           </div>
         </div>
       </section>
+
+      <section id="active-sessions" class="card">
+        <div class="card-head">
+          <h2>活跃会话</h2>
+          <span class="badge" :class="sessions.length ? 'badge-blue' : 'badge-gray'">
+            {{ sessions.length }} 个在线
+          </span>
+        </div>
+        <p class="card-desc">这里展示当前通行证在所有浏览器和终端上的登录会话，可按会话单独退出。</p>
+        <div class="device-list">
+          <div v-for="item in sessions" :key="item.id" class="device-row">
+            <span class="device-icon"><AppIcon :name="iconFor(item.kind)" /></span>
+            <div class="device-info">
+              <p class="device-name">
+                {{ item.name }}
+                <span v-if="item.current" class="badge badge-green">当前会话</span>
+              </p>
+              <p class="device-meta">
+                {{ item.browser }} · {{ item.os }} · {{ item.location || '未知位置' }}
+              </p>
+              <p class="device-meta">{{ item.ip }} · 登录于 {{ timeLabel(item.createdAt) }}</p>
+            </div>
+            <div class="device-actions">
+              <button
+                v-if="!item.current"
+                class="btn btn-danger btn-sm"
+                type="button"
+                @click="askRevokeSession(item)"
+              >
+                退出会话
+              </button>
+            </div>
+          </div>
+
+          <div v-if="!sessions.length" class="inline-empty">
+            <span class="inline-empty-icon"><AppIcon name="device" /></span>
+            <h3>暂无活跃会话</h3>
+            <p>新的浏览器或终端登录后，会在这里显示解析后的系统、浏览器与登录位置。</p>
+          </div>
+        </div>
+      </section>
     </div>
 
     <aside class="profile-side">
@@ -260,13 +323,21 @@ async function openAllLogs() {
 
   <BaseModal v-model="confirmOpen" :title="confirmTitle" width="440px">
     <div class="modal-device">
-      <span class="device-icon lg"><AppIcon :name="confirmType === 'logout' ? 'shield' : 'device'" /></span>
+      <span class="device-icon lg">
+        <AppIcon :name="confirmType === 'logout' ? 'shield' : 'device'" />
+      </span>
       <div>
         <p class="modal-device-name">
           {{ confirmType === 'logout' ? '保留当前终端会话' : confirmTarget?.name }}
         </p>
         <p class="modal-device-sub">
-          {{ confirmType === 'logout' ? '其余在线终端将立即退出' : confirmTarget?.location }}
+          {{
+            confirmType === 'logout'
+              ? '其余在线终端将立即退出'
+              : confirmType === 'session'
+                ? `${confirmTarget?.browser || ''} · ${confirmTarget?.os || ''}`.replace(/ · $/, '')
+                : confirmTarget?.location
+          }}
         </p>
       </div>
     </div>
@@ -274,7 +345,9 @@ async function openAllLogs() {
       {{
         confirmType === 'logout'
           ? '退出后，其它终端需要重新登录。当前设备不会受到影响。'
-          : '解绑后，该终端将退出星际网络，再次使用需要重新完成安全验证。'
+          : confirmType === 'session'
+            ? '该会话会立即失效，需要重新登录才能继续使用；其它会话不受影响。'
+            : '解绑后，该终端将退出星际网络，再次使用需要重新完成安全验证。'
       }}
     </p>
     <template #footer>

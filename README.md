@@ -24,8 +24,8 @@ Vue 3 + Cloudflare Workers + D1 实现的「INU 无限宇宙」账号中心。�
 
 - **总览**：星能钱包、INU 粒子、会员进度、快捷入口、最近动态；钱包卡片可直接进入充值 / 提现。
 - **个人资料**：昵称/邮箱/签名修改、头像配色、星际 ID 复制、手机号与邮箱验证码绑定（控制台验证码模式）、星际公民认证。
-- **账户安全**：安全评分、两步验证开关、登录保护策略、密码修改、安全日志（支持分页 / 筛选）。
-- **星际终端**：设备列表、设备详情、新增设备、解绑、退出其余终端、登录记录。
+- **账户安全**：安全评分、两步验证开关、登录保护策略、密码修改、安全日志（支持分页 / 筛选）、已授权第三方应用与一键撤销。
+- **星际终端**：受信设备、活跃会话与 UA 解析（系统 / 浏览器 / 机型）、按会话退出、新增设备、解绑、退出其余终端、登录记录。
 - **通知偏好**：通知类型、渠道开关、免打扰时段、每周摘要，以及站内信收件箱（标记已读 / 全部已读 / 删除）。
 - **会员中心**：等级进度、四档会员权益、粒子流水（分页）。
 - **协议中心**：协议列表、正文详情、待签署提醒、签署时写入协议快照、签署后发放 50 INU 粒子、已签协议导出文本。
@@ -133,8 +133,9 @@ npm run dev          # 终端 B，Vite 在 5173，/api 已代理到 8787
 
    **不要**把演示账号 `xiaoyiyi@inu.space` 设为生产管理员。
 
-7. 打开 `https://inu-space-pass.<你的子域>.workers.dev`。如需自定义域名，在
-   Cloudflare 控制台 → Workers & Pages → `inu-space-pass` → Settings → Domains & Routes 绑定。
+7. 打开 `https://pass.inumc.dpdns.org`（`wrangler.jsonc` 已绑定自定义域）。
+   也可以在 `https://inu-space-pass.<你的子域>.workers.dev` 访问；自定义域可在
+   Cloudflare 控制台 → Workers & Pages → `inu-space-pass` → Settings → Domains & Routes 调整。
 
 ### 上线前必做
 
@@ -258,11 +259,11 @@ INU 同时是一个标准的 OAuth 2.0 授权服务器。第三方应用把用�
 
 登录页支持 GitHub（主）与 Google（备用）。未配置的提供方会自动隐藏，邮箱密码登录不受影响。
 
-回调地址：
+生产回调地址（以当前域名为例，绑定其它域名时同步替换）：
 
 ```text
-https://<你的域名>/api/auth/oauth/github/callback
-https://<你的域名>/api/auth/oauth/google/callback
+https://pass.inumc.dpdns.org/api/auth/oauth/github/callback
+https://pass.inumc.dpdns.org/api/auth/oauth/google/callback
 ```
 
 本地调试使用 `http://127.0.0.1:8787/api/auth/oauth/<provider>/callback`。GitHub OAuth App 只允许一个回调地址，本地调试时需要临时替换；Google 可同时添加多个。
@@ -309,15 +310,17 @@ https://<你的域名>/api/auth/oauth/google/callback
 | DELETE | `/api/profile/phone` | 解绑手机号（需密码） |
 | POST | `/api/profile/email/code`、`/api/profile/email/verify` | 发送 / 校验换绑邮箱验证码 |
 | POST | `/api/profile/verify` | 星际公民认证（受 `site.verification_mode` 控制） |
-| GET | `/api/security` | 安全评分、凭证、策略、日志 |
+| GET | `/api/security` | 安全评分、凭证、策略、日志与已授权应用（`connections`） |
 | GET | `/api/security/logs` | 安全日志分页 |
 | POST | `/api/security/2fa` | 两步验证开关 |
 | PATCH | `/api/security/guards` | 登录保护开关 |
 | POST | `/api/security/password` | 修改密码并吊销其它会话 |
-| GET | `/api/devices` | 终端与登录记录 |
+| DELETE | `/api/security/connections/:clientId` | 撤销第三方应用授权（吊销全部令牌） |
+| GET | `/api/devices` | 受信终端、登录记录与活跃会话（`sessions`，含 UA 解析） |
 | GET | `/api/devices/logs` | 登录记录分页 |
 | POST | `/api/devices` | 新增受信设备 |
 | POST | `/api/devices/:id/unbind` | 解绑终端 |
+| POST | `/api/devices/sessions/:id/revoke` | 退出指定的其它活跃会话 |
 | POST | `/api/devices/logout-others` | 退出其余会话 |
 | GET | `/api/notifications` | 通知偏好聚合 |
 | GET | `/api/notifications/messages` | 站内信列表（分页 / 未读筛选） |

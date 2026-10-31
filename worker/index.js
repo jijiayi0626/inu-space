@@ -133,14 +133,115 @@ function clientLocation(c) {
   return '上海 · 中国';
 }
 
+function parseUserAgent(value) {
+  const ua = String(value || '');
+  const result = {
+    browser: '未知浏览器',
+    browserName: '未知浏览器',
+    browserVersion: '',
+    os: '未知系统',
+    osName: '未知系统',
+    osVersion: '',
+    kind: 'laptop',
+    name: '星际终端',
+  };
+  if (!ua) {
+    result.label = result.name;
+    return result;
+  }
+
+  const versionOf = (pattern) => {
+    const match = ua.match(pattern);
+    return match?.[1] ? match[1].replace(/_/g, '.') : '';
+  };
+
+  // 操作系统与设备类型
+  if (/CrOS/i.test(ua)) {
+    result.osName = 'ChromeOS';
+    result.osVersion = versionOf(/CrOS\s+\S+\s+([\d.]+)/i);
+    result.name = 'Chromebook';
+    result.kind = 'laptop';
+  } else if (/iPad/i.test(ua) || (/Macintosh/i.test(ua) && /Mobile/i.test(ua))) {
+    result.osName = 'iPadOS';
+    result.osVersion = versionOf(/(?:CPU )?OS ([\d_]+)/i);
+    result.name = 'iPad';
+    result.kind = 'tablet';
+  } else if (/iPhone|iPod/i.test(ua)) {
+    result.osName = 'iOS';
+    result.osVersion = versionOf(/(?:CPU )?OS ([\d_]+)/i);
+    result.name = /iPod/i.test(ua) ? 'iPod touch' : 'iPhone';
+    result.kind = 'phone';
+  } else if (/HarmonyOS/i.test(ua)) {
+    result.osName = 'HarmonyOS';
+    result.osVersion = versionOf(/HarmonyOS\s*([\d.]+)?/i);
+    result.name = 'HarmonyOS 手机';
+    result.kind = 'phone';
+  } else if (/Android/i.test(ua)) {
+    result.osName = 'Android';
+    result.osVersion = versionOf(/Android\s+([\d.]+)/i);
+    const isTablet = /Tablet|Nexus 7|Nexus 9|SM-T|Lenovo TAB|Pad/i.test(ua);
+    const model = ua.match(/Android\s+[\d.]+;\s*([^;)]+?)(?:\s+Build\/|\)|;)/i)?.[1] || '';
+    const cleaned = model
+      .replace(/\b(?:wv|Mobile|Tablet|Build|K|Linux|U)\b/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    result.name = cleaned && cleaned.length <= 40 ? cleaned : isTablet ? 'Android 平板' : 'Android 手机';
+    result.kind = isTablet ? 'tablet' : 'phone';
+  } else if (/Windows/i.test(ua)) {
+    const nt = versionOf(/Windows NT ([\d.]+)/i);
+    const windows = { '10.0': 'Windows 10/11', '6.3': 'Windows 8.1', '6.2': 'Windows 8', '6.1': 'Windows 7' };
+    result.osName = windows[nt] || 'Windows';
+    result.osVersion = '';
+    result.name = 'Windows 电脑';
+    result.kind = 'laptop';
+  } else if (/Macintosh|Mac OS X/i.test(ua)) {
+    result.osName = 'macOS';
+    result.osVersion = '';
+    result.name = 'Mac';
+    result.kind = 'laptop';
+  } else if (/Linux/i.test(ua)) {
+    result.osName = 'Linux';
+    result.name = 'Linux 电脑';
+    result.kind = 'laptop';
+  }
+
+  // 浏览器与内置客户端（顺序重要：先匹配更具体的壳）
+  const browserRules = [
+    { name: '微信', pattern: /MicroMessenger\/([\d.]+)/i },
+    { name: '企业微信', pattern: /wxwork\/([\d.]+)/i },
+    { name: '钉钉', pattern: /DingTalk\/([\d.]+)/i },
+    { name: 'QQ 浏览器', pattern: /(?:MQQBrowser|QQBrowser)\/([\d.]+)/i },
+    { name: 'Edge', pattern: /Edg(?:e|A|iOS)?\/([\d.]+)/i },
+    { name: 'Opera', pattern: /(?:OPR|Opera)\/([\d.]+)/i },
+    { name: 'Firefox', pattern: /(?:Firefox|FxiOS)\/([\d.]+)/i },
+    { name: 'Chrome', pattern: /(?:Chrome|CriOS)\/([\d.]+)/i },
+    { name: 'Safari', pattern: /Version\/([\d.]+).*Safari/i },
+    { name: 'curl', pattern: /curl\/([\d.]+)/i },
+    { name: 'Postman', pattern: /PostmanRuntime\/([\d.]+)/i },
+    { name: 'Python', pattern: /python-requests\/([\d.]+)/i },
+  ];
+  const matched = browserRules.find((rule) => rule.pattern.test(ua));
+  if (matched) {
+    const version = versionOf(matched.pattern);
+    result.browserName = matched.name;
+    result.browserVersion = version;
+    result.browser = version ? `${matched.name} ${version.split('.')[0]}` : matched.name;
+  } else if (/Mozilla|AppleWebKit/i.test(ua)) {
+    result.browserName = '浏览器';
+    result.browser = '浏览器';
+  }
+
+  result.os = result.osVersion ? `${result.osName} ${result.osVersion}` : result.osName;
+  result.label = [result.name, result.browser, result.os].filter(Boolean).join(' · ');
+  return result;
+}
+
+function detectClient(c) {
+  return parseUserAgent(c.req.header('User-Agent') || '');
+}
+
 function detectDevice(c) {
-  const ua = c.req.header('User-Agent') || '';
-  if (/iPhone/i.test(ua)) return 'iPhone';
-  if (/iPad/i.test(ua)) return 'iPad';
-  if (/Android/i.test(ua)) return 'Android 终端';
-  if (/Macintosh|Mac OS X/i.test(ua)) return 'MacBook Pro';
-  if (/Windows/i.test(ua)) return 'Windows 终端';
-  return '星际终端';
+  return detectClient(c).name;
 }
 
 function tierOf(userRow) {
@@ -903,7 +1004,8 @@ async function createSessionForUser(c, user, event = '登录成功') {
   const loginAt = nowIso();
   const ip = clientIp(c);
   const location = clientLocation(c);
-  const device = detectDevice(c);
+  const client = detectClient(c);
+  const device = client.name;
 
   await db
     .prepare(
@@ -928,7 +1030,7 @@ async function createSessionForUser(c, user, event = '登录成功') {
     .bind(loginAt, ip, device, location, user.id)
     .run();
 
-  await addSecurityLog(db, user.id, event, `${device} · ${location}`, 'green', 'i-check');
+  await addSecurityLog(db, user.id, event, `${client.label} · ${location}`, 'green', 'i-check');
 
   setCookie(c, SESSION_COOKIE, token, {
     httpOnly: true,
@@ -3718,10 +3820,29 @@ app.post('/api/profile/verify', async (c) => {
 app.get('/api/security', async (c) => {
   const db = c.env.DB;
   const user = c.get('userRow');
-  const logs = await db
-    .prepare('SELECT * FROM security_logs WHERE user_id = ? ORDER BY occurred_at DESC LIMIT 4')
-    .bind(user.id)
-    .all();
+  const now = nowIso();
+  const [logs, connections] = await Promise.all([
+    db
+      .prepare('SELECT * FROM security_logs WHERE user_id = ? ORDER BY occurred_at DESC LIMIT 4')
+      .bind(user.id)
+      .all(),
+    db
+      .prepare(
+        `SELECT cons.client_id, cons.scopes, cons.created_at, cons.updated_at,
+                cl.name, cl.description, cl.homepage_url, cl.enabled, cl.is_public,
+                (SELECT COUNT(*) FROM oauth_tokens t
+                  WHERE t.user_id = cons.user_id AND t.client_id = cons.client_id
+                    AND t.revoked_at IS NULL AND t.expires_at > ?) AS active_tokens,
+                (SELECT MAX(t.last_used_at) FROM oauth_tokens t
+                  WHERE t.user_id = cons.user_id AND t.client_id = cons.client_id) AS last_used_at
+         FROM oauth_consents cons
+         JOIN oauth_clients cl ON cl.client_id = cons.client_id
+         WHERE cons.user_id = ?
+         ORDER BY cons.updated_at DESC`,
+      )
+      .bind(now, user.id)
+      .all(),
+  ]);
 
   const score = 78 + (user.two_fa ? 8 : 0) + (user.phone_verified ? 6 : user.phone ? 3 : 0) + (user.email_verified === 0 ? 0 : 4);
 
@@ -3747,6 +3868,25 @@ app.get('/api/security', async (c) => {
       device: Boolean(user.guard_device),
       sensitive: Boolean(user.guard_sensitive),
     },
+    connections: connections.results.map((row) => {
+      const scopes = parseScopeList(row.scopes);
+      return {
+        clientId: row.client_id,
+        name: row.name,
+        description: row.description || '',
+        homepageUrl: row.homepage_url || '',
+        enabled: Boolean(row.enabled),
+        isPublic: Boolean(row.is_public),
+        scopes: scopes.map((scope) => {
+          const meta = INU_OAUTH_SCOPES.find((item) => item.key === scope);
+          return { key: scope, label: meta?.label || scope };
+        }),
+        activeTokens: Number(row.active_tokens) || 0,
+        authorizedAt: row.created_at,
+        updatedAt: row.updated_at,
+        lastUsedAt: row.last_used_at || '',
+      };
+    }),
     logs: logs.results.map((row) => ({
       id: row.id,
       event: row.event,
@@ -3776,6 +3916,38 @@ app.get('/api/security/logs', async (c) => {
       occurredAt: row.occurred_at,
     })),
   });
+});
+
+app.delete('/api/security/connections/:clientId', async (c) => {
+  const db = c.env.DB;
+  const user = c.get('userRow');
+  const clientId = decodeURIComponent(c.req.param('clientId') || '').trim();
+  if (!clientId) return jsonError(c, 400, 'INVALID_CLIENT', '应用标识无效');
+
+  const client = await db
+    .prepare('SELECT name FROM oauth_clients WHERE client_id = ?')
+    .bind(clientId)
+    .first();
+  const consent = await db
+    .prepare('SELECT scopes FROM oauth_consents WHERE user_id = ? AND client_id = ?')
+    .bind(user.id, clientId)
+    .first();
+  if (!consent) return jsonError(c, 404, 'NOT_FOUND', '没有找到该应用的授权记录');
+
+  const now = nowIso();
+  await db
+    .prepare('UPDATE oauth_tokens SET revoked_at = ? WHERE user_id = ? AND client_id = ? AND revoked_at IS NULL')
+    .bind(now, user.id, clientId)
+    .run();
+  await db
+    .prepare('DELETE FROM oauth_consents WHERE user_id = ? AND client_id = ?')
+    .bind(user.id, clientId)
+    .run();
+
+  const name = client?.name || clientId;
+  await addSecurityLog(db, user.id, '撤销应用授权', `${name} · 已吊销全部访问令牌`, 'orange', 'i-globe');
+  await addActivity(db, user.id, '撤销应用授权', name, 'orange', 'i-globe');
+  return ok(c, { ok: true, message: `已撤销「${name}」的授权` });
 });
 
 app.post('/api/security/2fa', async (c) => {
@@ -3865,17 +4037,44 @@ app.post('/api/security/password', async (c) => {
 app.get('/api/devices', async (c) => {
   const db = c.env.DB;
   const user = c.get('userRow');
-  const [devices, logs] = await Promise.all([
+  const currentHash = c.get('tokenHash') || '';
+  const [devices, logs, sessions] = await Promise.all([
     db.prepare('SELECT * FROM devices WHERE user_id = ? ORDER BY is_current DESC, last_active_at DESC').bind(user.id).all(),
     db
       .prepare('SELECT * FROM security_logs WHERE user_id = ? ORDER BY occurred_at DESC LIMIT 4')
       .bind(user.id)
+      .all(),
+    db
+      .prepare(
+        `SELECT rowid AS id, token_hash, created_at, expires_at, ip, location, user_agent
+         FROM sessions WHERE user_id = ? AND expires_at > ?
+         ORDER BY created_at DESC LIMIT 20`,
+      )
+      .bind(user.id, nowIso())
       .all(),
   ]);
 
   return ok(c, {
     devices: devices.results.map(serializeDevice),
     current: devices.results.filter((row) => row.is_current).map(serializeDevice)[0] || null,
+    sessions: sessions.results.map((row) => {
+      const client = parseUserAgent(row.user_agent);
+      return {
+        id: row.id,
+        current: row.token_hash === currentHash,
+        name: client.name,
+        browser: client.browser,
+        browserName: client.browserName,
+        browserVersion: client.browserVersion,
+        os: client.os,
+        kind: client.kind,
+        label: client.label,
+        ip: row.ip,
+        location: row.location,
+        createdAt: row.created_at,
+        expiresAt: row.expires_at,
+      };
+    }),
     logs: logs.results.map((row) => ({
       id: row.id,
       event: row.event,
@@ -3904,6 +4103,29 @@ app.get('/api/devices/logs', async (c) => {
       occurredAt: row.occurred_at,
     })),
   });
+});
+
+app.post('/api/devices/sessions/:id/revoke', async (c) => {
+  const db = c.env.DB;
+  const user = c.get('userRow');
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id) || id <= 0) {
+    return jsonError(c, 400, 'INVALID_ID', '会话编号无效');
+  }
+
+  const row = await db
+    .prepare('SELECT rowid AS id, token_hash, user_agent, location FROM sessions WHERE rowid = ? AND user_id = ?')
+    .bind(id, user.id)
+    .first();
+  if (!row) return jsonError(c, 404, 'NOT_FOUND', '该会话已失效');
+  if (row.token_hash === c.get('tokenHash')) {
+    return jsonError(c, 400, 'CURRENT_SESSION', '当前会话请使用「退出登录」结束');
+  }
+
+  await db.prepare('DELETE FROM sessions WHERE rowid = ? AND user_id = ?').bind(id, user.id).run();
+  const client = parseUserAgent(row.user_agent);
+  await addSecurityLog(db, user.id, '退出远程会话', `${client.label} · ${row.location || '未知位置'}`, 'orange', 'i-device');
+  return ok(c, { ok: true, message: '该会话已退出' });
 });
 
 app.post('/api/devices', async (c) => {
