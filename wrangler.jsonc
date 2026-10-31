@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "inu-space-pass",
+  "main": "worker/index.js",
+  "compatibility_date": "2025-04-01",
+  "observability": {
+    "enabled": true
+  },
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "inu-space-db",
+      // 运行 npx wrangler d1 create inu-space-db，把输出的 database_id 填到这里
+      "database_id": "00000000-0000-0000-0000-000000000000"
+    }
+  ]
+}

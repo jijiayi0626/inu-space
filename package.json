@@ -1,0 +1,26 @@
+{
+  "name": "inu-space-pass",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "INU 星际通行证 · Vue 3 + Cloudflare Workers + D1",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "worker:dev": "wrangler dev --local --port 8787",
+    "db:local": "wrangler d1 execute inu-space-db --local --file=./migrations/0001_schema.sql && wrangler d1 execute inu-space-db --local --file=./migrations/0002_seed.sql",
+    "db:remote": "wrangler d1 execute inu-space-db --remote --file=./migrations/0001_schema.sql && wrangler d1 execute inu-space-db --remote --file=./migrations/0002_seed.sql",
+    "deploy": "npm run build && wrangler deploy"
+  },
+  "dependencies": {
+    "hono": "^4.13.14",
+    "vue": "^3.5.44",
+    "vue-router": "^4.6.4"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.10",
+    "vite": "^8.3.5",
+    "wrangler": "^4.156.0"
+  }
+}
