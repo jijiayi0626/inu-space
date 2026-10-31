@@ -1,9 +1,11 @@
 <script setup>
 import { computed, reactive, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import AppIcon from '../components/AppIcon.vue';
 import BaseModal from '../components/BaseModal.vue';
 import PageHeader from '../components/PageHeader.vue';
 import SkeletonBlock from '../components/SkeletonBlock.vue';
+import { adminSections } from '../lib/adminSections';
 import { api } from '../lib/api';
 import { dateTimeLabel, money, timeLabel } from '../lib/format';
 import { toast } from '../lib/toast';
@@ -11,18 +13,17 @@ import { useAsyncData } from '../lib/useAsyncData';
 
 const { data, reload } = useAsyncData(({ force }) => api.get('/admin', { force, ttl: 0 }));
 
-const tab = ref('providers');
-const tabs = [
-  { key: 'providers', label: '登录方式', icon: 'shield' },
-  { key: 'settings', label: '站点设置', icon: 'grid' },
-  { key: 'content', label: '内容与商品', icon: 'box' },
-  { key: 'finance', label: '财务与订单', icon: 'star' },
-  { key: 'users', label: '用户管理', icon: 'user' },
-  { key: 'clients', label: '应用接入', icon: 'plug' },
-  { key: 'access', label: '接入指引', icon: 'file' },
-  { key: 'audit', label: '审计日志', icon: 'clock' },
-  { key: 'admins', label: '管理员', icon: 'key' },
-];
+const route = useRoute();
+const router = useRouter();
+const tabs = adminSections;
+const tab = computed(() => {
+  const key = String(route.params.section || '');
+  return tabs.some((item) => item.key === key) ? key : 'providers';
+});
+
+function switchTab(key) {
+  if (key !== tab.value) router.push(`/admin/${key}`);
+}
 
 const stats = computed(() => data.value?.stats || {});
 const providers = computed(() => data.value?.providers || []);
@@ -69,6 +70,7 @@ const siteForm = reactive({
   featureSupply: true,
   featureAgreements: true,
   featureRegister: false,
+  featureVerification: true,
   paymentMode: 'mock',
   verificationMode: 'console',
   rechargePresets: '50,100,200,500,1000',
@@ -100,6 +102,7 @@ watch(
     siteForm.featureSupply = Boolean(settings.featureSupply);
     siteForm.featureAgreements = Boolean(settings.featureAgreements);
     siteForm.featureRegister = Boolean(settings.featureRegister);
+    siteForm.featureVerification = settings.featureVerification !== false;
     siteForm.paymentMode = settings.paymentMode || 'mock';
     siteForm.verificationMode = settings.verificationMode || 'console';
     siteForm.rechargePresets = (settings.rechargePresets || []).join(',');
@@ -167,6 +170,7 @@ async function saveSiteSettings() {
       featureSupply: siteForm.featureSupply,
       featureAgreements: siteForm.featureAgreements,
       featureRegister: siteForm.featureRegister,
+      featureVerification: siteForm.featureVerification,
       paymentMode: siteForm.paymentMode,
       verificationMode: siteForm.verificationMode,
       rechargePresets: presets,
@@ -1010,7 +1014,7 @@ function resolveResetRequest(row) {
         class="admin-tab"
         :class="{ active: tab === item.key }"
         :aria-selected="tab === item.key"
-        @click="tab = item.key"
+        @click="switchTab(item.key)"
       >
         <AppIcon :name="item.icon" />
         <span>{{ item.label }}</span>
@@ -1226,6 +1230,7 @@ function resolveResetRequest(row) {
                 { key: 'featureWithdraw', title: '星能提现', desc: '提交提现申请并进入人工复核' },
                 { key: 'featureSupply', title: '星际补给站', desc: '商品兑换、订单与物流' },
                 { key: 'featureAgreements', title: '星际法条库', desc: '协议签署、查看与导出' },
+                { key: 'featureVerification', title: '实名认证', desc: '星际公民认证入口与核验通道' },
                 { key: 'featureAvatar', title: '头像自定义', desc: '修改头像文字与配色' },
                 { key: 'featurePhoneBind', title: '手机绑定', desc: '绑定 / 更换安全手机' },
                 { key: 'featureEmailChange', title: '邮箱更换', desc: '更换安全邮箱' },
@@ -1267,7 +1272,7 @@ function resolveResetRequest(row) {
               <option value="console">控制台调试 · 返回 devCode 并开放模拟认证</option>
               <option value="off">关闭验证码与模拟认证</option>
             </select>
-            <p class="hint">关闭后手机 / 邮箱验证码与星际公民自助认证都不可用，用户不能自行完成认证。</p>
+            <p class="hint">关闭后手机 / 邮箱验证码与星际公民自助认证都不可用；「实名认证」功能开关关闭时，认证入口显示为暂未开放。</p>
           </div>
 
           <div class="field">

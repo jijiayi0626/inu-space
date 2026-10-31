@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
+import { adminSections } from './lib/adminSections';
 import { ensureSession, session } from './lib/session';
 import { toast } from './lib/toast';
 
@@ -17,9 +18,19 @@ const routes = [
   },
   {
     path: '/admin',
+    redirect: '/admin/providers',
+  },
+  {
+    path: '/admin/:section',
     name: 'admin',
     component: () => import('./views/AdminView.vue'),
     meta: { title: '超级管理台', top: '', side: 'admin', admin: true },
+    beforeEnter: (to) => {
+      if (!adminSections.some((item) => item.key === to.params.section)) {
+        return { name: 'admin', params: { section: 'providers' } };
+      }
+      return true;
+    },
   },
   {
     path: '/',
@@ -38,6 +49,12 @@ const routes = [
     name: 'security',
     component: () => import('./views/SecurityView.vue'),
     meta: { title: '账户安全', top: 'account', side: 'security' },
+  },
+  {
+    path: '/connections',
+    name: 'connections',
+    component: () => import('./views/ConnectionsView.vue'),
+    meta: { title: '授权应用', top: 'account', side: 'connections' },
   },
   {
     path: '/devices',
@@ -125,8 +142,9 @@ router.beforeEach(async (to) => {
 });
 
 router.afterEach((to) => {
-  const title = to.meta.title ? `${to.meta.title} · INU 星际通行证` : 'INU 星际通行证';
-  document.title = title;
+  const section = to.name === 'admin' ? adminSections.find((item) => item.key === to.params.section) : null;
+  const title = section ? `${section.label} · 超级管理台` : to.meta.title;
+  document.title = title ? `${title} · INU 星际通行证` : 'INU 星际通行证';
 });
 
 export default router;

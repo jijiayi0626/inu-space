@@ -1,6 +1,6 @@
 # INU 星际通行证
 
-Vue 3 + Cloudflare Workers + D1 实现的「INU 无限宇宙」账号中心。包含 8 个账号业务页面、登录鉴权、真实的 D1 数据读写、会员/协议/补给站业务流程，以及一套可直接部署到 Cloudflare 的工程结构。
+Vue 3 + Cloudflare Workers + D1 实现的「INU 无限宇宙」账号中心。包含账号业务页面、登录鉴权、真实的 D1 数据读写、会员/协议/补给站业务流程、第三方授权管理，以及一套可直接部署到 Cloudflare 的工程结构。
 
 在此之上还实现了：
 
@@ -24,7 +24,8 @@ Vue 3 + Cloudflare Workers + D1 实现的「INU 无限宇宙」账号中心。�
 
 - **总览**：星能钱包、INU 粒子、会员进度、快捷入口、最近动态；钱包卡片可直接进入充值 / 提现。
 - **个人资料**：昵称/邮箱/签名修改、头像配色、星际 ID 复制、手机号与邮箱验证码绑定（控制台验证码模式）、星际公民认证。
-- **账户安全**：安全评分、两步验证开关、登录保护策略、密码修改、安全日志（支持分页 / 筛选）、已授权第三方应用与一键撤销。
+- **账户安全**：安全评分、两步验证开关、登录保护策略、密码修改、安全日志（支持分页 / 筛选）。
+- **授权应用**：独立页面展示通过「使用 INU 账号登录」授权的第三方应用、权限范围、有效期与最近使用时间，可一键撤销授权并吊销令牌。
 - **星际终端**：受信设备、活跃会话与 UA 解析（系统 / 浏览器 / 机型）、按会话退出、新增设备、解绑、退出其余终端、登录记录。
 - **通知偏好**：通知类型、渠道开关、免打扰时段、每周摘要，以及站内信收件箱（标记已读 / 全部已读 / 删除）。
 - **会员中心**：等级进度、四档会员权益、粒子流水（分页）。
@@ -158,7 +159,7 @@ npm run dev          # 终端 B，Vite 在 5173，/api 已代理到 8787
 | 分区 | 能力 |
 | --- | --- |
 | 登录方式 | 配置 GitHub / Google 的 Client ID、Client Secret、启用状态，保存即生效 |
-| 站点设置 | 演示账号入口显隐与只读、站点公告、欢迎语与页脚、客服邮箱与钱包卡号尾号、8 项功能开关、支付 / 验证模式、充值预设、提现门槛、改名冷却、维护模式 |
+| 站点设置 | 演示账号入口显隐与只读、站点公告、欢迎语与页脚、客服邮箱与钱包卡号尾号、9 项功能开关、支付 / 验证模式、充值预设、提现门槛、改名冷却、维护模式 |
 | 内容与商品 | 全站广播（按通知偏好送达站内信）、补给站商品增删改（名称、价格、会员价、库存、图标、色系、上下架）、协议模板增删改（标题、版本、正文、奖励粒子、启用状态） |
 | 财务与订单 | 收入 / 支出 / 待复核提现 / 订单数统计、提现复核（通过并打款 / 驳回并退款）、补给订单状态与物流（承运商、单号、时间线）、充值订单列表 |
 | 用户管理 | 用户搜索（邮箱 / 昵称 / INU ID / 手机号）、认证与管理员标记、粒子与余额增减、昵称修改、重置登录密码、处理密码找回申请 |
@@ -166,6 +167,8 @@ npm run dev          # 终端 B，Vite 在 5173，/api 已代理到 8787
 | 接入指引 | 展示端点、scope、接入步骤和服务端示例代码，可下载 / 复制 AI 可直接执行的 Markdown 接入文档 |
 | 审计日志 | 记录创建/删除应用、重置密钥、修改登录方式、更新站点设置、商品与模板变更、广播、订单 / 提现处理、用户调整、授予/移除管理员等操作 |
 | 管理员 | 按邮箱授予或移除超级管理员，内置「至少保留一名管理员」与禁止自我移除保护 |
+
+每个分区都有独立地址：`/admin/providers`、`/admin/settings`、`/admin/content`、`/admin/finance`、`/admin/users`、`/admin/clients`、`/admin/access`、`/admin/audit`、`/admin/admins`。`/admin` 会跳转到登录方式，侧边栏在管理台内展开全部分区，便于直接跳转和收藏。
 
 保存在 D1 的社交登录 Secret 使用 `CONFIG_KEY` 派生的 AES-GCM 密钥加密，管理接口永远不会回传明文。未设置 `CONFIG_KEY` 时，管理台只能保留已有密钥，不能写入新的 Secret。第三方应用的 Client Secret 只在创建和轮换时显示一次，D1 仅保存 SHA-256 摘要。
 
@@ -192,6 +195,7 @@ npm run dev          # 终端 B，Vite 在 5173，/api 已代理到 8787
 | `site.feature_supply` | `1` | 补给站下单（关闭后仅可浏览） |
 | `site.feature_agreements` | `1` | 协议签署（关闭后仅可浏览） |
 | `site.feature_register` | `0` | 开放邮箱自助注册 |
+| `site.feature_verification` | `1` | 星际公民实名认证入口；关闭后认证按钮显示「认证通道已关闭」，服务端拒绝认证、下单与提现 |
 | `site.payment_mode` | `mock` | `mock` 模拟支付 / `off` 关闭在线支付 |
 | `site.verification_mode` | `console` | `console` 返回验证码 devCode 并开放模拟认证 / `off` 关闭验证码与模拟认证 |
 | `site.recharge_presets` | `50,100,200,500,1000` | 充值金额预设（元，1–8 个） |
@@ -311,6 +315,7 @@ https://pass.inumc.dpdns.org/api/auth/oauth/google/callback
 | POST | `/api/profile/email/code`、`/api/profile/email/verify` | 发送 / 校验换绑邮箱验证码 |
 | POST | `/api/profile/verify` | 星际公民认证（受 `site.verification_mode` 控制） |
 | GET | `/api/security` | 安全评分、凭证、策略、日志与已授权应用（`connections`） |
+| GET | `/api/security/connections` | 已授权应用独立接口（授权范围、最近使用、有效令牌数） |
 | GET | `/api/security/logs` | 安全日志分页 |
 | POST | `/api/security/2fa` | 两步验证开关 |
 | PATCH | `/api/security/guards` | 登录保护开关 |
@@ -400,14 +405,15 @@ inu-cloud/
 │  ├─ 0005_features.sql     # 钱包/充值/提现/验证码/协议模板/站内信/商品与订单字段
 │  └─ 0006_password_reset.sql # 密码找回申请
 ├─ src/
-│  ├─ views/                # 8 个业务页面 + 登录 / 管理台 / 授权同意页
+│  ├─ views/                # 业务页面 + 登录 / 管理台 / 授权同意页
 │  ├─ components/           # AppShell、TopBar、SideBar、Modal、Toast 等
-│  ├─ lib/                  # API 客户端、session、格式化、主题、toast
+│  ├─ lib/                  # API 客户端、session、adminSections、格式化、主题、toast
 │  ├─ assets/base.css       # 设计系统与页面样式
 │  ├─ router.js
 │  └─ main.js
 ├─ public/
 │  └─ inu-oauth-integration.md  # 可交给 AI 执行的 OAuth 接入指南模板
+├─ CHANGELOG.md             # 版本更新日志
 ├─ .dev.vars.example        # 本地环境变量模板
 ├─ wrangler.jsonc
 └─ vite.config.js
@@ -420,3 +426,7 @@ inu-cloud/
 - 状态色 `#00B42A` / `#FF7D00` / `#F53F3F`
 - 64px 顶栏、244px 侧栏、16px 卡片圆角
 - 支持明暗主题、桌面/平板/手机响应式布局
+
+## 更新日志
+
+版本变更、功能新增与修复记录见 [CHANGELOG.md](./CHANGELOG.md)。

@@ -138,32 +138,6 @@ const logsOpen = ref(false);
 const allLogs = ref([]);
 const logsLoading = ref(false);
 
-const connections = computed(() => data.value?.connections || []);
-const revokeOpen = ref(false);
-const revokeTarget = ref(null);
-const revokeLoading = ref(false);
-
-function askRevoke(connection) {
-  revokeTarget.value = connection;
-  revokeOpen.value = true;
-}
-
-async function revokeConnection() {
-  if (!revokeTarget.value) return;
-  revokeLoading.value = true;
-  try {
-    const result = await api.del(`/security/connections/${encodeURIComponent(revokeTarget.value.clientId)}`);
-    toast(result.message || '已撤销应用授权');
-    revokeOpen.value = false;
-    revokeTarget.value = null;
-    await reload({ silent: true });
-  } catch (error) {
-    toast(error.message, 'error');
-  } finally {
-    revokeLoading.value = false;
-  }
-}
-
 async function openAllLogs() {
   logsOpen.value = true;
   logsLoading.value = true;
@@ -308,43 +282,6 @@ async function openAllLogs() {
           </div>
         </div>
         <p class="notify-note"><AppIcon name="shield" />建议为星际通行证开启两步验证</p>
-      </section>
-
-      <section id="connections" class="card">
-        <div class="card-head">
-          <h2>已授权应用</h2>
-          <span class="badge" :class="connections.length ? 'badge-blue' : 'badge-gray'">
-            {{ connections.length }} 个
-          </span>
-        </div>
-        <p class="card-desc">
-          这些应用通过「使用 INU 账号登录」获得了你的档案权限。撤销后，应用会失去访问令牌，需要重新授权。
-        </p>
-
-        <div v-for="item in connections" :key="item.clientId" class="sec-row">
-          <span class="sec-icon"><AppIcon name="globe" /></span>
-          <div>
-            <p class="sec-title">
-              {{ item.name }}
-              <span v-if="!item.enabled" class="badge badge-gray">已停用</span>
-            </p>
-            <p class="sec-sub">{{ item.scopes.map((scope) => scope.label).join(' · ') || '基础档案' }}</p>
-            <p class="sec-sub">
-              授权于 {{ timeLabel(item.authorizedAt) }} ·
-              {{ item.lastUsedAt ? `最近使用 ${timeLabel(item.lastUsedAt)}` : '尚未使用' }} ·
-              {{ item.activeTokens }} 个有效令牌
-            </p>
-          </div>
-          <div class="sec-right">
-            <button class="btn btn-danger btn-sm" type="button" @click="askRevoke(item)">撤销授权</button>
-          </div>
-        </div>
-
-        <div v-if="!connections.length" class="inline-empty">
-          <span class="inline-empty-icon"><AppIcon name="globe" /></span>
-          <h3>还没有授权任何应用</h3>
-          <p>当你在第三方应用中选择「使用 INU 账号登录」后，授权记录会出现在这里。</p>
-        </div>
       </section>
     </div>
 
@@ -503,26 +440,10 @@ async function openAllLogs() {
     </div>
   </BaseModal>
 
-  <BaseModal v-model="revokeOpen" title="撤销应用授权" width="440px">
-    <div v-if="revokeTarget" class="revoke-copy">
-      <p>撤销后，「{{ revokeTarget.name }}」将立即失去访问令牌，无法继续读取你的 INU 资料。</p>
-      <p class="hint">应用如需再次访问，需要重新发起授权并经过你确认。</p>
-    </div>
-    <template #footer>
-      <button class="btn btn-ghost btn-sm" type="button" @click="revokeOpen = false">取消</button>
-      <button class="btn btn-danger btn-sm" type="button" :disabled="revokeLoading" @click="revokeConnection">
-        <span v-if="revokeLoading" class="spinner" />
-        {{ revokeLoading ? '正在撤销…' : '撤销授权' }}
-      </button>
-    </template>
-  </BaseModal>
-
   <ContactVerifyModal v-model="phoneOpen" kind="phone" :current="data?.credentials?.phone" @updated="onContactUpdated" />
   <ContactVerifyModal v-model="emailOpen" kind="email" :current="data?.credentials?.email" @updated="onContactUpdated" />
 </template>
 
 <style scoped>
 .feed-scroll{max-height:56vh;overflow-y:auto}
-.revoke-copy p{margin:0 0 8px;color:var(--text-2);line-height:1.7}
-.revoke-copy .hint{margin:0;color:var(--text-3)}
 </style>

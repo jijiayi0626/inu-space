@@ -557,6 +557,7 @@ const SITE_DEFAULTS = {
   featureSupply: true,
   featureAgreements: true,
   featureRegister: false,
+  featureVerification: true,
   paymentMode: 'mock',
   verificationMode: 'console',
   rechargePresets: '50,100,200,500,1000',
@@ -679,6 +680,7 @@ async function siteSettings(c) {
     featureSupply: bool('feature_supply', SITE_DEFAULTS.featureSupply),
     featureAgreements: bool('feature_agreements', SITE_DEFAULTS.featureAgreements),
     featureRegister: bool('feature_register', SITE_DEFAULTS.featureRegister),
+    featureVerification: bool('feature_verification', SITE_DEFAULTS.featureVerification),
     paymentMode: choice('payment_mode', SITE_DEFAULTS.paymentMode, PAYMENT_MODES),
     verificationMode: choice('verification_mode', SITE_DEFAULTS.verificationMode, VERIFICATION_MODES),
     rechargePresets: presetList('recharge_presets', SITE_DEFAULTS.rechargePresets),
@@ -719,6 +721,7 @@ function publicSiteSettings(settings) {
       supply: settings.featureSupply,
       agreements: settings.featureAgreements,
       register: settings.featureRegister,
+      verification: settings.featureVerification,
     },
     payment: { mode: settings.paymentMode },
     verification: { mode: settings.verificationMode },
@@ -2388,6 +2391,7 @@ app.patch('/api/admin/settings', async (c) => {
     'featureSupply',
     'featureAgreements',
     'featureRegister',
+    'featureVerification',
     'maintenanceEnabled',
   ];
   for (const key of boolKeys) {
@@ -2511,6 +2515,7 @@ app.patch('/api/admin/settings', async (c) => {
     boolSetting('feature_supply', next.featureSupply),
     boolSetting('feature_agreements', next.featureAgreements),
     boolSetting('feature_register', next.featureRegister),
+    boolSetting('feature_verification', next.featureVerification),
     saveSetting(c.env.DB, `${SITE_PREFIX}payment_mode`, next.paymentMode),
     saveSetting(c.env.DB, `${SITE_PREFIX}verification_mode`, next.verificationMode),
     saveSetting(c.env.DB, `${SITE_PREFIX}recharge_presets`, next.rechargePresets.join(',')),
@@ -2524,7 +2529,7 @@ app.patch('/api/admin/settings', async (c) => {
   await addAdminAudit(
     c,
     '更新站点设置',
-    `公告${next.noticeEnabled ? '开启' : '关闭'} · 充值${next.featureRecharge ? '开启' : '关闭'} · 维护${next.maintenanceEnabled ? '开启' : '关闭'}`,
+    `公告${next.noticeEnabled ? '开启' : '关闭'} · 充值${next.featureRecharge ? '开启' : '关闭'} · 实名认证${next.featureVerification ? '开启' : '关闭'} · 维护${next.maintenanceEnabled ? '开启' : '关闭'}`,
   );
 
   return ok(c, { settings: adminSiteSettings(next) });
@@ -3798,8 +3803,8 @@ app.post('/api/profile/verify', async (c) => {
   const db = c.env.DB;
   const user = c.get('userRow');
   const settings = await siteSettings(c);
-  if (settings.verificationMode === 'off') {
-    return jsonError(c, 503, 'VERIFICATION_UNAVAILABLE', '星际公民认证通道尚未开启，请联系管理员');
+  if (!settings.featureVerification || settings.verificationMode === 'off') {
+    return jsonError(c, 503, 'VERIFICATION_UNAVAILABLE', '星际公民认证通道已关闭，请联系管理员');
   }
   if (user.verified) {
     return ok(c, { user: await serializeUserFor(c, user), message: '星际公民身份已认证' });
@@ -3817,31 +3822,55 @@ app.post('/api/profile/verify', async (c) => {
 /* 账户安全                                                             */
 /* ------------------------------------------------------------------ */
 
+async function loadAuthorizedApps(db, userId) {
+  const now = nowIso();
+  const rows = await db
+    .prepare(
+      `SELECT cons.client_id, cons.scopes, cons.created_at, cons.updated_at,
+              cl.name, cl.description, cl.homepage_url, cl.enabled, cl.is_public,
+              (SELECT COUNT(*) FROM oauth_tokens t
+                WHERE t.user_id = cons.user_id AND t.client_id = cons.client_id
+                  AND t.revoked_at IS NULL AND t.expires_at > ?) AS active_tokens,
+              (SELECT MAX(t.last_used_at) FROM oauth_tokens t
+                WHERE t.user_id = cons.user_id AND t.client_id = cons.client_id) AS last_used_at
+       FROM oauth_consents cons
+       JOIN oauth_clients cl ON cl.client_id = cons.client_id
+       WHERE cons.user_id = ?
+       ORDER BY cons.updated_at DESC`,
+    )
+    .bind(now, userId)
+    .all();
+
+  return rows.results.map((row) => {
+    const scopes = parseScopeList(row.scopes);
+    return {
+      clientId: row.client_id,
+      name: row.name,
+      description: row.description || '',
+      homepageUrl: row.homepage_url || '',
+      enabled: Boolean(row.enabled),
+      isPublic: Boolean(row.is_public),
+      scopes: scopes.map((scope) => {
+        const meta = INU_OAUTH_SCOPES.find((item) => item.key === scope);
+        return { key: scope, label: meta?.label || scope };
+      }),
+      activeTokens: Number(row.active_tokens) || 0,
+      authorizedAt: row.created_at,
+      updatedAt: row.updated_at,
+      lastUsedAt: row.last_used_at || '',
+    };
+  });
+}
+
 app.get('/api/security', async (c) => {
   const db = c.env.DB;
   const user = c.get('userRow');
-  const now = nowIso();
   const [logs, connections] = await Promise.all([
     db
       .prepare('SELECT * FROM security_logs WHERE user_id = ? ORDER BY occurred_at DESC LIMIT 4')
       .bind(user.id)
       .all(),
-    db
-      .prepare(
-        `SELECT cons.client_id, cons.scopes, cons.created_at, cons.updated_at,
-                cl.name, cl.description, cl.homepage_url, cl.enabled, cl.is_public,
-                (SELECT COUNT(*) FROM oauth_tokens t
-                  WHERE t.user_id = cons.user_id AND t.client_id = cons.client_id
-                    AND t.revoked_at IS NULL AND t.expires_at > ?) AS active_tokens,
-                (SELECT MAX(t.last_used_at) FROM oauth_tokens t
-                  WHERE t.user_id = cons.user_id AND t.client_id = cons.client_id) AS last_used_at
-         FROM oauth_consents cons
-         JOIN oauth_clients cl ON cl.client_id = cons.client_id
-         WHERE cons.user_id = ?
-         ORDER BY cons.updated_at DESC`,
-      )
-      .bind(now, user.id)
-      .all(),
+    loadAuthorizedApps(db, user.id),
   ]);
 
   const score = 78 + (user.two_fa ? 8 : 0) + (user.phone_verified ? 6 : user.phone ? 3 : 0) + (user.email_verified === 0 ? 0 : 4);
@@ -3868,25 +3897,7 @@ app.get('/api/security', async (c) => {
       device: Boolean(user.guard_device),
       sensitive: Boolean(user.guard_sensitive),
     },
-    connections: connections.results.map((row) => {
-      const scopes = parseScopeList(row.scopes);
-      return {
-        clientId: row.client_id,
-        name: row.name,
-        description: row.description || '',
-        homepageUrl: row.homepage_url || '',
-        enabled: Boolean(row.enabled),
-        isPublic: Boolean(row.is_public),
-        scopes: scopes.map((scope) => {
-          const meta = INU_OAUTH_SCOPES.find((item) => item.key === scope);
-          return { key: scope, label: meta?.label || scope };
-        }),
-        activeTokens: Number(row.active_tokens) || 0,
-        authorizedAt: row.created_at,
-        updatedAt: row.updated_at,
-        lastUsedAt: row.last_used_at || '',
-      };
-    }),
+    connections,
     logs: logs.results.map((row) => ({
       id: row.id,
       event: row.event,
@@ -3897,6 +3908,11 @@ app.get('/api/security', async (c) => {
     })),
     advice: SECURITY_ADVICE,
   });
+});
+
+app.get('/api/security/connections', async (c) => {
+  const connections = await loadAuthorizedApps(c.env.DB, c.get('userRow').id);
+  return ok(c, { connections });
 });
 
 app.get('/api/security/logs', async (c) => {
@@ -4684,7 +4700,15 @@ async function createSupplyOrderFor(c, user, product) {
     return { error: jsonError(c, 503, 'FEATURE_DISABLED', '星际补给站暂未开放') };
   }
   if (!user.verified) {
-    return { error: jsonError(c, 403, 'VERIFY_REQUIRED', '完成星际公民认证后才可下单') };
+    const verifyClosed = !settings.featureVerification || settings.verificationMode === 'off';
+    return {
+      error: jsonError(
+        c,
+        403,
+        'VERIFY_REQUIRED',
+        verifyClosed ? '实名认证通道已关闭，请联系管理员' : '完成星际公民认证后才可下单',
+      ),
+    };
   }
   if (Number(product.stock) === 0) {
     return { error: jsonError(c, 400, 'OUT_OF_STOCK', '该补给物资已售罄') };
@@ -5221,7 +5245,13 @@ app.post('/api/wallet/withdraw', async (c) => {
     return jsonError(c, 503, 'FEATURE_DISABLED', '星能提现已关闭，请联系管理员');
   }
   if (!user.verified) {
-    return jsonError(c, 403, 'VERIFY_REQUIRED', '完成星际公民认证后才可提现');
+    const verifyClosed = !settings.featureVerification || settings.verificationMode === 'off';
+    return jsonError(
+      c,
+      403,
+      'VERIFY_REQUIRED',
+      verifyClosed ? '实名认证通道已关闭，请联系管理员' : '完成星际公民认证后才可提现',
+    );
   }
   if (!user.phone) {
     return jsonError(c, 400, 'PHONE_REQUIRED', '请先绑定手机号后再申请提现');

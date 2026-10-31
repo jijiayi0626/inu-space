@@ -27,6 +27,9 @@ const rechargeError = ref('');
 
 const presets = computed(() => session.site?.wallet?.presets || [50, 100, 200, 500, 1000]);
 const rechargeEnabled = computed(() => session.site?.features?.recharge !== false);
+const verificationAvailable = computed(
+  () => session.site?.features?.verification !== false && session.site?.verification?.mode !== 'off',
+);
 const paymentMode = computed(() => session.site?.payment?.mode || 'mock');
 
 function openRecharge() {
@@ -88,7 +91,11 @@ const quicks = computed(() => [
     to: '/profile#verify',
     icon: 'idcard',
     title: '星际公民认证',
-    sub: user.value.verified ? '已认证 · 权限已解锁' : '未实名 · 立即认证',
+    sub: user.value.verified
+      ? '已认证 · 权限已解锁'
+      : verificationAvailable.value
+        ? '未实名 · 立即认证'
+        : '认证通道暂未开放',
   },
   {
     to: '/profile#basic',

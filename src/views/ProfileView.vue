@@ -18,6 +18,9 @@ const counts = computed(() => data.value?.counts || { devices: 0, agreementsSign
 const progress = computed(() => Math.min(99, Math.floor(((user.value.particles || 0) / 10000) * 100)));
 
 const features = computed(() => session.site?.features || {});
+const verificationAvailable = computed(
+  () => features.value.verification !== false && session.site?.verification?.mode !== 'off',
+);
 const nameChangeDays = computed(() => Number(session.site?.nameChangeDays ?? 30));
 
 const form = reactive({ name: '', email: '', bio: '' });
@@ -83,6 +86,10 @@ const verifyAgreed = ref(false);
 const verifying = ref(false);
 
 function openVerify() {
+  if (!verificationAvailable.value) {
+    toast('实名认证通道暂未开放，请联系管理员', 'error');
+    return;
+  }
   verifyAgreed.value = false;
   verifyOpen.value = true;
 }
@@ -178,6 +185,12 @@ const linkItems = computed(() => [
     icon: 'device',
     title: '星际终端',
     sub: `${counts.value.devices} 台设备已绑定 · 管理登录记录`,
+  },
+  {
+    to: '/connections',
+    icon: 'globe',
+    title: '授权应用',
+    sub: '管理使用 INU 账号登录的第三方应用',
   },
   {
     to: '/notifications',
@@ -294,8 +307,8 @@ const linkItems = computed(() => [
       <section id="verify" class="card">
         <div class="card-head">
           <h2>星际公民身份认证</h2>
-          <span class="badge" :class="user.verified ? 'badge-green' : 'badge-red'">
-            {{ user.verified ? '已实名' : '未实名' }}
+          <span class="badge" :class="user.verified ? 'badge-green' : verificationAvailable ? 'badge-red' : 'badge-gray'">
+            {{ user.verified ? '已实名' : verificationAvailable ? '未实名' : '暂未开放' }}
           </span>
         </div>
         <p class="card-desc">
@@ -331,8 +344,20 @@ const linkItems = computed(() => [
           </div>
         </div>
 
+        <p v-if="!user.verified && !verificationAvailable" class="hint verify-closed">
+          管理员已关闭实名认证入口，恢复后可继续完成核验。
+        </p>
+
         <div class="card-actions">
-          <button v-if="!user.verified" class="btn btn-primary" type="button" @click="openVerify">立即认证</button>
+          <button
+            v-if="!user.verified"
+            class="btn btn-primary"
+            type="button"
+            :disabled="!verificationAvailable"
+            @click="openVerify"
+          >
+            {{ verificationAvailable ? '立即认证' : '认证通道已关闭' }}
+          </button>
           <RouterLink v-else class="btn btn-ghost" to="/supply">前往补给站</RouterLink>
           <RouterLink class="btn btn-text" to="/agreements">查看认证协议</RouterLink>
         </div>
@@ -512,4 +537,5 @@ const linkItems = computed(() => [
 .tone-dot.tone-green{background:linear-gradient(135deg,#00B42A,#15803D)}
 .tone-dot.tone-orange{background:linear-gradient(135deg,#FF7D00,#C2410C)}
 .tone-dot.active{border-color:#fff;box-shadow:0 0 0 2px var(--primary)}
+.verify-closed{margin:0 0 12px}
 </style>

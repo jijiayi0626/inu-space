@@ -2,12 +2,16 @@
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import AppIcon from './AppIcon.vue';
+import { adminSections } from '../lib/adminSections';
 import { session } from '../lib/session';
 
 defineEmits(['close']);
 
 const route = useRoute();
 const user = computed(() => session.user || {});
+const verificationAvailable = computed(
+  () => session.site?.features?.verification !== false && session.site?.verification?.mode !== 'off',
+);
 
 const baseGroups = [
   {
@@ -16,6 +20,7 @@ const baseGroups = [
       { to: '/', icon: 'grid', label: '总览', key: 'overview' },
       { to: '/profile', icon: 'user', label: '个人资料', key: 'profile' },
       { to: '/security', icon: 'shield', label: '账户安全', key: 'security' },
+      { to: '/connections', icon: 'globe', label: '授权应用', key: 'connections' },
       { to: '/devices', icon: 'device', label: '星际终端', key: 'devices' },
       { to: '/notifications', icon: 'bell', label: '通知偏好', key: 'notifications' },
     ],
@@ -30,18 +35,31 @@ const baseGroups = [
 ];
 
 const groups = computed(() => {
-  if (!user.value.isAdmin) return baseGroups;
-  return [
-    ...baseGroups,
-    {
+  const list = baseGroups.map((group) => ({ ...group, links: [...group.links] }));
+  if (!user.value.isAdmin) return list;
+  if (route.path.startsWith('/admin')) {
+    list.push({
+      label: '超级管理台',
+      links: adminSections.map((section) => ({
+        to: `/admin/${section.key}`,
+        icon: section.icon,
+        label: section.label,
+        key: `admin-${section.key}`,
+        match: true,
+      })),
+    });
+  } else {
+    list.push({
       label: '超级管理台',
       links: [{ to: '/admin', icon: 'key', label: '控制中枢', key: 'admin' }],
-    },
-  ];
+    });
+  }
+  return list;
 });
 
-function isActive(key) {
-  return route.meta.side === key;
+function isActive(link) {
+  if (link.match) return route.path === link.to;
+  return route.meta.side === link.key;
 }
 </script>
 
@@ -55,8 +73,8 @@ function isActive(key) {
           :key="link.key"
           :to="link.to"
           class="side-link"
-          :class="{ active: isActive(link.key) }"
-          :aria-current="isActive(link.key) ? 'page' : undefined"
+          :class="{ active: isActive(link) }"
+          :aria-current="isActive(link) ? 'page' : undefined"
           @click="$emit('close')"
         >
           <AppIcon :name="link.icon" />
@@ -66,14 +84,14 @@ function isActive(key) {
       </nav>
     </template>
 
-    <div v-if="!user.verified" class="side-promo">
+    <div v-if="!user.verified && verificationAvailable" class="side-promo">
       <div class="promo-head"><AppIcon name="spark" /><span>解锁跃迁权限</span></div>
       <p>完成星际公民认证，开启补给站与星能提现能力。</p>
       <RouterLink class="btn btn-primary btn-sm promo-btn" to="/profile#verify" @click="$emit('close')">
         立即认证
       </RouterLink>
     </div>
-    <div v-else class="side-promo side-promo-done">
+    <div v-else-if="user.verified" class="side-promo side-promo-done">
       <div class="promo-head"><AppIcon name="shield" /><span>星际公民 · 已认证</span></div>
       <p>你的星际档案已完成核验，补给站与星能权限已解锁。</p>
       <RouterLink class="btn btn-ghost btn-sm promo-btn" to="/supply" @click="$emit('close')">
