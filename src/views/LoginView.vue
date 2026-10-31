@@ -1,7 +1,8 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppIcon from '../components/AppIcon.vue';
+import { api } from '../lib/api';
 import { login } from '../lib/session';
 import { toast } from '../lib/toast';
 
@@ -13,11 +14,51 @@ const password = ref('inu2026');
 const showPassword = ref(false);
 const loading = ref(false);
 const error = ref('');
+const providers = ref([]);
+const oauthLoading = ref('');
+
+const enabledProviders = computed(() => providers.value.filter((provider) => provider.enabled));
+
+const OAUTH_ERRORS = {
+  cancelled: '已取消第三方登录',
+  state: '登录校验已过期，请重新发起',
+  code: '授权码无效，请重新发起登录',
+  email: '第三方账号没有可用的已验证邮箱',
+  provider_unavailable: '该第三方登录暂不可用',
+  provider_error: '第三方平台返回错误，请稍后重试',
+  failed: '第三方登录失败，请稍后重试',
+};
 
 const redirect = computed(() => {
   const target = typeof route.query.redirect === 'string' ? route.query.redirect : '/';
   return target.startsWith('/') ? target : '/';
 });
+
+onMounted(async () => {
+  try {
+    const data = await api.get('/auth/providers', { ttl: 0 });
+    providers.value = Array.isArray(data.providers) ? data.providers : [];
+  } catch {
+    providers.value = [];
+  }
+
+  const oauthError = typeof route.query.oauth_error === 'string' ? route.query.oauth_error : '';
+  if (oauthError) {
+    error.value = OAUTH_ERRORS[oauthError] || OAUTH_ERRORS.failed;
+    const query = { ...route.query };
+    delete query.oauth_error;
+    delete query.provider;
+    router.replace({ query });
+  }
+});
+
+function startOAuth(id) {
+  if (loading.value || oauthLoading.value) return;
+  error.value = '';
+  oauthLoading.value = id;
+  const target = `/api/auth/oauth/${encodeURIComponent(id)}/start?redirect=${encodeURIComponent(redirect.value)}`;
+  window.location.assign(target);
+}
 
 function fillDemo() {
   email.value = 'xiaoyiyi@inu.space';
@@ -164,6 +205,27 @@ async function submit() {
             <AppIcon v-if="!loading" name="chevron" />
           </button>
         </form>
+
+        <div v-if="enabledProviders.length" class="oauth-block">
+          <div class="login-divider"><span>或使用第三方通行证</span></div>
+          <div class="oauth-buttons" :class="{ single: enabledProviders.length === 1 }">
+            <button
+              v-for="provider in enabledProviders"
+              :key="provider.id"
+              type="button"
+              class="oauth-btn"
+              :disabled="loading || Boolean(oauthLoading)"
+              @click="startOAuth(provider.id)"
+            >
+              <span class="oauth-icon" :class="`is-${provider.id}`">
+                <span v-if="oauthLoading === provider.id" class="spinner oauth-spinner" />
+                <AppIcon v-else :name="provider.id" />
+              </span>
+              <span>{{ oauthLoading === provider.id ? '正在连接…' : `${provider.label} 登录` }}</span>
+              <span v-if="provider.backup && enabledProviders.length > 1" class="oauth-tag">备用</span>
+            </button>
+          </div>
+        </div>
 
         <button type="button" class="demo-fill" @click="fillDemo">
           <span class="demo-fill-icon"><AppIcon name="idcard" /></span>

@@ -88,6 +88,50 @@ npm run dev          # 终端 B，Vite 在 5173，/api 已代理到 8787
   `100000` 以上（哈希串内已记录迭代次数，调整后旧密码仍可验证，用户下次改密时自动升级）。
 - 为生产邮箱/短信/支付接入真实服务；当前相关按钮为演示提示。
 
+## 第三方登录（GitHub / Google）
+
+登录页支持 GitHub（主）与 Google（备用）OAuth。未配置的提供方会自动隐藏，邮箱密码登录不受影响。
+
+### 1. 创建 OAuth 应用
+
+GitHub：Settings → Developer settings → OAuth Apps → New OAuth App
+
+- Homepage URL：`https://inu-space-pass.<你的子域>.workers.dev`
+- Authorization callback URL：`https://inu-space-pass.<你的子域>.workers.dev/api/auth/oauth/github/callback`
+
+Google：Google Cloud Console → APIs & Services → Credentials → Create OAuth client ID → Web application
+
+- Authorized redirect URI：`https://inu-space-pass.<你的子域>.workers.dev/api/auth/oauth/google/callback`
+
+本地调试时把域名换成 `http://127.0.0.1:8787`，并在 GitHub / Google 各加一条本地回调。
+
+### 2. 配置密钥
+
+```bash
+npx wrangler secret put GITHUB_CLIENT_ID
+npx wrangler secret put GITHUB_CLIENT_SECRET
+npx wrangler secret put GOOGLE_CLIENT_ID
+npx wrangler secret put GOOGLE_CLIENT_SECRET
+```
+
+本地写入 `.dev.vars`（已在 `.gitignore` 中，可参考 `.dev.vars.example`）：
+
+```dotenv
+GITHUB_CLIENT_ID=...
+GITHUB_CLIENT_SECRET=...
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+```
+
+设置后刷新登录页即可看到按钮；`GET /api/auth/providers` 会返回各提供方的启用状态。
+
+### 3. 行为说明
+
+- 只接受提供方返回的**已验证邮箱**；没有验证邮箱会拒绝登录。
+- 邮箱已存在时自动绑定到该用户，不重复建号；否则创建新用户（无可用密码，只能走第三方登录）。
+- `state` 存在 HttpOnly Cookie 中；Google 额外使用 PKCE（S256）。回调校验失败会回到登录页提示。
+- 绑定关系存于 `oauth_accounts`（`migrations/0003_oauth.sql`），同一 `provider + subject` 唯一。
+
 ## API
 
 所有 `/api/*` 响应均为 `private, no-store`，需要登录态。
@@ -96,6 +140,9 @@ npm run dev          # 终端 B，Vite 在 5173，/api 已代理到 8787
 | --- | --- | --- |
 | POST | `/api/auth/login` | 邮箱密码登录，失败 5 次锁定 15 分钟 |
 | POST | `/api/auth/logout` | 退出并清除会话 |
+| GET | `/api/auth/providers` | 第三方登录提供方启用状态（公开） |
+| GET | `/api/auth/oauth/:provider/start` | 发起 OAuth 授权（公开，302 到提供方） |
+| GET | `/api/auth/oauth/:provider/callback` | OAuth 回调，登录/建号后 302 回应用（公开） |
 | GET | `/api/me` | 当前用户 |
 | GET | `/api/overview` | 总览聚合数据 |
 | GET / PATCH | `/api/profile` | 读取 / 更新资料 |
@@ -147,7 +194,8 @@ inu-cloud/
 │  └─ data.js           # 会员等级、商品、通知类型等静态数据
 ├─ migrations/
 │  ├─ 0001_schema.sql   # D1 表结构与索引
-│  └─ 0002_seed.sql     # 演示账号与演示数据
+│  ├─ 0002_seed.sql     # 演示账号与演示数据
+│  └─ 0003_oauth.sql    # 第三方登录绑定表
 ├─ src/
 │  ├─ views/            # 8 个业务页面 + 登录页
 │  ├─ components/       # AppShell、TopBar、SideBar、Modal、Toast 等

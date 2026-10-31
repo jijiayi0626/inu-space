@@ -1133,6 +1133,29 @@ body.modal-open{overflow:hidden}
 .login-forgot{font-size:12.5px;color:var(--primary)}
 .login-submit{width:100%;height:44px;border-radius:10px;font-size:14.5px;font-weight:600;margin-top:2px}
 .login-submit .icon{width:16px;height:16px}
+.oauth-block{margin-top:18px}
+.oauth-block .login-divider{margin:0 0 12px}
+.oauth-buttons{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.oauth-buttons.single{grid-template-columns:1fr}
+.oauth-btn{
+  position:relative;display:flex;align-items:center;justify-content:center;gap:8px;
+  height:42px;padding:0 12px;border-radius:10px;
+  border:1px solid var(--border);background:var(--card);color:var(--text);
+  font-size:12.5px;font-weight:600;cursor:pointer;
+  transition:border-color .18s,background .18s,box-shadow .18s;
+}
+.oauth-btn:hover:not(:disabled){border-color:rgba(22,93,255,.42);background:var(--soft);box-shadow:0 4px 14px rgba(15,42,92,.06)}
+.oauth-btn:disabled{opacity:.6;cursor:not-allowed}
+.oauth-icon{display:grid;place-items:center;width:18px;height:18px;flex:none;color:var(--text-sub)}
+.oauth-icon .icon{width:17px;height:17px}
+.oauth-icon.is-google{color:#4285F4}
+.oauth-tag{
+  position:absolute;top:-7px;right:8px;padding:0 5px;height:14px;border-radius:4px;
+  font-size:9px;font-weight:700;letter-spacing:.06em;line-height:14px;
+  color:var(--primary);background:var(--primary-light);
+}
+.oauth-spinner{width:15px;height:15px;border-color:rgba(22,93,255,.22);border-top-color:var(--primary)}
+@media(max-width:520px){.oauth-buttons{grid-template-columns:1fr}}
 .demo-fill{
   display:flex;align-items:center;gap:11px;width:100%;
   margin-top:18px;padding:11px 12px;border-radius:12px;

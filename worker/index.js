@@ -219,12 +219,312 @@ async function addActivity(db, userId, title, detail, tone = 'blue', icon = 'i-s
 }
 
 /* ------------------------------------------------------------------ */
+/* 第三方登录                                                           */
+/* ------------------------------------------------------------------ */
+
+const OAUTH_COOKIE = 'inu_oauth';
+const OAUTH_TTL_MS = 10 * 60 * 1000;
+
+const OAUTH_PROVIDERS = {
+  github: {
+    id: 'github',
+    label: 'GitHub',
+    backup: false,
+    authorizeUrl: 'https://github.com/login/oauth/authorize',
+    tokenUrl: 'https://github.com/login/oauth/access_token',
+    scope: 'read:user user:email',
+    clientIdEnv: 'GITHUB_CLIENT_ID',
+    clientSecretEnv: 'GITHUB_CLIENT_SECRET',
+  },
+  google: {
+    id: 'google',
+    label: 'Google',
+    backup: true,
+    authorizeUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+    tokenUrl: 'https://oauth2.googleapis.com/token',
+    scope: 'openid email profile',
+    clientIdEnv: 'GOOGLE_CLIENT_ID',
+    clientSecretEnv: 'GOOGLE_CLIENT_SECRET',
+  },
+};
+
+const isHttps = (c) => new URL(c.req.url).protocol === 'https:';
+
+function randomBase64Url(size = 32) {
+  return bytesToBase64Url(crypto.getRandomValues(new Uint8Array(size)));
+}
+
+async function sha256Base64Url(value) {
+  const digest = await crypto.subtle.digest('SHA-256', encoder.encode(value));
+  return bytesToBase64Url(new Uint8Array(digest));
+}
+
+function safeRedirect(value, origin) {
+  try {
+    const url = new URL(String(value || '/'), origin);
+    if (url.origin !== origin) return '/';
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return '/';
+  }
+}
+
+function oauthConfig(c, id) {
+  const provider = OAUTH_PROVIDERS[id];
+  if (!provider) return null;
+  const clientId = c.env[provider.clientIdEnv];
+  const clientSecret = c.env[provider.clientSecretEnv];
+  return { provider, clientId, clientSecret, enabled: Boolean(clientId && clientSecret) };
+}
+
+function readOAuthCookie(c) {
+  const raw = getCookie(c, OAUTH_COOKIE);
+  if (!raw) return null;
+  try {
+    const pad = raw.length % 4 ? '='.repeat(4 - (raw.length % 4)) : '';
+    const binary = atob(raw.replace(/-/g, '+').replace(/_/g, '/') + pad);
+    const bytes = Uint8Array.from(binary, (ch) => ch.charCodeAt(0));
+    const data = JSON.parse(new TextDecoder().decode(bytes));
+    if (!data || typeof data !== 'object') return null;
+    return {
+      s: String(data.s || ''),
+      p: String(data.p || ''),
+      r: String(data.r || '/'),
+      v: String(data.v || ''),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function oauthErrorRedirect(c, code, providerId) {
+  const url = new URL('/login', new URL(c.req.url).origin);
+  url.searchParams.set('oauth_error', code);
+  if (providerId) url.searchParams.set('provider', providerId);
+  c.header('Cache-Control', 'no-store');
+  return c.redirect(url.toString(), 302);
+}
+
+async function exchangeOAuthCode(cfg, code, redirectUri, verifier) {
+  const body = new URLSearchParams();
+  body.set('client_id', cfg.clientId);
+  body.set('client_secret', cfg.clientSecret);
+  body.set('code', code);
+  body.set('redirect_uri', redirectUri);
+  if (cfg.provider.id === 'google') body.set('grant_type', 'authorization_code');
+  if (verifier) body.set('code_verifier', verifier);
+
+  const res = await fetch(cfg.provider.tokenUrl, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'User-Agent': 'inu-space-pass',
+    },
+    body,
+    signal: AbortSignal.timeout(10000),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data?.error || !data?.access_token) throw new Error('oauth_token');
+  return data.access_token;
+}
+
+async function fetchOAuthJson(url, accessToken) {
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+      'User-Agent': 'inu-space-pass',
+    },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) throw new Error(`oauth_profile_${res.status}`);
+  return res.json();
+}
+
+async function fetchOAuthIdentity(provider, accessToken) {
+  if (provider.id === 'github') {
+    const profile = await fetchOAuthJson('https://api.github.com/user', accessToken);
+    const emails = await fetchOAuthJson('https://api.github.com/user/emails', accessToken);
+    const list = Array.isArray(emails) ? emails : [];
+    const verified = list.find((item) => item.primary && item.verified) || list.find((item) => item.verified);
+    if (!profile?.id || !verified?.email) throw new Error('oauth_email');
+    return {
+      subject: String(profile.id),
+      email: String(verified.email).trim().toLowerCase(),
+      name: profile.name || profile.login || verified.email.split('@')[0],
+    };
+  }
+
+  const profile = await fetchOAuthJson('https://openidconnect.googleapis.com/v1/userinfo', accessToken);
+  const emailVerified = profile?.email_verified === true || profile?.email_verified === 'true';
+  if (!profile?.sub || !profile?.email || !emailVerified) throw new Error('oauth_email');
+  return {
+    subject: String(profile.sub),
+    email: String(profile.email).trim().toLowerCase(),
+    name: profile.name || String(profile.email).split('@')[0],
+  };
+}
+
+function cleanDisplayName(value, fallback) {
+  const raw = String(value || '').replace(/[\u0000-\u001f\u007f]/g, '').trim();
+  const name = Array.from(raw).slice(0, 24).join('');
+  return name || Array.from(String(fallback || '星际旅者')).slice(0, 24).join('');
+}
+
+function avatarTextOf(name) {
+  return Array.from(name)[0] || '星';
+}
+
+function randomDigits(size) {
+  return [...crypto.getRandomValues(new Uint8Array(size))].map((byte) => byte % 10).join('');
+}
+
+async function uniqueInuId(db) {
+  for (let i = 0; i < 6; i += 1) {
+    const inuId = `INU·${randomDigits(5)}·${randomDigits(4)}`;
+    const exists = await db.prepare('SELECT 1 AS hit FROM users WHERE inu_id = ?').bind(inuId).first();
+    if (!exists) return { inuId, orbit: inuId.replace(/·/g, '-') };
+  }
+  const fallback = `INU·${String(Date.now()).slice(-5)}·${randomDigits(4)}`;
+  return { inuId: fallback, orbit: fallback.replace(/·/g, '-') };
+}
+
+async function findOrCreateOAuthUser(c, provider, identity) {
+  const db = c.env.DB;
+  const linked = await db
+    .prepare('SELECT * FROM oauth_accounts WHERE provider = ? AND subject = ?')
+    .bind(provider.id, identity.subject)
+    .first();
+
+  if (linked) {
+    const user = await db.prepare('SELECT * FROM users WHERE id = ?').bind(linked.user_id).first();
+    if (!user) throw new Error('oauth_user_missing');
+    await db
+      .prepare('UPDATE oauth_accounts SET email = ?, last_login_at = ? WHERE id = ?')
+      .bind(identity.email, nowIso(), linked.id)
+      .run();
+    return { user, created: false };
+  }
+
+  let user = await db.prepare('SELECT * FROM users WHERE email = ?').bind(identity.email).first();
+  let created = false;
+
+  if (!user) {
+    const name = cleanDisplayName(identity.name, identity.email.split('@')[0]);
+    const { inuId, orbit } = await uniqueInuId(db);
+    try {
+      const inserted = await db
+        .prepare(
+          `INSERT INTO users (
+             email, password_hash, display_name, inu_id, orbit_code, region, bio, avatar_text,
+             level, member_tier, particles, star_energy_cents, miles, verified, phone,
+             two_fa, guard_geo, guard_device, guard_sensitive
+           ) VALUES (?, ?, ?, ?, ?, '', '', ?, 1, 'stardust', 0, 0, 0, 0, NULL, 0, 1, 1, 0)`,
+        )
+        .bind(identity.email, `oauth$${randomBase64Url(24)}`, name, inuId, orbit, avatarTextOf(name))
+        .run();
+      user = await db.prepare('SELECT * FROM users WHERE id = ?').bind(inserted.meta?.last_row_id).first();
+      created = true;
+    } catch (error) {
+      user = await db.prepare('SELECT * FROM users WHERE email = ?').bind(identity.email).first();
+      if (!user) throw error;
+    }
+  }
+
+  try {
+    await db
+      .prepare(
+        'INSERT INTO oauth_accounts (user_id, provider, subject, email, created_at, last_login_at) VALUES (?, ?, ?, ?, ?, ?)',
+      )
+      .bind(user.id, provider.id, identity.subject, identity.email, nowIso(), nowIso())
+      .run();
+  } catch (error) {
+    const exists = await db
+      .prepare('SELECT 1 AS hit FROM oauth_accounts WHERE provider = ? AND subject = ?')
+      .bind(provider.id, identity.subject)
+      .first();
+    if (!exists) throw error;
+  }
+
+  if (created) {
+    try {
+      await addActivity(db, user.id, '加入 INU 星际网络', `通过 ${provider.label} 创建通行证`, 'blue', 'i-spark');
+    } catch {
+      /* 活动记录失败不影响登录 */
+    }
+  }
+
+  return { user, created };
+}
+
+async function createSessionForUser(c, user, event = '登录成功') {
+  const db = c.env.DB;
+  await db.prepare('DELETE FROM sessions WHERE expires_at <= ?').bind(nowIso()).run();
+
+  const token = randomBase64Url(32);
+  const tokenHash = await sha256Hex(token);
+  const loginAt = nowIso();
+  const ip = clientIp(c);
+  const location = clientLocation(c);
+  const device = detectDevice(c);
+
+  await db
+    .prepare(
+      `INSERT INTO sessions (token_hash, user_id, created_at, expires_at, ip, location, user_agent, device_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
+    )
+    .bind(
+      tokenHash,
+      user.id,
+      loginAt,
+      new Date(Date.now() + SESSION_TTL_MS).toISOString(),
+      ip,
+      location,
+      c.req.header('User-Agent') || '',
+    )
+    .run();
+
+  await db
+    .prepare(
+      'UPDATE users SET last_login_at = ?, last_login_ip = ?, last_login_device = ?, last_login_location = ? WHERE id = ?',
+    )
+    .bind(loginAt, ip, device, location, user.id)
+    .run();
+
+  await addSecurityLog(db, user.id, event, `${device} · ${location}`, 'green', 'i-check');
+
+  setCookie(c, SESSION_COOKIE, token, {
+    httpOnly: true,
+    sameSite: 'Lax',
+    secure: isHttps(c),
+    path: '/',
+    maxAge: SESSION_TTL_MS / 1000,
+  });
+
+  return {
+    ...user,
+    last_login_at: loginAt,
+    last_login_ip: ip,
+    last_login_device: device,
+    last_login_location: location,
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* 会话                                                                 */
 /* ------------------------------------------------------------------ */
 
 async function requireSession(c, next) {
   const path = c.req.path;
-  if (path === '/api/auth/login' || path === '/api/health') return next();
+  if (
+    path === '/api/auth/login' ||
+    path === '/api/auth/providers' ||
+    path === '/api/health' ||
+    path.startsWith('/api/auth/oauth/')
+  ) {
+    return next();
+  }
 
   const token = getCookie(c, SESSION_COOKIE);
   if (!token) return jsonError(c, 401, 'UNAUTHORIZED', '登录状态已失效，请重新进入星际通行证');
@@ -304,57 +604,96 @@ app.post('/api/auth/login', async (c) => {
   }
 
   await db.prepare('DELETE FROM login_guards WHERE email = ?').bind(email).run();
-  await db.prepare('DELETE FROM sessions WHERE expires_at <= ?').bind(nowIso()).run();
+  const sessionUser = await createSessionForUser(c, user);
+  return ok(c, { user: serializeUser(sessionUser) });
+});
 
-  const token = bytesToBase64Url(crypto.getRandomValues(new Uint8Array(32)));
-  const tokenHash = await sha256Hex(token);
-  const loginAt = nowIso();
-  const ip = clientIp(c);
-  const location = clientLocation(c);
-  const device = detectDevice(c);
+app.get('/api/auth/providers', (c) => {
+  const providers = Object.values(OAUTH_PROVIDERS).map((provider) => ({
+    id: provider.id,
+    label: provider.label,
+    backup: Boolean(provider.backup),
+    enabled: oauthConfig(c, provider.id).enabled,
+  }));
+  return ok(c, { providers });
+});
 
-  await db
-    .prepare(
-      `INSERT INTO sessions (token_hash, user_id, created_at, expires_at, ip, location, user_agent, device_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
-    )
-    .bind(
-      tokenHash,
-      user.id,
-      loginAt,
-      new Date(now + SESSION_TTL_MS).toISOString(),
-      ip,
-      location,
-      c.req.header('User-Agent') || '',
-    )
-    .run();
+app.get('/api/auth/oauth/:provider/start', async (c) => {
+  const id = c.req.param('provider');
+  const cfg = oauthConfig(c, id);
+  if (!cfg) return jsonError(c, 404, 'UNKNOWN_PROVIDER', '未知的第三方登录方式');
+  if (!cfg.enabled) return jsonError(c, 503, 'OAUTH_NOT_CONFIGURED', '该第三方登录尚未配置');
 
-  await db
-    .prepare(
-      'UPDATE users SET last_login_at = ?, last_login_ip = ?, last_login_device = ?, last_login_location = ? WHERE id = ?',
-    )
-    .bind(loginAt, ip, device, location, user.id)
-    .run();
+  const origin = new URL(c.req.url).origin;
+  const redirect = safeRedirect(c.req.query('redirect'), origin);
+  const state = randomBase64Url(32);
+  const verifier = id === 'google' ? randomBase64Url(32) : '';
+  const payload = bytesToBase64Url(
+    encoder.encode(JSON.stringify({ s: state, p: id, r: redirect, v: verifier })),
+  );
 
-  await addSecurityLog(db, user.id, '登录成功', `${device} · ${location}`, 'green', 'i-check');
-
-  setCookie(c, SESSION_COOKIE, token, {
+  setCookie(c, OAUTH_COOKIE, payload, {
     httpOnly: true,
     sameSite: 'Lax',
-    secure: new URL(c.req.url).protocol === 'https:',
-    path: '/',
-    maxAge: SESSION_TTL_MS / 1000,
+    secure: isHttps(c),
+    path: '/api/auth/oauth',
+    maxAge: OAUTH_TTL_MS / 1000,
   });
 
-  return ok(c, {
-    user: serializeUser({
-      ...user,
-      last_login_at: loginAt,
-      last_login_ip: ip,
-      last_login_device: device,
-      last_login_location: location,
-    }),
-  });
+  const callbackUrl = `${origin}/api/auth/oauth/${id}/callback`;
+  const url = new URL(cfg.provider.authorizeUrl);
+  url.searchParams.set('client_id', cfg.clientId);
+  url.searchParams.set('redirect_uri', callbackUrl);
+  url.searchParams.set('response_type', 'code');
+  url.searchParams.set('scope', cfg.provider.scope);
+  url.searchParams.set('state', state);
+  if (id === 'github') {
+    url.searchParams.set('allow_signup', 'true');
+  } else {
+    url.searchParams.set('access_type', 'online');
+    url.searchParams.set('prompt', 'select_account');
+    url.searchParams.set('code_challenge', await sha256Base64Url(verifier));
+    url.searchParams.set('code_challenge_method', 'S256');
+  }
+
+  c.header('Cache-Control', 'no-store');
+  return c.redirect(url.toString(), 302);
+});
+
+app.get('/api/auth/oauth/:provider/callback', async (c) => {
+  const id = c.req.param('provider');
+  const cfg = oauthConfig(c, id);
+  if (!cfg || !cfg.enabled) return oauthErrorRedirect(c, 'provider_unavailable', id);
+
+  const origin = new URL(c.req.url).origin;
+  const stored = readOAuthCookie(c);
+  deleteCookie(c, OAUTH_COOKIE, { path: '/api/auth/oauth' });
+
+  const providerError = c.req.query('error');
+  if (providerError) {
+    return oauthErrorRedirect(c, providerError === 'access_denied' ? 'cancelled' : 'provider_error', id);
+  }
+
+  const state = c.req.query('state') || '';
+  const code = c.req.query('code') || '';
+  if (!stored || stored.p !== id || !state || !stored.s || !safeEqual(stored.s, state)) {
+    return oauthErrorRedirect(c, 'state', id);
+  }
+  if (!code) return oauthErrorRedirect(c, 'code', id);
+
+  const redirect = safeRedirect(stored.r, origin);
+  try {
+    const callbackUrl = `${origin}/api/auth/oauth/${id}/callback`;
+    const accessToken = await exchangeOAuthCode(cfg, code, callbackUrl, stored.v);
+    const identity = await fetchOAuthIdentity(cfg.provider, accessToken);
+    const { user } = await findOrCreateOAuthUser(c, cfg.provider, identity);
+    await createSessionForUser(c, user, '第三方登录成功');
+    c.header('Cache-Control', 'no-store');
+    return c.redirect(`${origin}${redirect}`, 302);
+  } catch (error) {
+    console.error('oauth callback failed', id, error?.message || error);
+    return oauthErrorRedirect(c, error?.message === 'oauth_email' ? 'email' : 'failed', id);
+  }
 });
 
 app.post('/api/auth/logout', async (c) => {
