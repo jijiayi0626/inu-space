@@ -15,7 +15,7 @@ const devices = computed(() => data.value?.devices || []);
 const sessions = computed(() => data.value?.sessions || []);
 const currentSession = computed(() => sessions.value.find((item) => item.current) || null);
 const current = computed(
-  () => data.value?.current || devices.value.find((item) => item.current) || currentSession.value || null,
+  () => currentSession.value || data.value?.current || devices.value.find((item) => item.current) || null,
 );
 const currentMeta = computed(() => {
   const value = current.value || {};

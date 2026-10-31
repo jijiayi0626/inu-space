@@ -1293,7 +1293,7 @@ app.post('/api/auth/register', async (c) => {
     .bind(userId)
     .run();
   await addActivity(db, userId, '加入 INU 星际网络', `通行证 ${inuId} 已激活`, 'blue', 'i-spark');
-  await addSecurityLog(db, userId, '账号注册成功', `${detectDevice(c)} · ${clientLocation(c)}`, 'green', 'i-check');
+  await addSecurityLog(db, userId, '账号注册成功', `${detectClient(c).label} · ${clientLocation(c)}`, 'green', 'i-check');
   await pushNotification(db, userId, 'type_security', '欢迎加入 INU 星际网络', '你的星际通行证已激活，建议先完成实名认证并开启两步验证。', '/profile');
 
   let sessionUser = await createSessionForUser(c, user, '注册并登录');
@@ -1351,7 +1351,7 @@ app.post('/api/auth/password-reset', async (c) => {
       db,
       user.id,
       '提交密码找回申请',
-      `${detectDevice(c)} · ${clientLocation(c)}`,
+      `${detectClient(c).label} · ${clientLocation(c)}`,
       'orange',
       'i-lock',
     );
