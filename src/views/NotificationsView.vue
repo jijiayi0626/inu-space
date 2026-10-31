@@ -1,9 +1,12 @@
 <script setup>
 import { computed, reactive, ref, watch } from 'vue';
 import AppIcon from '../components/AppIcon.vue';
+import BaseModal from '../components/BaseModal.vue';
+import ContactVerifyModal from '../components/ContactVerifyModal.vue';
 import PageHeader from '../components/PageHeader.vue';
 import SkeletonBlock from '../components/SkeletonBlock.vue';
 import { api } from '../lib/api';
+import { timeLabel } from '../lib/format';
 import { toast } from '../lib/toast';
 import { useAsyncData } from '../lib/useAsyncData';
 
@@ -112,6 +115,67 @@ async function toggleDigest(event) {
     toast(error.message, 'error');
   }
 }
+
+const inbox = computed(() => data.value?.messages || []);
+const unread = computed(() => data.value?.unread || 0);
+
+async function markRead(message) {
+  if (message.read) return;
+  try {
+    await api.post(`/notifications/messages/${message.id}/read`);
+    message.read = true;
+    await reload({ silent: true });
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
+
+async function readAll() {
+  try {
+    const result = await api.post('/notifications/messages/read-all');
+    toast(result.updated ? `已将 ${result.updated} 条消息标为已读` : '没有未读消息');
+    await reload({ silent: true });
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
+
+async function removeMessage(message) {
+  try {
+    await api.del(`/notifications/messages/${message.id}`);
+    toast('消息已删除');
+    await reload({ silent: true });
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
+
+const messagesOpen = ref(false);
+const allMessages = ref([]);
+const messagesLoading = ref(false);
+
+async function openAllMessages() {
+  messagesOpen.value = true;
+  messagesLoading.value = true;
+  try {
+    const result = await api.get('/notifications/messages?limit=100', { force: true, ttl: 0 });
+    allMessages.value = result.messages || [];
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    messagesLoading.value = false;
+  }
+}
+
+const phoneOpen = ref(false);
+
+function openSms() {
+  phoneOpen.value = true;
+}
+
+async function onPhoneUpdated() {
+  await reload({ silent: true });
+}
 </script>
 
 <template>
@@ -128,6 +192,39 @@ async function toggleDigest(event) {
 
   <div v-else class="profile-grid">
     <div class="profile-main">
+      <section id="inbox" class="card">
+        <div class="card-head">
+          <h2>站内信</h2>
+          <span class="badge" :class="unread ? 'badge-orange' : 'badge-green'">{{ unread ? `${unread} 条未读` : '全部已读' }}</span>
+          <div class="inbox-head-actions">
+            <button class="btn btn-text" type="button" :disabled="!unread" @click="readAll">全部已读</button>
+            <button class="btn btn-text" type="button" @click="openAllMessages">查看全部</button>
+          </div>
+        </div>
+        <div class="inbox-list">
+          <div v-for="message in inbox" :key="message.id" class="inbox-row" :class="{ unread: !message.read }">
+            <span class="inbox-dot" />
+            <div class="inbox-copy">
+              <p class="inbox-title">{{ message.title }}</p>
+              <p class="inbox-body">{{ message.body }}</p>
+              <p class="inbox-meta">
+                <span>{{ timeLabel(message.createdAt) }}</span>
+                <RouterLink v-if="message.link" class="inbox-link" :to="message.link" @click="markRead(message)">查看详情</RouterLink>
+              </p>
+            </div>
+            <div class="inbox-actions">
+              <button v-if="!message.read" class="btn btn-text" type="button" @click="markRead(message)">标为已读</button>
+              <button class="btn btn-text" type="button" @click="removeMessage(message)">删除</button>
+            </div>
+          </div>
+          <div v-if="!inbox.length" class="inline-empty">
+            <span class="inline-empty-icon"><AppIcon name="bell" /></span>
+            <h3>收件箱还是空的</h3>
+            <p>安全提醒、补给动态与星能变动会通过站内信送达。</p>
+          </div>
+        </div>
+      </section>
+
       <section id="notify-types" class="card">
         <div class="card-head">
           <h2>通知类型</h2>
@@ -175,7 +272,7 @@ async function toggleDigest(event) {
               v-else
               class="btn btn-text"
               type="button"
-              @click="toast('短信验证通道正在接入星际网络…')"
+              @click="openSms"
             >
               去绑定
             </button>
@@ -257,4 +354,44 @@ async function toggleDigest(event) {
       </section>
     </aside>
   </div>
+
+  <BaseModal v-model="messagesOpen" title="全部站内信" width="580px">
+    <div v-if="messagesLoading" class="feed">
+      <SkeletonBlock :rows="6" />
+    </div>
+    <div v-else class="inbox-list modal-inbox">
+      <div v-for="message in allMessages" :key="message.id" class="inbox-row" :class="{ unread: !message.read }">
+        <span class="inbox-dot" />
+        <div class="inbox-copy">
+          <p class="inbox-title">{{ message.title }}</p>
+          <p class="inbox-body">{{ message.body }}</p>
+          <p class="inbox-meta"><span>{{ timeLabel(message.createdAt) }}</span></p>
+        </div>
+      </div>
+      <div v-if="!allMessages.length" class="inline-empty">
+        <span class="inline-empty-icon"><AppIcon name="bell" /></span>
+        <h3>暂无站内信</h3>
+        <p>新的星际讯息会出现在这里。</p>
+      </div>
+    </div>
+  </BaseModal>
+
+  <ContactVerifyModal v-model="phoneOpen" kind="phone" @updated="onPhoneUpdated" />
 </template>
+
+<style scoped>
+.inbox-head-actions{display:flex;gap:4px;margin-left:auto}
+.inbox-list{display:flex;flex-direction:column;gap:2px}
+.inbox-row{display:flex;align-items:flex-start;gap:10px;padding:12px 6px;border-bottom:1px solid var(--border-soft)}
+.inbox-row:last-child{border-bottom:none}
+.inbox-dot{width:8px;height:8px;border-radius:50%;background:var(--border-soft);margin-top:7px;flex:none}
+.inbox-row.unread .inbox-dot{background:var(--primary);box-shadow:0 0 0 3px var(--primary-light)}
+.inbox-copy{flex:1;min-width:0}
+.inbox-title{font-size:12.5px;font-weight:600}
+.inbox-row.unread .inbox-title{color:var(--primary)}
+.inbox-body{font-size:11.5px;line-height:1.65;color:var(--text-sub);margin-top:2px}
+.inbox-meta{display:flex;align-items:center;gap:10px;font-size:11px;color:var(--text-mute);margin-top:5px}
+.inbox-link{color:var(--primary);font-weight:500}
+.inbox-actions{display:flex;flex-direction:column;gap:2px;flex:none}
+.modal-inbox{max-height:60vh;overflow-y:auto}
+</style>

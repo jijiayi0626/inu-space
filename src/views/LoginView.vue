@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppIcon from '../components/AppIcon.vue';
+import BaseModal from '../components/BaseModal.vue';
 import { api } from '../lib/api';
 import { login } from '../lib/session';
 import { toast } from '../lib/toast';
@@ -106,6 +107,39 @@ async function submit() {
     error.value = err.message || '登录失败，请稍后重试';
   } finally {
     loading.value = false;
+  }
+}
+
+const resetOpen = ref(false);
+const resetEmail = ref('');
+const resetSending = ref(false);
+const resetMessage = ref('');
+const resetDone = ref(false);
+const supportEmail = computed(() => site.value?.supportEmail || 'support@inu.space');
+
+function openReset() {
+  resetEmail.value = email.value.trim();
+  resetMessage.value = '';
+  resetDone.value = false;
+  resetOpen.value = true;
+}
+
+async function submitReset() {
+  if (resetSending.value) return;
+  resetMessage.value = '';
+  if (!resetEmail.value.trim()) {
+    resetMessage.value = '请输入注册邮箱';
+    return;
+  }
+  resetSending.value = true;
+  try {
+    const result = await api.post('/auth/password-reset', { email: resetEmail.value.trim() });
+    resetDone.value = true;
+    resetMessage.value = result.message || '找回申请已提交';
+  } catch (err) {
+    resetMessage.value = err.message || '提交失败，请稍后重试';
+  } finally {
+    resetSending.value = false;
   }
 }
 </script>
@@ -216,7 +250,7 @@ async function submit() {
               <input type="checkbox" class="check" checked />
               <span>记住本次星际坐标</span>
             </label>
-            <button type="button" class="btn-text login-forgot" @click="toast('找回通道正在接入星际网络')">
+            <button type="button" class="btn-text login-forgot" @click="openReset">
               忘记密码？
             </button>
           </div>
@@ -280,9 +314,45 @@ async function submit() {
       </div>
     </section>
   </div>
+
+  <BaseModal v-model="resetOpen" title="找回星际通行证" width="440px">
+    <div class="reset-form">
+      <p class="reset-lead">
+        提交注册邮箱后，管理员会在用户管理台收到找回申请，并为你重置登录密码。
+        如急需处理，也可邮件联系 <a :href="`mailto:${supportEmail}`">{{ supportEmail }}</a>。
+      </p>
+      <div class="field">
+        <label for="reset-email">注册邮箱</label>
+        <input
+          id="reset-email"
+          v-model="resetEmail"
+          class="input"
+          type="email"
+          autocomplete="username"
+          placeholder="you@inu.space"
+          :disabled="resetSending"
+        />
+      </div>
+      <p v-if="resetMessage" class="reset-message" :class="{ done: resetDone }">{{ resetMessage }}</p>
+    </div>
+    <template #footer>
+      <button class="btn btn-ghost" type="button" @click="resetOpen = false">
+        {{ resetDone ? '关闭' : '取消' }}
+      </button>
+      <button v-if="!resetDone" class="btn btn-primary" type="button" :disabled="resetSending" @click="submitReset">
+        <span v-if="resetSending" class="spinner" />
+        <span>{{ resetSending ? '提交中…' : '提交找回申请' }}</span>
+      </button>
+    </template>
+  </BaseModal>
 </template>
 
 <style scoped>
+.reset-form{display:flex;flex-direction:column;gap:14px}
+.reset-lead{font-size:12.5px;line-height:1.75;color:var(--text-sub)}
+.reset-lead a{color:var(--primary);text-decoration:none}
+.reset-message{padding:9px 11px;border-radius:8px;font-size:12px;line-height:1.6;color:var(--warning);background:rgba(255,125,0,.09)}
+.reset-message.done{color:var(--success);background:rgba(0,180,42,.08)}
 .login-notice{
   display:flex;align-items:flex-start;gap:9px;margin:16px 0 0;
   padding:10px 12px;border-radius:10px;font-size:12px;line-height:1.65;

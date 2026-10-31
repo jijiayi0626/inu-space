@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import AppIcon from '../components/AppIcon.vue';
 import BaseModal from '../components/BaseModal.vue';
 import PageHeader from '../components/PageHeader.vue';
@@ -67,6 +67,56 @@ async function confirmAction() {
     confirmLoading.value = false;
   }
 }
+
+const addOpen = ref(false);
+const addSaving = ref(false);
+const addError = ref('');
+const addForm = reactive({ name: '', kind: 'laptop', os: '' });
+
+function openAdd() {
+  addForm.name = '';
+  addForm.kind = 'laptop';
+  addForm.os = '';
+  addError.value = '';
+  addOpen.value = true;
+}
+
+async function submitAdd() {
+  addError.value = '';
+  const name = addForm.name.trim();
+  if ([...name].length < 2 || [...name].length > 24) {
+    addError.value = '终端名称需为 2–24 个字符';
+    return;
+  }
+  addSaving.value = true;
+  try {
+    await api.post('/devices', { name, kind: addForm.kind, os: addForm.os.trim() });
+    addOpen.value = false;
+    toast('新终端已加入可信列表');
+    await reload({ silent: true });
+  } catch (error) {
+    addError.value = error.message;
+  } finally {
+    addSaving.value = false;
+  }
+}
+
+const logsOpen = ref(false);
+const allLogs = ref([]);
+const logsLoading = ref(false);
+
+async function openAllLogs() {
+  logsOpen.value = true;
+  logsLoading.value = true;
+  try {
+    const result = await api.get('/devices/logs?limit=100', { force: true, ttl: 0 });
+    allLogs.value = result.logs || [];
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    logsLoading.value = false;
+  }
+}
 </script>
 
 <template>
@@ -86,7 +136,7 @@ async function confirmAction() {
       <section id="device-list" class="card">
         <div class="card-head">
           <h2>已绑定终端</h2>
-          <button class="btn btn-ghost btn-sm" @click="toast('新终端验证通道正在接入星际网络')">添加终端</button>
+          <button class="btn btn-ghost btn-sm" @click="openAdd">添加终端</button>
         </div>
 
         <div class="device-list">
@@ -120,7 +170,7 @@ async function confirmAction() {
       <section id="login-history" class="card">
         <div class="card-head">
           <h2>登录记录</h2>
-          <button class="btn btn-text" @click="toast('已展示最近 30 天的全部登录记录')">查看全部</button>
+          <button class="btn btn-text" @click="openAllLogs">查看全部</button>
         </div>
         <div class="feed">
           <div v-for="log in data.logs" :key="log.id" class="feed-item">
@@ -235,4 +285,67 @@ async function confirmAction() {
       </button>
     </template>
   </BaseModal>
+
+  <BaseModal v-model="addOpen" title="添加星际终端" width="460px">
+    <div class="modal-device">
+      <span class="device-icon lg"><AppIcon :name="iconFor(addForm.kind)" /></span>
+      <div>
+        <p class="modal-device-name">新终端安全验证</p>
+        <p class="modal-device-sub">绑定后将加入可信终端列表</p>
+      </div>
+      <span class="badge badge-green">安全</span>
+    </div>
+
+    <div class="field">
+      <label for="device-name">终端名称</label>
+      <input id="device-name" v-model="addForm.name" class="input" maxlength="24" placeholder="例如：星际工作站" />
+    </div>
+    <div class="field">
+      <label for="device-kind">终端类型</label>
+      <select id="device-kind" v-model="addForm.kind" class="input">
+        <option value="laptop">笔记本 · Laptop</option>
+        <option value="phone">手机 · Phone</option>
+        <option value="tablet">平板 · Tablet</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="device-os">系统版本（可选）</label>
+      <input id="device-os" v-model="addForm.os" class="input" maxlength="40" placeholder="例如：INU OS 3.2 / macOS 15" />
+    </div>
+
+    <p v-if="addError" class="form-error"><AppIcon name="shield" /><span>{{ addError }}</span></p>
+
+    <template #footer>
+      <button class="btn btn-ghost btn-sm" type="button" @click="addOpen = false">取消</button>
+      <button class="btn btn-primary btn-sm" type="button" :disabled="addSaving" @click="submitAdd">
+        <span v-if="addSaving" class="spinner" />
+        {{ addSaving ? '正在绑定…' : '绑定终端' }}
+      </button>
+    </template>
+  </BaseModal>
+
+  <BaseModal v-model="logsOpen" title="全部登录记录" width="560px">
+    <div v-if="logsLoading" class="feed">
+      <SkeletonBlock :rows="6" />
+    </div>
+    <div v-else class="feed feed-scroll">
+      <div v-for="log in allLogs" :key="log.id" class="feed-item">
+        <span class="feed-chip" :class="`chip-${log.tone}`"><AppIcon :name="log.icon" /></span>
+        <div class="feed-body">
+          <p class="feed-title">{{ log.event }}</p>
+          <p class="feed-sub">{{ log.detail }}</p>
+        </div>
+        <span class="feed-time">{{ timeLabel(log.occurredAt) }}</span>
+      </div>
+      <div v-if="!allLogs.length" class="inline-empty">
+        <span class="inline-empty-icon"><AppIcon name="clock" /></span>
+        <h3>暂无登录记录</h3>
+        <p>终端登录、解绑与安全操作都会记录在这里。</p>
+      </div>
+    </div>
+  </BaseModal>
 </template>
+
+<style scoped>
+.feed-scroll{max-height:56vh;overflow-y:auto}
+</style>

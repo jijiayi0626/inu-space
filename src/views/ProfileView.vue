@@ -2,6 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue';
 import AppIcon from '../components/AppIcon.vue';
 import BaseModal from '../components/BaseModal.vue';
+import ContactVerifyModal from '../components/ContactVerifyModal.vue';
 import PageHeader from '../components/PageHeader.vue';
 import SkeletonBlock from '../components/SkeletonBlock.vue';
 import { api } from '../lib/api';
@@ -15,6 +16,9 @@ const { data } = useAsyncData(({ force }) => api.get('/profile', { force }));
 const user = computed(() => data.value?.user || session.user || {});
 const counts = computed(() => data.value?.counts || { devices: 0, agreementsSigned: 0, agreementsPending: 0 });
 const progress = computed(() => Math.min(99, Math.floor(((user.value.particles || 0) / 10000) * 100)));
+
+const features = computed(() => session.site?.features || {});
+const nameChangeDays = computed(() => Number(session.site?.nameChangeDays ?? 30));
 
 const form = reactive({ name: '', email: '', bio: '' });
 const saving = ref(false);
@@ -37,13 +41,17 @@ function resetForm() {
   form.bio = data.value.user.bio;
 }
 
+function syncUser(nextUser) {
+  setUser(nextUser);
+  if (data.value) data.value = { ...data.value, user: nextUser };
+}
+
 async function save() {
   if (saving.value) return;
   saving.value = true;
   try {
-    const result = await api.patch('/profile', { ...form });
-    setUser(result.user);
-    if (data.value) data.value = { ...data.value, user: result.user };
+    const result = await api.patch('/profile', { name: form.name, bio: form.bio });
+    syncUser(result.user);
     toast('已保存修改，星际档案已同步');
   } catch (error) {
     toast(error.message, 'error');
@@ -87,8 +95,7 @@ async function confirmVerify() {
   verifying.value = true;
   try {
     const result = await api.post('/profile/verify');
-    setUser(result.user);
-    if (data.value) data.value = { ...data.value, user: result.user };
+    syncUser(result.user);
     verifyOpen.value = false;
     toast('星际公民认证完成，补给站权限已解锁');
   } catch (error) {
@@ -96,6 +103,67 @@ async function confirmVerify() {
   } finally {
     verifying.value = false;
   }
+}
+
+const avatarOpen = ref(false);
+const avatarForm = reactive({ text: '', tone: 'blue' });
+const avatarSaving = ref(false);
+const avatarError = ref('');
+const avatarTones = ['blue', 'purple', 'cyan', 'green', 'orange'];
+
+function openAvatar() {
+  if (features.value.avatar === false) {
+    toast('头像更换功能暂未开放', 'error');
+    return;
+  }
+  avatarForm.text = user.value.avatarText || '逸';
+  avatarForm.tone = user.value.avatarTone || 'blue';
+  avatarError.value = '';
+  avatarOpen.value = true;
+}
+
+async function saveAvatar() {
+  avatarError.value = '';
+  const text = Array.from(avatarForm.text.trim()).slice(0, 2).join('');
+  if (!text) {
+    avatarError.value = '请输入 1–2 个字符作为头像';
+    return;
+  }
+  avatarSaving.value = true;
+  try {
+    const result = await api.post('/profile/avatar', { text, tone: avatarForm.tone });
+    syncUser(result.user);
+    avatarOpen.value = false;
+    toast('星际头像已更新');
+  } catch (error) {
+    avatarError.value = error.message;
+  } finally {
+    avatarSaving.value = false;
+  }
+}
+
+const phoneOpen = ref(false);
+const emailOpen = ref(false);
+
+function openPhone() {
+  if (features.value.phoneBind === false) {
+    toast('手机号绑定功能暂未开放', 'error');
+    return;
+  }
+  phoneOpen.value = true;
+}
+
+function openEmail() {
+  if (features.value.emailChange === false) {
+    toast('安全邮箱更换功能暂未开放', 'error');
+    return;
+  }
+  emailOpen.value = true;
+}
+
+function onContactUpdated(nextUser) {
+  syncUser(nextUser);
+  form.email = nextUser.email;
 }
 
 const linkItems = computed(() => [
@@ -153,7 +221,7 @@ const linkItems = computed(() => [
         </div>
 
         <div class="identity">
-          <div class="avatar-xl">{{ user.avatarText }}<span class="avatar-dot" /></div>
+          <div class="avatar-xl" :class="`tone-${user.avatarTone || 'blue'}`">{{ user.avatarText }}<span class="avatar-dot" /></div>
           <div class="identity-info">
             <p class="identity-name">
               {{ user.name }}
@@ -164,7 +232,7 @@ const linkItems = computed(() => [
               {{ user.lastLogin?.location || user.region }}
             </p>
           </div>
-          <button class="btn btn-ghost btn-sm identity-btn" @click="toast('头像更换通道正在接入星际网络')">
+          <button class="btn btn-ghost btn-sm identity-btn" @click="openAvatar">
             更换头像
           </button>
         </div>
@@ -175,12 +243,17 @@ const linkItems = computed(() => [
           <div class="field">
             <label for="nickname">昵称</label>
             <input id="nickname" v-model="form.name" class="input" type="text" maxlength="16" />
-            <p class="hint">昵称每 30 天可修改一次</p>
+            <p class="hint">{{ nameChangeDays > 0 ? `昵称每 ${nameChangeDays} 天可修改一次` : '昵称修改次数不受限制' }}</p>
           </div>
           <div class="field">
             <label for="email">邮箱</label>
-            <input id="email" v-model="form.email" class="input" type="email" />
-            <p class="hint">用于接收星际补给与安全通知</p>
+            <div class="input-inline">
+              <input id="email" v-model="form.email" class="input" type="email" readonly />
+              <button class="btn btn-text" type="button" @click="openEmail">更换</button>
+            </div>
+            <p class="hint">
+              用于接收星际补给与安全通知 · {{ user.emailVerified === false ? '待验证' : '已验证' }}
+            </p>
           </div>
           <div class="field span-2">
             <label for="bio">星际签名</label>
@@ -194,8 +267,8 @@ const linkItems = computed(() => [
               <span class="badge" :class="user.phone ? 'badge-green' : 'badge-red'">
                 {{ user.phone ? '已绑定' : '未绑定' }}
               </span>
-              <button class="btn btn-text" type="button" @click="toast('短信验证通道正在接入星际网络…')">
-                去绑定
+              <button class="btn btn-text" type="button" @click="openPhone">
+                {{ user.phone ? '更换' : '去绑定' }}
               </button>
             </div>
           </div>
@@ -377,4 +450,66 @@ const linkItems = computed(() => [
       </button>
     </template>
   </BaseModal>
+
+  <BaseModal v-model="avatarOpen" title="更换星际头像" width="440px">
+    <div class="avatar-preview">
+      <span class="avatar-xl" :class="`tone-${avatarForm.tone}`">{{ avatarForm.text || '逸' }}</span>
+      <div>
+        <p class="modal-device-name">{{ user.name }}</p>
+        <p class="modal-device-sub">头像会显示在星际公民档案与授权页面</p>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="avatar-text">头像字符</label>
+      <input id="avatar-text" v-model="avatarForm.text" class="input" type="text" maxlength="2" placeholder="1–2 个字符" />
+      <p class="hint">支持中文、字母或符号，最多 2 个字符</p>
+    </div>
+
+    <div class="field">
+      <label>头像配色</label>
+      <div class="tone-row">
+        <button
+          v-for="tone in avatarTones"
+          :key="tone"
+          type="button"
+          class="tone-dot"
+          :class="[`tone-${tone}`, { active: avatarForm.tone === tone }]"
+          :aria-label="tone"
+          @click="avatarForm.tone = tone"
+        />
+      </div>
+    </div>
+
+    <p v-if="avatarError" class="form-error"><AppIcon name="shield" /><span>{{ avatarError }}</span></p>
+
+    <template #footer>
+      <button class="btn btn-ghost btn-sm" type="button" @click="avatarOpen = false">取消</button>
+      <button class="btn btn-primary btn-sm" type="button" :disabled="avatarSaving" @click="saveAvatar">
+        <span v-if="avatarSaving" class="spinner" />
+        {{ avatarSaving ? '正在同步…' : '保存头像' }}
+      </button>
+    </template>
+  </BaseModal>
+
+  <ContactVerifyModal v-model="phoneOpen" kind="phone" :current="user.phone" @updated="onContactUpdated" />
+  <ContactVerifyModal v-model="emailOpen" kind="email" :current="user.email" @updated="onContactUpdated" />
 </template>
+
+<style scoped>
+.avatar-xl.tone-blue{background:linear-gradient(135deg,#165DFF,#3B82F6)}
+.avatar-xl.tone-purple{background:linear-gradient(135deg,#8B5CF6,#6D28D9)}
+.avatar-xl.tone-cyan{background:linear-gradient(135deg,#06B6D4,#0E7490)}
+.avatar-xl.tone-green{background:linear-gradient(135deg,#00B42A,#15803D)}
+.avatar-xl.tone-orange{background:linear-gradient(135deg,#FF7D00,#C2410C)}
+.avatar-preview{display:flex;align-items:center;gap:14px;margin-bottom:16px}
+.avatar-preview>div{min-width:0}
+.tone-row{display:flex;gap:10px;flex-wrap:wrap}
+.tone-dot{width:32px;height:32px;border-radius:50%;border:2px solid transparent;cursor:pointer;box-shadow:0 0 0 1px var(--border-soft)}
+.tone-dot.tone-blue{background:linear-gradient(135deg,#165DFF,#3B82F6)}
+.tone-dot.tone-purple{background:linear-gradient(135deg,#8B5CF6,#6D28D9)}
+.tone-dot.tone-cyan{background:linear-gradient(135deg,#06B6D4,#0E7490)}
+.tone-dot.tone-green{background:linear-gradient(135deg,#00B42A,#15803D)}
+.tone-dot.tone-orange{background:linear-gradient(135deg,#FF7D00,#C2410C)}
+.tone-dot.active{border-color:#fff;box-shadow:0 0 0 2px var(--primary)}
+</style>

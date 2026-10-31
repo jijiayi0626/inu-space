@@ -6,19 +6,30 @@ import PageHeader from '../components/PageHeader.vue';
 import SkeletonBlock from '../components/SkeletonBlock.vue';
 import { api } from '../lib/api';
 import { dateLabel, dateTimeLabel } from '../lib/format';
+import { session } from '../lib/session';
 import { toast } from '../lib/toast';
 import { useAsyncData } from '../lib/useAsyncData';
 
 const { data, reload } = useAsyncData(({ force }) => api.get('/agreements', { force }));
 
 const stats = computed(() => data.value?.stats || { signed: 0, pending: 0, total: 0, lastSigned: null });
+const agreementsEnabled = computed(() => session.site?.features?.agreements !== false);
 
 const signOpen = ref(false);
 const selected = ref(null);
 const agreed = ref(false);
 const signing = ref(false);
 
+const contentOpen = ref(false);
+const contentItem = ref(null);
+const contentText = ref('');
+const contentLoading = ref(false);
+
 function openSign(item) {
+  if (!agreementsEnabled.value) {
+    toast('协议签署功能暂未开放', 'error');
+    return;
+  }
   selected.value = item;
   agreed.value = false;
   signOpen.value = true;
@@ -42,8 +53,29 @@ async function confirmSign() {
   }
 }
 
-function viewAgreement(item) {
-  toast(`《${item.title}》正文正在同步至星际终端`);
+async function viewAgreement(item) {
+  contentItem.value = item;
+  contentText.value = '';
+  contentOpen.value = true;
+  contentLoading.value = true;
+  try {
+    const result = await api.get(`/agreements/${item.id}`, { force: true, ttl: 0 });
+    contentText.value = result.item?.content || '协议正文正在归档中，请稍后再试。';
+  } catch (error) {
+    contentText.value = '';
+    toast(error.message, 'error');
+  } finally {
+    contentLoading.value = false;
+  }
+}
+
+function exportAgreement(item) {
+  const link = document.createElement('a');
+  link.href = `/api/agreements/${item.id}/export`;
+  link.download = `${item.title}-${item.version}.md`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
 }
 </script>
 
@@ -83,7 +115,7 @@ function viewAgreement(item) {
           <p class="stat-name">待签署</p>
           <p class="stat-value">{{ stats.pending }}<small>份</small></p>
         </div>
-        <p class="stat-foot">完成签署可获得 50 INU 粒子 / 份</p>
+        <p class="stat-foot">完成签署可获得对应协议奖励的 INU 粒子</p>
       </article>
       <article class="stat-card">
         <div class="stat-top">
@@ -122,7 +154,13 @@ function viewAgreement(item) {
                 <button v-if="item.status === 'signed'" class="btn btn-text" type="button" @click="viewAgreement(item)">
                   查看
                 </button>
-                <button v-else class="btn btn-text" type="button" @click="openSign(item)">签署</button>
+                <button v-else class="btn btn-text" type="button" @click="viewAgreement(item)">预览</button>
+                <button v-if="item.status === 'signed'" class="btn btn-text" type="button" @click="exportAgreement(item)">
+                  导出
+                </button>
+                <button v-else class="btn btn-text" type="button" :disabled="!item.active" @click="openSign(item)">
+                  {{ item.active ? '签署' : '已下架' }}
+                </button>
               </td>
             </tr>
           </tbody>
@@ -153,7 +191,7 @@ function viewAgreement(item) {
       </label>
       <p class="card-note">
         <AppIcon name="spark" />
-        <span>完成签署将获得 50 INU 粒子，并同步更新你的星际信用档案。</span>
+        <span>完成签署将获得 {{ selected.reward || 50 }} INU 粒子，并同步更新你的星际信用档案。</span>
       </p>
     </template>
     <template #footer>
@@ -164,4 +202,33 @@ function viewAgreement(item) {
       </button>
     </template>
   </BaseModal>
+
+  <BaseModal v-model="contentOpen" :title="contentItem ? `《${contentItem.title}》` : '协议正文'" width="620px">
+    <div class="agreement-meta">
+      <span class="badge badge-blue">{{ contentItem?.version || '—' }}</span>
+      <span class="badge" :class="contentItem?.status === 'signed' ? 'badge-green' : 'badge-orange'">
+        {{ contentItem?.status === 'signed' ? '已签署' : '待签署' }}
+      </span>
+      <span v-if="contentItem?.signedAt" class="head-note">签署于 {{ dateTimeLabel(contentItem.signedAt) }}</span>
+    </div>
+    <div v-if="contentLoading" class="feed">
+      <SkeletonBlock :rows="7" />
+    </div>
+    <div v-else class="agreement-content">{{ contentText }}</div>
+    <template #footer>
+      <button class="btn btn-ghost btn-sm" type="button" @click="contentOpen = false">关闭</button>
+      <button v-if="contentItem" class="btn btn-ghost btn-sm" type="button" @click="exportAgreement(contentItem)">
+        <AppIcon name="file" />
+        导出 Markdown
+      </button>
+    </template>
+  </BaseModal>
 </template>
+
+<style scoped>
+.agreement-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.agreement-content{
+  max-height:56vh;overflow-y:auto;white-space:pre-wrap;line-height:1.9;
+  font-size:13px;color:var(--text-sub);padding:2px 2px 8px;
+}
+</style>

@@ -5,7 +5,7 @@ import BaseModal from '../components/BaseModal.vue';
 import PageHeader from '../components/PageHeader.vue';
 import SkeletonBlock from '../components/SkeletonBlock.vue';
 import { api } from '../lib/api';
-import { dateTimeLabel, timeLabel } from '../lib/format';
+import { dateTimeLabel, money, timeLabel } from '../lib/format';
 import { toast } from '../lib/toast';
 import { useAsyncData } from '../lib/useAsyncData';
 
@@ -15,6 +15,9 @@ const tab = ref('providers');
 const tabs = [
   { key: 'providers', label: '登录方式', icon: 'shield' },
   { key: 'settings', label: '站点设置', icon: 'grid' },
+  { key: 'content', label: '内容与商品', icon: 'box' },
+  { key: 'finance', label: '财务与订单', icon: 'star' },
+  { key: 'users', label: '用户管理', icon: 'user' },
   { key: 'clients', label: '应用接入', icon: 'plug' },
   { key: 'access', label: '接入指引', icon: 'file' },
   { key: 'audit', label: '审计日志', icon: 'clock' },
@@ -29,6 +32,22 @@ const audit = computed(() => data.value?.audit || []);
 const endpoints = computed(() => data.value?.endpoints || {});
 const scopes = computed(() => data.value?.scopes || []);
 const configReady = computed(() => Boolean(data.value?.config?.secretKeyReady));
+const productList = computed(() => data.value?.products || []);
+const templateList = computed(() => data.value?.agreementTemplates || []);
+const orderList = computed(() => data.value?.orders || []);
+const withdrawalList = computed(() => data.value?.withdrawals || []);
+const rechargeList = computed(() => data.value?.recharges || []);
+const resetRequestList = computed(() => data.value?.passwordResets || []);
+const finance = computed(() => data.value?.finance || {});
+const adminUsers = ref([]);
+
+watch(
+  () => data.value?.users,
+  (list) => {
+    if (list) adminUsers.value = list;
+  },
+  { immediate: true },
+);
 
 /* ---------- 站点设置 ---------- */
 
@@ -40,6 +59,23 @@ const siteForm = reactive({
   noticeLevel: 'info',
   footerText: '',
   loginWelcome: '',
+  supportEmail: '',
+  walletCardLast4: '',
+  featureRecharge: true,
+  featureWithdraw: false,
+  featurePhoneBind: true,
+  featureEmailChange: true,
+  featureAvatar: true,
+  featureSupply: true,
+  featureAgreements: true,
+  featureRegister: false,
+  paymentMode: 'mock',
+  verificationMode: 'console',
+  rechargePresets: '50,100,200,500,1000',
+  withdrawMinYuan: 100,
+  nameChangeDays: 30,
+  maintenanceEnabled: false,
+  maintenanceText: '',
   saving: false,
 });
 
@@ -54,6 +90,23 @@ watch(
     siteForm.noticeLevel = settings.noticeLevel || 'info';
     siteForm.footerText = settings.footerText || '';
     siteForm.loginWelcome = settings.loginWelcome || '';
+    siteForm.supportEmail = settings.supportEmail || '';
+    siteForm.walletCardLast4 = settings.walletCardLast4 || '';
+    siteForm.featureRecharge = Boolean(settings.featureRecharge);
+    siteForm.featureWithdraw = Boolean(settings.featureWithdraw);
+    siteForm.featurePhoneBind = Boolean(settings.featurePhoneBind);
+    siteForm.featureEmailChange = Boolean(settings.featureEmailChange);
+    siteForm.featureAvatar = Boolean(settings.featureAvatar);
+    siteForm.featureSupply = Boolean(settings.featureSupply);
+    siteForm.featureAgreements = Boolean(settings.featureAgreements);
+    siteForm.featureRegister = Boolean(settings.featureRegister);
+    siteForm.paymentMode = settings.paymentMode || 'mock';
+    siteForm.verificationMode = settings.verificationMode || 'console';
+    siteForm.rechargePresets = (settings.rechargePresets || []).join(',');
+    siteForm.withdrawMinYuan = Math.round((settings.withdrawMinCents || 10000) / 100);
+    siteForm.nameChangeDays = settings.nameChangeDays ?? 30;
+    siteForm.maintenanceEnabled = Boolean(settings.maintenanceEnabled);
+    siteForm.maintenanceText = settings.maintenanceText || '';
   },
   { immediate: true },
 );
@@ -62,6 +115,36 @@ async function saveSiteSettings() {
   if (siteForm.saving) return;
   if (siteForm.noticeEnabled && !siteForm.noticeText.trim()) {
     toast('开启公告前请填写公告内容', 'error');
+    return;
+  }
+  if (siteForm.maintenanceEnabled && !siteForm.maintenanceText.trim()) {
+    toast('开启维护模式前请填写维护提示', 'error');
+    return;
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(siteForm.supportEmail.trim())) {
+    toast('请输入有效的客服邮箱', 'error');
+    return;
+  }
+  if (!/^\d{4}$/.test(siteForm.walletCardLast4.trim())) {
+    toast('钱包尾号需为 4 位数字', 'error');
+    return;
+  }
+  const presets = siteForm.rechargePresets
+    .split(',')
+    .map((item) => Number(item.trim()))
+    .filter((item) => Number.isFinite(item) && item >= 1 && item <= 100000);
+  if (!presets.length || presets.length > 8) {
+    toast('请填写 1–8 个充值金额（元），用逗号分隔', 'error');
+    return;
+  }
+  const withdrawMinYuan = Number(siteForm.withdrawMinYuan);
+  if (!Number.isFinite(withdrawMinYuan) || withdrawMinYuan < 10 || withdrawMinYuan > 50000) {
+    toast('提现门槛需在 10–50000 星能之间', 'error');
+    return;
+  }
+  const nameChangeDays = Number(siteForm.nameChangeDays);
+  if (!Number.isFinite(nameChangeDays) || nameChangeDays < 0 || nameChangeDays > 365) {
+    toast('昵称修改间隔需在 0–365 天之间', 'error');
     return;
   }
   siteForm.saving = true;
@@ -74,6 +157,23 @@ async function saveSiteSettings() {
       noticeLevel: siteForm.noticeLevel,
       footerText: siteForm.footerText.trim(),
       loginWelcome: siteForm.loginWelcome.trim(),
+      supportEmail: siteForm.supportEmail.trim(),
+      walletCardLast4: siteForm.walletCardLast4.trim(),
+      featureRecharge: siteForm.featureRecharge,
+      featureWithdraw: siteForm.featureWithdraw,
+      featurePhoneBind: siteForm.featurePhoneBind,
+      featureEmailChange: siteForm.featureEmailChange,
+      featureAvatar: siteForm.featureAvatar,
+      featureSupply: siteForm.featureSupply,
+      featureAgreements: siteForm.featureAgreements,
+      featureRegister: siteForm.featureRegister,
+      paymentMode: siteForm.paymentMode,
+      verificationMode: siteForm.verificationMode,
+      rechargePresets: presets,
+      withdrawMinCents: Math.round(withdrawMinYuan * 100),
+      nameChangeDays: Math.round(nameChangeDays),
+      maintenanceEnabled: siteForm.maintenanceEnabled,
+      maintenanceText: siteForm.maintenanceText.trim(),
     });
     toast('站点设置已保存，刷新页面后生效');
     await reload({ silent: true });
@@ -418,6 +518,436 @@ function sourceLabel(source) {
   if (source === 'env') return '环境变量';
   return '未配置';
 }
+
+/* ---------- 商品管理 ---------- */
+
+function bareIcon(value) {
+  return String(value || 'box').replace(/^i-/, '');
+}
+
+function orderStatusLabel(status) {
+  return ORDER_STATUS_OPTIONS.find((item) => item.key === status)?.label || status;
+}
+
+function stockLabel(stock) {
+  return Number(stock) < 0 ? '不限' : Number(stock);
+}
+
+const TONES = ['blue', 'purple', 'cyan', 'green', 'orange'];
+const PRODUCT_ICONS = ['i-box', 'i-orbit', 'i-star', 'i-spark', 'i-moon', 'i-sun', 'i-map', 'i-file', 'i-device', 'i-lock'];
+
+const productModal = ref(false);
+const editingProduct = ref(null);
+const savingProduct = ref(false);
+const productError = ref('');
+const productForm = reactive({
+  id: '',
+  name: '',
+  desc: '',
+  priceYuan: '128',
+  icon: 'i-box',
+  tag: '',
+  tone: 'blue',
+  stock: -1,
+  sort: 0,
+  active: true,
+});
+
+function openCreateProduct() {
+  editingProduct.value = null;
+  Object.assign(productForm, {
+    id: '',
+    name: '',
+    desc: '',
+    priceYuan: '128',
+    icon: 'i-box',
+    tag: '',
+    tone: 'blue',
+    stock: -1,
+    sort: 0,
+    active: true,
+  });
+  productError.value = '';
+  productModal.value = true;
+}
+
+function openEditProduct(product) {
+  editingProduct.value = product;
+  Object.assign(productForm, {
+    id: product.id,
+    name: product.name,
+    desc: product.desc || '',
+    priceYuan: (product.priceCents / 100).toFixed(2).replace(/\.?0+$/, '') || '0',
+    icon: product.icon,
+    tag: product.tag || '',
+    tone: product.tone || 'blue',
+    stock: product.stock,
+    sort: product.sort,
+    active: product.active,
+  });
+  productError.value = '';
+  productModal.value = true;
+}
+
+async function submitProduct() {
+  productError.value = '';
+  const name = productForm.name.trim();
+  if ([...name].length < 1 || [...name].length > 40) {
+    productError.value = '商品名称需为 1–40 个字符';
+    return;
+  }
+  const priceCents = Math.round(Number(productForm.priceYuan) * 100);
+  if (!Number.isFinite(priceCents) || priceCents < 100 || priceCents > 10000000) {
+    productError.value = '商品价格需在 1–100000 星能之间';
+    return;
+  }
+  const payload = {
+    name,
+    desc: productForm.desc.trim(),
+    priceCents,
+    icon: productForm.icon,
+    tag: productForm.tag.trim(),
+    tone: productForm.tone,
+    stock: Math.round(Number(productForm.stock)),
+    sort: Math.round(Number(productForm.sort)),
+    active: productForm.active,
+  };
+  savingProduct.value = true;
+  try {
+    if (editingProduct.value) {
+      await api.patch(`/admin/products/${editingProduct.value.id}`, payload);
+      toast('商品已更新');
+    } else {
+      if (productForm.id.trim()) payload.id = productForm.id.trim().toLowerCase();
+      await api.post('/admin/products', payload);
+      toast('商品已创建');
+    }
+    productModal.value = false;
+    await reload({ silent: true });
+  } catch (error) {
+    productError.value = error.message;
+  } finally {
+    savingProduct.value = false;
+  }
+}
+
+function deleteProduct(product) {
+  askConfirm({
+    title: '删除补给商品',
+    message: `删除「${product.name}」后，补给站将不再展示该商品，历史订单不受影响。`,
+    confirmText: '删除商品',
+    danger: true,
+    action: async () => {
+      await api.del(`/admin/products/${product.id}`);
+      toast('商品已删除');
+      await reload({ silent: true });
+    },
+  });
+}
+
+/* ---------- 协议模板管理 ---------- */
+
+const templateModal = ref(false);
+const editingTemplate = ref(null);
+const savingTemplate = ref(false);
+const templateError = ref('');
+const templateForm = reactive({
+  title: '',
+  version: 'v1.0',
+  content: '',
+  reward: 50,
+  sort: 0,
+  active: true,
+});
+
+function openCreateTemplate() {
+  editingTemplate.value = null;
+  Object.assign(templateForm, { title: '', version: 'v1.0', content: '', reward: 50, sort: 0, active: true });
+  templateError.value = '';
+  templateModal.value = true;
+}
+
+function openEditTemplate(template) {
+  editingTemplate.value = template;
+  Object.assign(templateForm, {
+    title: template.title,
+    version: template.version,
+    content: template.content || '',
+    reward: template.reward,
+    sort: template.sort,
+    active: template.active,
+  });
+  templateError.value = '';
+  templateModal.value = true;
+}
+
+async function submitTemplate() {
+  templateError.value = '';
+  if ([...templateForm.title.trim()].length < 2) {
+    templateError.value = '协议名称需为 2–40 个字符';
+    return;
+  }
+  if ([...templateForm.content].length < 10) {
+    templateError.value = '协议正文至少需要 10 个字符';
+    return;
+  }
+  const payload = {
+    title: templateForm.title.trim(),
+    version: templateForm.version.trim(),
+    content: templateForm.content,
+    reward: Math.round(Number(templateForm.reward)),
+    sort: Math.round(Number(templateForm.sort)),
+    active: templateForm.active,
+  };
+  savingTemplate.value = true;
+  try {
+    if (editingTemplate.value) {
+      await api.patch(`/admin/agreement-templates/${editingTemplate.value.id}`, payload);
+      toast('协议模板已更新，待签署协议已同步');
+    } else {
+      await api.post('/admin/agreement-templates', payload);
+      toast('协议模板已创建，并已为全部用户生成待签记录');
+    }
+    templateModal.value = false;
+    await reload({ silent: true });
+  } catch (error) {
+    templateError.value = error.message;
+  } finally {
+    savingTemplate.value = false;
+  }
+}
+
+function deleteTemplate(template) {
+  askConfirm({
+    title: '删除协议模板',
+    message: `删除「${template.title}」后，新用户将不再收到该协议；已签署记录仍会保留。`,
+    confirmText: '删除模板',
+    danger: true,
+    action: async () => {
+      await api.del(`/admin/agreement-templates/${template.id}`);
+      toast('协议模板已删除');
+      await reload({ silent: true });
+    },
+  });
+}
+
+/* ---------- 站内信广播 ---------- */
+
+const NOTIFICATION_CATEGORIES = [
+  { key: 'type_security', label: '账户安全提醒' },
+  { key: 'type_supply', label: '星际补给动态' },
+  { key: 'type_energy', label: '星能变动' },
+  { key: 'type_member', label: '会员权益与等级' },
+  { key: 'type_radio', label: '星际电台与活动' },
+];
+
+const broadcastForm = reactive({
+  title: '',
+  body: '',
+  category: 'type_radio',
+  link: '',
+  email: '',
+  sending: false,
+});
+
+async function sendBroadcast() {
+  if (broadcastForm.sending) return;
+  if ([...broadcastForm.title.trim()].length < 2) {
+    toast('消息标题需为 2–40 个字符', 'error');
+    return;
+  }
+  if ([...broadcastForm.body.trim()].length < 2) {
+    toast('消息正文需为 2–300 个字符', 'error');
+    return;
+  }
+  broadcastForm.sending = true;
+  try {
+    const result = await api.post('/admin/notifications', {
+      title: broadcastForm.title.trim(),
+      body: broadcastForm.body.trim(),
+      category: broadcastForm.category,
+      link: broadcastForm.link.trim(),
+      email: broadcastForm.email.trim().toLowerCase(),
+    });
+    toast(`站内信已发送 ${result.sent}/${result.total}`);
+    broadcastForm.title = '';
+    broadcastForm.body = '';
+    broadcastForm.link = '';
+    broadcastForm.email = '';
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    broadcastForm.sending = false;
+  }
+}
+
+/* ---------- 订单管理 ---------- */
+
+const ORDER_STATUS_OPTIONS = [
+  { key: 'pending_payment', label: '待支付' },
+  { key: 'transit', label: '跃迁中' },
+  { key: 'delivered', label: '已签收' },
+  { key: 'cancelled', label: '已取消' },
+];
+const ORDER_STATUS_TONES = {
+  pending_payment: 'badge-orange',
+  transit: 'badge-blue',
+  delivered: 'badge-green',
+  cancelled: 'badge-gray',
+};
+
+const WITHDRAW_STATUS = {
+  processing: { label: '待复核', tone: 'badge-orange' },
+  paid: { label: '已打款', tone: 'badge-green' },
+  rejected: { label: '已驳回', tone: 'badge-gray' },
+};
+
+const orderModal = ref(false);
+const orderTarget = ref(null);
+const savingOrder = ref(false);
+const orderError = ref('');
+const orderForm = reactive({ status: 'pending_payment', carrier: '', trackingNo: '' });
+
+function openOrderAdmin(order) {
+  orderTarget.value = order;
+  orderForm.status = order.status;
+  orderForm.carrier = order.carrier || '';
+  orderForm.trackingNo = order.trackingNo || '';
+  orderError.value = '';
+  orderModal.value = true;
+}
+
+async function submitOrder() {
+  if (!orderTarget.value || savingOrder.value) return;
+  orderError.value = '';
+  savingOrder.value = true;
+  try {
+    const result = await api.patch(`/admin/orders/${orderTarget.value.id}`, {
+      status: orderForm.status,
+      carrier: orderForm.carrier.trim(),
+      trackingNo: orderForm.trackingNo.trim(),
+    });
+    toast(result.refunded ? `订单已更新，已退回 ${money(result.refunded)} 星能` : '订单已更新');
+    orderModal.value = false;
+    await reload({ silent: true });
+  } catch (error) {
+    orderError.value = error.message;
+  } finally {
+    savingOrder.value = false;
+  }
+}
+
+/* ---------- 提现处理 ---------- */
+
+const withdrawModal = ref(false);
+const withdrawTarget = ref(null);
+const withdrawNote = ref('');
+const withdrawBusy = ref(false);
+
+function openWithdraw(row) {
+  withdrawTarget.value = row;
+  withdrawNote.value = '';
+  withdrawModal.value = true;
+}
+
+async function processWithdraw(action) {
+  if (!withdrawTarget.value || withdrawBusy.value) return;
+  withdrawBusy.value = true;
+  try {
+    await api.patch(`/admin/withdrawals/${withdrawTarget.value.id}`, {
+      action,
+      note: withdrawNote.value.trim(),
+    });
+    toast(action === 'approve' ? '提现已通过，已标记为打款完成' : '提现已驳回，星能已退回用户钱包');
+    withdrawModal.value = false;
+    await reload({ silent: true });
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    withdrawBusy.value = false;
+  }
+}
+
+/* ---------- 用户管理 ---------- */
+
+const userQuery = ref('');
+const usersLoading = ref(false);
+const userModal = ref(false);
+const userTarget = ref(null);
+const userError = ref('');
+const userSaving = ref(false);
+const userForm = reactive({ name: '', verified: false, particlesDelta: 0, balanceDeltaYuan: 0, password: '' });
+
+async function searchAdminUsers() {
+  if (usersLoading.value) return;
+  usersLoading.value = true;
+  try {
+    const q = userQuery.value.trim();
+    const result = await api.get(`/admin/users?limit=50${q ? `&q=${encodeURIComponent(q)}` : ''}`, {
+      force: true,
+      ttl: 0,
+    });
+    adminUsers.value = result.users || [];
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    usersLoading.value = false;
+  }
+}
+
+function openUserAdjust(user) {
+  userTarget.value = user;
+  userForm.name = user.name;
+  userForm.verified = user.verified;
+  userForm.particlesDelta = 0;
+  userForm.balanceDeltaYuan = 0;
+  userForm.password = '';
+  userError.value = '';
+  userModal.value = true;
+}
+
+async function submitUserAdjust() {
+  if (!userTarget.value || userSaving.value) return;
+  userError.value = '';
+  if ([...userForm.name.trim()].length < 2 || [...userForm.name.trim()].length > 20) {
+    userError.value = '昵称需为 2–20 个字符';
+    return;
+  }
+  const particlesDelta = Math.round(Number(userForm.particlesDelta) || 0);
+  const balanceDelta = Math.round(Number(userForm.balanceDeltaYuan) * 100 || 0);
+  const payload = {
+    name: userForm.name.trim(),
+    verified: userForm.verified,
+    particlesDelta,
+    balanceDelta,
+  };
+  if (userForm.password.trim()) payload.password = userForm.password;
+  userSaving.value = true;
+  try {
+    await api.patch(`/admin/users/${userTarget.value.id}`, payload);
+    toast(userForm.password.trim() ? '用户资料已更新，密码已重置' : '用户资料已更新');
+    userModal.value = false;
+    await reload({ silent: true });
+    await searchAdminUsers();
+  } catch (error) {
+    userError.value = error.message;
+  } finally {
+    userSaving.value = false;
+  }
+}
+
+function resolveResetRequest(row) {
+  askConfirm({
+    title: '标记找回申请已处理',
+    message: `确认已通过其他方式联系 ${row.userName}（${row.email}）并完成密码找回？`,
+    confirmText: '标记已处理',
+    action: async () => {
+      await api.patch(`/admin/password-resets/${row.id}`, { note: '管理员已联系用户' });
+      toast('找回申请已处理');
+      await reload({ silent: true });
+    },
+  });
+}
 </script>
 
 <template>
@@ -682,6 +1212,130 @@ function sourceLabel(source) {
             </div>
           </div>
         </article>
+
+        <article class="card settings-card settings-card-wide">
+          <div class="settings-head">
+            <span class="settings-icon is-green"><AppIcon name="grid" /></span>
+            <div><strong>功能开关</strong><span>关闭后前端入口隐藏，服务端也会拒绝对应写操作</span></div>
+          </div>
+
+          <div class="feature-grid">
+            <label
+              v-for="item in [
+                { key: 'featureRecharge', title: '星能充值', desc: '钱包充值入口与支付订单' },
+                { key: 'featureWithdraw', title: '星能提现', desc: '提交提现申请并进入人工复核' },
+                { key: 'featureSupply', title: '星际补给站', desc: '商品兑换、订单与物流' },
+                { key: 'featureAgreements', title: '星际法条库', desc: '协议签署、查看与导出' },
+                { key: 'featureAvatar', title: '头像自定义', desc: '修改头像文字与配色' },
+                { key: 'featurePhoneBind', title: '手机绑定', desc: '绑定 / 更换安全手机' },
+                { key: 'featureEmailChange', title: '邮箱更换', desc: '更换安全邮箱' },
+                { key: 'featureRegister', title: '开放注册', desc: '允许新用户自助注册通行证' },
+              ]"
+              :key="item.key"
+              class="setting-row feature-row"
+            >
+              <span>
+                <strong>{{ item.title }}</strong>
+                <em>{{ item.desc }}</em>
+              </span>
+              <span class="switch">
+                <input v-model="siteForm[item.key]" type="checkbox" />
+                <span class="track" />
+                <span class="thumb" />
+              </span>
+            </label>
+          </div>
+        </article>
+
+        <article class="card settings-card">
+          <div class="settings-head">
+            <span class="settings-icon is-purple"><AppIcon name="star" /></span>
+            <div><strong>支付与验证</strong><span>充值、提现与验证码通道</span></div>
+          </div>
+
+          <div class="field">
+            <label for="payment-mode">支付模式</label>
+            <select id="payment-mode" v-model="siteForm.paymentMode" class="input">
+              <option value="mock">模拟支付 · 下单即到账</option>
+              <option value="off">关闭支付</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="verify-mode">验证码通道</label>
+            <select id="verify-mode" v-model="siteForm.verificationMode" class="input">
+              <option value="console">控制台调试 · 返回 devCode 并开放模拟认证</option>
+              <option value="off">关闭验证码与模拟认证</option>
+            </select>
+            <p class="hint">关闭后手机 / 邮箱验证码与星际公民自助认证都不可用，用户不能自行完成认证。</p>
+          </div>
+
+          <div class="field">
+            <label for="recharge-presets">充值快捷金额（元）</label>
+            <input id="recharge-presets" v-model="siteForm.rechargePresets" class="input" placeholder="50,100,200,500,1000" />
+            <p class="hint">1–8 个金额，用英文逗号分隔，仅影响前端快捷选项。</p>
+          </div>
+
+          <div class="settings-fields">
+            <div class="field">
+              <label for="withdraw-min">提现门槛（星能）</label>
+              <input id="withdraw-min" v-model.number="siteForm.withdrawMinYuan" class="input" type="number" min="10" max="50000" />
+            </div>
+            <div class="field">
+              <label for="name-days">昵称修改间隔（天）</label>
+              <input id="name-days" v-model.number="siteForm.nameChangeDays" class="input" type="number" min="0" max="365" />
+            </div>
+          </div>
+        </article>
+
+        <article class="card settings-card">
+          <div class="settings-head">
+            <span class="settings-icon is-cyan"><AppIcon name="mail" /></span>
+            <div><strong>客服与钱包</strong><span>帮助终端邮箱与钱包卡面尾号</span></div>
+          </div>
+
+          <div class="field">
+            <label for="support-email">客服邮箱</label>
+            <input id="support-email" v-model="siteForm.supportEmail" class="input" type="email" placeholder="support@inu.space" />
+            <p class="hint">用于帮助终端、补给站与安全中心的客服入口。</p>
+          </div>
+
+          <div class="field">
+            <label for="wallet-last4">钱包尾号</label>
+            <input id="wallet-last4" v-model="siteForm.walletCardLast4" class="input" maxlength="4" placeholder="0721" />
+          </div>
+        </article>
+
+        <article class="card settings-card settings-card-wide">
+          <div class="settings-head">
+            <span class="settings-icon is-orange"><AppIcon name="lock" /></span>
+            <div><strong>维护模式</strong><span>开启后普通用户无法执行写操作，超级管理员不受影响</span></div>
+          </div>
+
+          <label class="setting-row">
+            <span>
+              <strong>启用维护模式</strong>
+              <em>登录、注册、浏览、健康检查与 OAuth 授权仍然可用。</em>
+            </span>
+            <span class="switch">
+              <input v-model="siteForm.maintenanceEnabled" type="checkbox" />
+              <span class="track" />
+              <span class="thumb" />
+            </span>
+          </label>
+
+          <div class="field">
+            <label for="maintenance-text">维护提示</label>
+            <textarea
+              id="maintenance-text"
+              v-model="siteForm.maintenanceText"
+              class="input modal-textarea"
+              rows="2"
+              maxlength="200"
+              placeholder="例如：星际网络正在升级，预计 30 分钟后恢复。"
+            />
+          </div>
+        </article>
       </div>
 
       <div class="settings-foot">
@@ -690,6 +1344,332 @@ function sourceLabel(source) {
           <span v-if="siteForm.saving" class="spinner" />
           <span>{{ siteForm.saving ? '保存中…' : '保存站点设置' }}</span>
         </button>
+      </div>
+    </section>
+
+    <!-- 内容与商品 -->
+    <section v-if="tab === 'content'" class="admin-section">
+      <div class="admin-section-head">
+        <div>
+          <h2>内容与商品</h2>
+          <p>补给商品、协议模板与站内信广播，全部写入 D1 并立即生效。</p>
+        </div>
+      </div>
+
+      <div class="card broadcast-card">
+        <div class="card-head">
+          <h2>发送站内信</h2>
+          <span class="badge badge-blue">全员 / 指定用户</span>
+        </div>
+        <div class="broadcast-grid">
+          <div class="field">
+            <label for="bc-title">消息标题</label>
+            <input id="bc-title" v-model="broadcastForm.title" class="input" maxlength="40" placeholder="例如：星际电台今晚更新" />
+          </div>
+          <div class="field">
+            <label for="bc-category">消息分类</label>
+            <select id="bc-category" v-model="broadcastForm.category" class="input">
+              <option v-for="item in NOTIFICATION_CATEGORIES" :key="item.key" :value="item.key">{{ item.label }}</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="bc-email">指定用户邮箱（可选）</label>
+            <input id="bc-email" v-model="broadcastForm.email" class="input" placeholder="留空表示发送给全部用户" />
+          </div>
+          <div class="field">
+            <label for="bc-link">跳转路径（可选）</label>
+            <input id="bc-link" v-model="broadcastForm.link" class="input" maxlength="200" placeholder="/wallet" />
+          </div>
+          <div class="field broadcast-body">
+            <label for="bc-body">正文</label>
+            <textarea id="bc-body" v-model="broadcastForm.body" class="input modal-textarea" rows="3" maxlength="300" placeholder="最多 300 个字符" />
+          </div>
+        </div>
+        <div class="broadcast-foot">
+          <p class="hint">发送后用户可在「站内信」与通知中心查看，并受分类偏好开关影响。</p>
+          <button class="btn btn-primary" type="button" :disabled="broadcastForm.sending" @click="sendBroadcast">
+            <span v-if="broadcastForm.sending" class="spinner" />
+            <span>{{ broadcastForm.sending ? '发送中…' : '发送站内信' }}</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>补给商品</h2>
+          <div class="head-actions">
+            <span class="head-note">{{ productList.length }} 件</span>
+            <button class="btn btn-primary btn-sm" type="button" @click="openCreateProduct">
+              <AppIcon name="plus" />
+              <span>新增商品</span>
+            </button>
+          </div>
+        </div>
+
+        <div v-if="!productList.length" class="admin-empty compact">
+          <span class="admin-empty-icon"><AppIcon name="box" /></span>
+          <h3>还没有补给商品</h3>
+          <p>新增商品后，已认证的星际公民即可在补给站兑换。</p>
+        </div>
+
+        <div v-else class="manage-list">
+          <div v-for="product in productList" :key="product.id" class="manage-row">
+            <span class="manage-mark" :class="`is-${product.tone}`">
+              <AppIcon :name="bareIcon(product.icon)" />
+            </span>
+            <div class="manage-copy">
+              <strong>
+                {{ product.name }}
+                <span class="badge" :class="product.active ? 'badge-green' : 'badge-gray'">{{ product.active ? '上架' : '下架' }}</span>
+                <span v-if="product.tag" class="badge badge-blue">{{ product.tag }}</span>
+              </strong>
+              <span>{{ product.desc || '暂无描述' }}</span>
+              <em>{{ product.id }} · 排序 {{ product.sort }} · 库存 {{ stockLabel(product.stock) }}</em>
+            </div>
+            <div class="manage-price">
+              <strong>{{ money(product.priceCents) }}</strong>
+              <span>星能</span>
+            </div>
+            <div class="manage-actions">
+              <button class="btn btn-ghost btn-sm" type="button" @click="openEditProduct(product)">编辑</button>
+              <button class="btn btn-danger btn-sm" type="button" @click="deleteProduct(product)">删除</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>协议模板</h2>
+          <div class="head-actions">
+            <span class="head-note">{{ templateList.length }} 份</span>
+            <button class="btn btn-primary btn-sm" type="button" @click="openCreateTemplate">
+              <AppIcon name="plus" />
+              <span>新增协议</span>
+            </button>
+          </div>
+        </div>
+
+        <div v-if="!templateList.length" class="admin-empty compact">
+          <span class="admin-empty-icon"><AppIcon name="file" /></span>
+          <h3>还没有协议模板</h3>
+          <p>新增模板后会自动为全部用户生成待签署记录。</p>
+        </div>
+
+        <div v-else class="manage-list">
+          <div v-for="template in templateList" :key="template.id" class="manage-row">
+            <span class="manage-mark is-purple"><AppIcon name="file" /></span>
+            <div class="manage-copy">
+              <strong>
+                {{ template.title }}
+                <span class="badge" :class="template.active ? 'badge-green' : 'badge-gray'">{{ template.active ? '生效中' : '已下架' }}</span>
+              </strong>
+              <span>{{ template.version }} · 签署奖励 {{ template.reward }} 粒子 · 排序 {{ template.sort }}</span>
+              <em>{{ (template.content || '').slice(0, 48) }}{{ (template.content || '').length > 48 ? '…' : '' }}</em>
+            </div>
+            <div class="manage-actions">
+              <button class="btn btn-ghost btn-sm" type="button" @click="openEditTemplate(template)">编辑</button>
+              <button class="btn btn-danger btn-sm" type="button" @click="deleteTemplate(template)">删除</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 财务与订单 -->
+    <section v-if="tab === 'finance'" class="admin-section">
+      <div class="admin-section-head">
+        <div>
+          <h2>财务与订单</h2>
+          <p>用户星能、充值、补给订单与提现复核，所有金额以星能计。</p>
+        </div>
+      </div>
+
+      <div class="finance-grid">
+        <div class="admin-stat">
+          <span class="admin-stat-icon is-blue"><AppIcon name="idcard" /></span>
+          <div><strong>{{ money(finance.walletCents) }}</strong><span>用户星能总额</span></div>
+        </div>
+        <div class="admin-stat">
+          <span class="admin-stat-icon is-green"><AppIcon name="star" /></span>
+          <div><strong>{{ money(finance.rechargeCents) }}</strong><span>累计充值（{{ finance.rechargeCount || 0 }} 笔）</span></div>
+        </div>
+        <div class="admin-stat">
+          <span class="admin-stat-icon is-purple"><AppIcon name="box" /></span>
+          <div><strong>{{ money(finance.supplyCents) }}</strong><span>补给消费（{{ finance.orderCount || 0 }} 单）</span></div>
+        </div>
+        <div class="admin-stat">
+          <span class="admin-stat-icon is-orange"><AppIcon name="clock" /></span>
+          <div><strong>{{ money(finance.withdrawPendingCents) }}</strong><span>待复核提现（{{ finance.withdrawPendingCount || 0 }} 笔）</span></div>
+        </div>
+        <div class="admin-stat">
+          <span class="admin-stat-icon is-cyan"><AppIcon name="check" /></span>
+          <div><strong>{{ money(finance.withdrawnCents) }}</strong><span>已打款提现</span></div>
+        </div>
+        <div class="admin-stat">
+          <span class="admin-stat-icon is-blue"><AppIcon name="file" /></span>
+          <div><strong>{{ finance.agreementSigned || 0 }} / {{ finance.agreementTotal || 0 }}</strong><span>协议已签署</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>提现复核</h2>
+          <span class="head-note">{{ finance.withdrawPendingCount || 0 }} 笔待处理</span>
+        </div>
+
+        <div v-if="!withdrawalList.length" class="admin-empty compact">
+          <span class="admin-empty-icon"><AppIcon name="idcard" /></span>
+          <h3>还没有提现申请</h3>
+          <p>用户提交提现后，会在这里进入人工复核。</p>
+        </div>
+
+        <div v-else class="manage-list">
+          <div v-for="row in withdrawalList" :key="row.id" class="manage-row">
+            <span class="manage-mark is-orange"><AppIcon name="idcard" /></span>
+            <div class="manage-copy">
+              <strong>
+                {{ money(row.amountCents) }} 星能
+                <span class="badge" :class="WITHDRAW_STATUS[row.status]?.tone || 'badge-gray'">{{ WITHDRAW_STATUS[row.status]?.label || row.status }}</span>
+              </strong>
+              <span>{{ row.userName }} · {{ row.userEmail }}</span>
+              <em>{{ row.code }} · 收款账号 {{ row.account }} · {{ dateTimeLabel(row.createdAt) }}</em>
+            </div>
+            <div class="manage-actions">
+              <button v-if="row.status === 'processing'" class="btn btn-primary btn-sm" type="button" @click="openWithdraw(row)">处理</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>补给订单</h2>
+          <span class="head-note">最近 20 笔</span>
+        </div>
+
+        <div v-if="!orderList.length" class="admin-empty compact">
+          <span class="admin-empty-icon"><AppIcon name="box" /></span>
+          <h3>还没有补给订单</h3>
+          <p>用户在补给站兑换商品后，订单会出现在这里。</p>
+        </div>
+
+        <div v-else class="manage-list">
+          <div v-for="order in orderList" :key="order.id" class="manage-row">
+            <span class="manage-mark is-blue"><AppIcon name="box" /></span>
+            <div class="manage-copy">
+              <strong>
+                {{ order.item }}
+                <span class="badge" :class="ORDER_STATUS_TONES[order.status] || 'badge-gray'">{{ orderStatusLabel(order.status) }}</span>
+              </strong>
+              <span>{{ order.userName }} · {{ order.code }}</span>
+              <em>{{ money(order.energyCents) }} 星能 · {{ dateTimeLabel(order.createdAt) }}{{ order.trackingNo ? ` · ${order.carrier || '星际快递'} ${order.trackingNo}` : '' }}</em>
+            </div>
+            <div class="manage-actions">
+              <button class="btn btn-ghost btn-sm" type="button" @click="openOrderAdmin(order)">处理</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>充值订单</h2>
+          <span class="head-note">最近 20 笔</span>
+        </div>
+
+        <div v-if="!rechargeList.length" class="admin-empty compact">
+          <span class="admin-empty-icon"><AppIcon name="star" /></span>
+          <h3>还没有充值记录</h3>
+          <p>用户创建充值订单后，会在这里展示支付状态。</p>
+        </div>
+
+        <div v-else class="manage-list">
+          <div v-for="row in rechargeList" :key="row.id" class="manage-row">
+            <span class="manage-mark is-green"><AppIcon name="star" /></span>
+            <div class="manage-copy">
+              <strong>
+                {{ money(row.amountCents) }} 星能
+                <span class="badge" :class="row.status === 'paid' ? 'badge-green' : 'badge-orange'">{{ row.status === 'paid' ? '已到账' : row.status === 'pending' ? '待支付' : row.status }}</span>
+              </strong>
+              <span>{{ row.userName }} · {{ row.userEmail }}</span>
+              <em>{{ row.code }} · {{ row.method || 'mock' }} · {{ dateTimeLabel(row.createdAt) }}</em>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 用户管理 -->
+    <section v-if="tab === 'users'" class="admin-section">
+      <div class="admin-section-head">
+        <div>
+          <h2>用户管理</h2>
+          <p>搜索用户、调整昵称、认证状态、INU 粒子与星能余额，所有调整都会写入流水与审计。</p>
+        </div>
+      </div>
+
+      <div v-if="resetRequestList.length" class="card">
+        <div class="card-head">
+          <h2>密码找回申请</h2>
+          <span class="head-note">{{ resetRequestList.length }} 条待处理</span>
+        </div>
+        <div class="manage-list">
+          <div v-for="row in resetRequestList" :key="row.id" class="manage-row">
+            <span class="manage-mark is-orange"><AppIcon name="lock" /></span>
+            <div class="manage-copy">
+              <strong>
+                {{ row.userName }}
+                <span class="badge badge-orange">待处理</span>
+              </strong>
+              <span>{{ row.email }}</span>
+              <em>{{ row.userInuId }} · {{ dateTimeLabel(row.createdAt) }}</em>
+            </div>
+            <div class="manage-actions">
+              <button class="btn btn-ghost btn-sm" type="button" @click="resolveResetRequest(row)">标记已处理</button>
+            </div>
+          </div>
+        </div>
+        <p class="hint">在用户调整弹窗中填写新密码并保存后，该用户的找回申请会自动完成。</p>
+      </div>
+
+      <div class="card">
+        <div class="user-search">
+          <input
+            v-model="userQuery"
+            class="input"
+            placeholder="搜索邮箱 / 昵称 / INU ID / 手机号"
+            @keyup.enter="searchAdminUsers"
+          />
+          <button class="btn btn-primary" type="button" :disabled="usersLoading" @click="searchAdminUsers">
+            <span v-if="usersLoading" class="spinner" />
+            <span>{{ usersLoading ? '搜索中…' : '搜索用户' }}</span>
+          </button>
+        </div>
+
+        <div v-if="!adminUsers.length" class="admin-empty compact">
+          <span class="admin-empty-icon"><AppIcon name="user" /></span>
+          <h3>没有匹配的用户</h3>
+          <p>试试其他关键词，或清空搜索查看最近注册的星际公民。</p>
+        </div>
+
+        <div v-else class="manage-list">
+          <div v-for="user in adminUsers" :key="user.id" class="manage-row">
+            <span class="manage-mark is-purple">{{ (user.name || 'U').slice(0, 1) }}</span>
+            <div class="manage-copy">
+              <strong>
+                {{ user.name }}
+                <span class="badge" :class="user.verified ? 'badge-green' : 'badge-gray'">{{ user.verified ? '已认证' : '未认证' }}</span>
+                <span v-if="user.isAdmin" class="badge badge-blue">管理员</span>
+              </strong>
+              <span>{{ user.email }} · {{ user.inuId }}</span>
+              <em>{{ money(user.balanceCents) }} 星能 · {{ user.particles }} 粒子 · {{ user.phone || '未绑定手机' }} · {{ dateTimeLabel(user.createdAt) }}</em>
+            </div>
+            <div class="manage-actions">
+              <button class="btn btn-ghost btn-sm" type="button" @click="openUserAdjust(user)">调整</button>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -1015,6 +1995,246 @@ const profile = await fetch(endpoints.userinfo, {
     </template>
   </BaseModal>
 
+  <!-- 商品编辑 -->
+  <BaseModal v-model="productModal" :title="editingProduct ? '编辑补给商品' : '新增补给商品'" width="560px">
+    <div class="modal-form">
+      <div class="settings-fields">
+        <div class="field">
+          <label for="product-name">商品名称</label>
+          <input id="product-name" v-model="productForm.name" class="input" maxlength="40" placeholder="例如：星尘补给包" />
+        </div>
+        <div class="field">
+          <label for="product-price">价格（星能）</label>
+          <input id="product-price" v-model="productForm.priceYuan" class="input" type="number" min="1" step="0.01" />
+        </div>
+      </div>
+      <div class="field">
+        <label for="product-desc">商品描述</label>
+        <input id="product-desc" v-model="productForm.desc" class="input" maxlength="160" placeholder="一句话介绍这件补给" />
+      </div>
+      <div class="settings-fields">
+        <div class="field">
+          <label for="product-icon">图标</label>
+          <select id="product-icon" v-model="productForm.icon" class="input">
+            <option v-for="icon in PRODUCT_ICONS" :key="icon" :value="icon">{{ icon }}</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="product-tone">配色</label>
+          <select id="product-tone" v-model="productForm.tone" class="input">
+            <option v-for="tone in TONES" :key="tone" :value="tone">{{ tone }}</option>
+          </select>
+        </div>
+      </div>
+      <div class="settings-fields">
+        <div class="field">
+          <label for="product-tag">标签</label>
+          <input id="product-tag" v-model="productForm.tag" class="input" maxlength="12" placeholder="例如：限定" />
+        </div>
+        <div class="field">
+          <label for="product-id">商品 ID</label>
+          <input
+            id="product-id"
+            v-model="productForm.id"
+            class="input"
+            :disabled="Boolean(editingProduct)"
+            maxlength="40"
+            placeholder="留空自动生成"
+          />
+        </div>
+      </div>
+      <div class="settings-fields">
+        <div class="field">
+          <label for="product-stock">库存（-1 表示不限）</label>
+          <input id="product-stock" v-model.number="productForm.stock" class="input" type="number" min="-1" max="99999" />
+        </div>
+        <div class="field">
+          <label for="product-sort">排序值</label>
+          <input id="product-sort" v-model.number="productForm.sort" class="input" type="number" min="0" max="9999" />
+        </div>
+      </div>
+      <label class="public-toggle">
+        <span class="switch">
+          <input v-model="productForm.active" type="checkbox" />
+          <span class="track" />
+          <span class="thumb" />
+        </span>
+        <span><strong>立即上架</strong><em>关闭后商品保留在后台，但补给站不再展示</em></span>
+      </label>
+      <p v-if="productError" class="modal-error">{{ productError }}</p>
+    </div>
+    <template #footer>
+      <button class="btn btn-ghost" type="button" @click="productModal = false">取消</button>
+      <button class="btn btn-primary" type="button" :disabled="savingProduct" @click="submitProduct">
+        <span v-if="savingProduct" class="spinner" />
+        <span>{{ savingProduct ? '保存中…' : editingProduct ? '保存修改' : '创建商品' }}</span>
+      </button>
+    </template>
+  </BaseModal>
+
+  <!-- 协议模板编辑 -->
+  <BaseModal v-model="templateModal" :title="editingTemplate ? '编辑协议模板' : '新增协议模板'" width="640px">
+    <div class="modal-form">
+      <div class="settings-fields">
+        <div class="field">
+          <label for="template-title">协议名称</label>
+          <input id="template-title" v-model="templateForm.title" class="input" maxlength="40" placeholder="例如：星际航行服务协议" />
+        </div>
+        <div class="field">
+          <label for="template-version">版本号</label>
+          <input id="template-version" v-model="templateForm.version" class="input" maxlength="20" placeholder="v1.0" />
+        </div>
+      </div>
+      <div class="settings-fields">
+        <div class="field">
+          <label for="template-reward">签署奖励（粒子）</label>
+          <input id="template-reward" v-model.number="templateForm.reward" class="input" type="number" min="0" max="10000" />
+        </div>
+        <div class="field">
+          <label for="template-sort">排序值</label>
+          <input id="template-sort" v-model.number="templateForm.sort" class="input" type="number" min="0" max="9999" />
+        </div>
+      </div>
+      <div class="field">
+        <label for="template-content">协议正文（Markdown / 纯文本）</label>
+        <textarea id="template-content" v-model="templateForm.content" class="input modal-textarea" rows="10" maxlength="20000" placeholder="填写协议条款，支持换行与 Markdown。" />
+        <p class="hint">保存后会同步更新所有待签署记录；重新启用时会为全部用户补齐待签。</p>
+      </div>
+      <label class="public-toggle">
+        <span class="switch">
+          <input v-model="templateForm.active" type="checkbox" />
+          <span class="track" />
+          <span class="thumb" />
+        </span>
+        <span><strong>生效中</strong><em>下架后用户仍可查看已签署版本，但不再收到新的待签提醒</em></span>
+      </label>
+      <p v-if="templateError" class="modal-error">{{ templateError }}</p>
+    </div>
+    <template #footer>
+      <button class="btn btn-ghost" type="button" @click="templateModal = false">取消</button>
+      <button class="btn btn-primary" type="button" :disabled="savingTemplate" @click="submitTemplate">
+        <span v-if="savingTemplate" class="spinner" />
+        <span>{{ savingTemplate ? '保存中…' : editingTemplate ? '保存修改' : '创建模板' }}</span>
+      </button>
+    </template>
+  </BaseModal>
+
+  <!-- 订单处理 -->
+  <BaseModal v-model="orderModal" title="处理补给订单" width="520px">
+    <div v-if="orderTarget" class="modal-form">
+      <div class="modal-summary">
+        <strong>{{ orderTarget.item }}</strong>
+        <span>{{ orderTarget.code }} · {{ orderTarget.userName }} · {{ money(orderTarget.energyCents) }} 星能</span>
+      </div>
+      <div class="field">
+        <label for="order-status">订单状态</label>
+        <select id="order-status" v-model="orderForm.status" class="input">
+          <option v-for="item in ORDER_STATUS_OPTIONS" :key="item.key" :value="item.key">{{ item.label }}</option>
+        </select>
+        <p class="hint">取消已支付订单会自动把星能退回用户钱包；标记签收会通知用户。</p>
+      </div>
+      <div class="settings-fields">
+        <div class="field">
+          <label for="order-carrier">承运方</label>
+          <input id="order-carrier" v-model="orderForm.carrier" class="input" maxlength="30" placeholder="例如：星际快递" />
+        </div>
+        <div class="field">
+          <label for="order-tracking">运单号</label>
+          <input id="order-tracking" v-model="orderForm.trackingNo" class="input" maxlength="60" placeholder="填写后通知用户物流更新" />
+        </div>
+      </div>
+      <p v-if="orderError" class="modal-error">{{ orderError }}</p>
+    </div>
+    <template #footer>
+      <button class="btn btn-ghost" type="button" @click="orderModal = false">取消</button>
+      <button class="btn btn-primary" type="button" :disabled="savingOrder" @click="submitOrder">
+        <span v-if="savingOrder" class="spinner" />
+        <span>{{ savingOrder ? '保存中…' : '保存订单状态' }}</span>
+      </button>
+    </template>
+  </BaseModal>
+
+  <!-- 提现复核 -->
+  <BaseModal v-model="withdrawModal" title="提现复核" width="500px">
+    <div v-if="withdrawTarget" class="modal-form">
+      <div class="modal-summary">
+        <strong>{{ money(withdrawTarget.amountCents) }} 星能</strong>
+        <span>{{ withdrawTarget.code }} · {{ withdrawTarget.userName }}</span>
+        <span>收款账号：{{ withdrawTarget.account }}</span>
+      </div>
+      <div class="field">
+        <label for="withdraw-note">复核备注（可选）</label>
+        <textarea id="withdraw-note" v-model="withdrawNote" class="input modal-textarea" rows="3" maxlength="200" placeholder="驳回时建议填写原因，会随站内信发送给用户。" />
+      </div>
+      <div class="modal-note warn">
+        <AppIcon name="shield" />
+        <p>通过后会标记为已打款；驳回会立即把星能退回用户钱包，无法撤回。</p>
+      </div>
+    </div>
+    <template #footer>
+      <button class="btn btn-ghost" type="button" @click="withdrawModal = false">取消</button>
+      <button class="btn btn-danger" type="button" :disabled="withdrawBusy" @click="processWithdraw('reject')">驳回并退款</button>
+      <button class="btn btn-primary" type="button" :disabled="withdrawBusy" @click="processWithdraw('approve')">
+        <span v-if="withdrawBusy" class="spinner" />
+        <span>{{ withdrawBusy ? '处理中…' : '通过并打款' }}</span>
+      </button>
+    </template>
+  </BaseModal>
+
+  <!-- 用户调整 -->
+  <BaseModal v-model="userModal" title="调整用户资料" width="520px">
+    <div v-if="userTarget" class="modal-form">
+      <div class="modal-summary">
+        <strong>{{ userTarget.name }}</strong>
+        <span>{{ userTarget.email }} · {{ userTarget.inuId }}</span>
+        <span>当前 {{ money(userTarget.balanceCents) }} 星能 · {{ userTarget.particles }} 粒子</span>
+      </div>
+      <div class="field">
+        <label for="user-name">昵称</label>
+        <input id="user-name" v-model="userForm.name" class="input" maxlength="20" />
+      </div>
+      <label class="public-toggle">
+        <span class="switch">
+          <input v-model="userForm.verified" type="checkbox" />
+          <span class="track" />
+          <span class="thumb" />
+        </span>
+        <span><strong>星际公民认证</strong><em>开启后可下单、提现并使用全部功能</em></span>
+      </label>
+      <div class="field">
+        <label for="user-password">重置登录密码</label>
+        <input
+          id="user-password"
+          v-model="userForm.password"
+          class="input"
+          type="password"
+          autocomplete="new-password"
+          placeholder="留空表示不修改；至少 8 位且包含字母与数字"
+        />
+        <p class="hint">重置后用户需使用新密码登录，待处理的密码找回申请会自动完成。</p>
+      </div>
+      <div class="settings-fields">
+        <div class="field">
+          <label for="user-particles">粒子增减</label>
+          <input id="user-particles" v-model.number="userForm.particlesDelta" class="input" type="number" placeholder="正数增加，负数扣减" />
+        </div>
+        <div class="field">
+          <label for="user-balance">星能增减</label>
+          <input id="user-balance" v-model.number="userForm.balanceDeltaYuan" class="input" type="number" step="0.01" placeholder="正数增加，负数扣减" />
+        </div>
+      </div>
+      <p class="hint">粒子和星能的调整会写入用户流水与安全日志，并发送站内信。</p>
+      <p v-if="userError" class="modal-error">{{ userError }}</p>
+    </div>
+    <template #footer>
+      <button class="btn btn-ghost" type="button" @click="userModal = false">取消</button>
+      <button class="btn btn-primary" type="button" :disabled="userSaving" @click="submitUserAdjust">
+        <span v-if="userSaving" class="spinner" />
+        <span>{{ userSaving ? '保存中…' : '保存调整' }}</span>
+      </button>
+    </template>
+  </BaseModal>
+
   <!-- 通用确认 -->
   <BaseModal v-model="confirmState.open" :title="confirmState.title" width="440px">
     <p class="confirm-copy">{{ confirmState.message }}</p>
@@ -1299,18 +2519,72 @@ const profile = await fetch(endpoints.userinfo, {
 .secret-box code{flex:1;min-width:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;word-break:break-all;line-height:1.6}
 .confirm-copy{font-size:13px;color:var(--text-sub);line-height:1.75}
 
+.settings-icon.is-green{color:var(--success);background:rgba(0,180,42,.1)}
+.settings-icon.is-cyan{color:var(--cyan);background:rgba(6,182,212,.12)}
+.feature-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.feature-row{padding:11px 12px}
+.feature-row strong{font-size:12.5px}
+
+.head-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.broadcast-card{padding:20px}
+.broadcast-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.broadcast-body{grid-column:1/-1}
+.broadcast-foot{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px solid var(--border-soft)}
+.broadcast-foot .hint{margin:0;flex:1;min-width:220px}
+
+.manage-list{display:flex;flex-direction:column}
+.manage-row{display:flex;align-items:center;gap:13px;padding:13px 0;border-bottom:1px solid var(--border-soft)}
+.manage-row:last-child{border-bottom:none;padding-bottom:0}
+.manage-mark{
+  width:40px;height:40px;border-radius:11px;flex:none;display:grid;place-items:center;
+  font-size:15px;font-weight:700;color:#fff;background:linear-gradient(135deg,var(--primary),var(--accent));
+}
+.manage-mark .icon{width:19px;height:19px}
+.manage-mark.is-blue{background:linear-gradient(135deg,#165DFF,#4D8DFF)}
+.manage-mark.is-purple{background:linear-gradient(135deg,#8B5CF6,#C084FC)}
+.manage-mark.is-cyan{background:linear-gradient(135deg,#0891B2,#22D3EE)}
+.manage-mark.is-green{background:linear-gradient(135deg,#059669,#34D399)}
+.manage-mark.is-orange{background:linear-gradient(135deg,#EA580C,#FBBF24)}
+.manage-copy{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.manage-copy strong{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:13px;font-weight:600}
+.manage-copy strong .badge{font-size:10px;padding:1px 6px}
+.manage-copy>span{font-size:11.5px;color:var(--text-mute);line-height:1.5;word-break:break-word}
+.manage-copy>em{font-style:normal;font-size:10.5px;color:var(--text-mute);line-height:1.5;word-break:break-all}
+.manage-price{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:1px}
+.manage-price strong{font-size:14px;font-weight:700;font-variant-numeric:tabular-nums}
+.manage-price span{font-size:10px;color:var(--text-mute)}
+.manage-actions{display:flex;gap:6px;flex:none;flex-wrap:wrap;justify-content:flex-end}
+
+.finance-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.finance-grid .admin-stat{background:var(--card);border:1px solid var(--card-border);box-shadow:var(--shadow-card)}
+.finance-grid .admin-stat em{margin-left:0}
+
+.user-search{display:flex;gap:10px;padding-bottom:16px;border-bottom:1px solid var(--border-soft);margin-bottom:4px}
+.user-search .input{flex:1}
+
+.modal-summary{display:flex;flex-direction:column;gap:3px;padding:12px 14px;border-radius:10px;background:var(--soft);border:1px solid var(--border-soft)}
+.modal-summary strong{font-size:14px;font-weight:700}
+.modal-summary span{font-size:11.5px;color:var(--text-mute);line-height:1.55;word-break:break-all}
+.modal-note{display:flex;gap:9px;padding:11px 12px;border-radius:9px;background:var(--soft)}
+.modal-note.warn{background:rgba(255,125,0,.08)}
+.modal-note .icon{width:16px;height:16px;color:var(--warning);margin-top:2px;flex:none}
+.modal-note p{font-size:11.5px;color:var(--text-sub);line-height:1.65}
+
 @media(max-width:960px){
   .admin-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .finance-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .provider-grid{grid-template-columns:1fr}
   .settings-grid{grid-template-columns:1fr}
   .settings-card-wide{grid-column:auto}
   .access-grid{grid-template-columns:1fr}
+  .broadcast-grid{grid-template-columns:1fr}
   .admin-orbit{display:none}
 }
 @media(max-width:640px){
   .admin-banner{padding:22px 20px}
   .admin-banner h2{font-size:19px}
   .admin-stats{grid-template-columns:1fr 1fr;gap:10px}
+  .finance-grid{grid-template-columns:1fr}
   .admin-stat{padding:13px;gap:9px;flex-wrap:wrap}
   .admin-stat em{width:100%;margin-left:47px;text-align:left}
   .admin-tabs{flex-wrap:wrap;overflow:visible}
@@ -1326,6 +2600,12 @@ const profile = await fetch(endpoints.userinfo, {
   .scope-picker{grid-template-columns:1fr}
   .audit-meta{display:none}
   .settings-fields{grid-template-columns:1fr}
+  .feature-grid{grid-template-columns:1fr}
+  .broadcast-grid{grid-template-columns:1fr}
+  .manage-row{flex-wrap:wrap}
+  .manage-price{align-items:flex-start;flex-direction:row;gap:4px}
+  .manage-actions{margin-left:53px;width:100%;justify-content:flex-start}
+  .user-search{flex-direction:column}
   .doc-card{align-items:flex-start}
   .doc-card-actions{width:100%}
   .doc-card-actions .btn{flex:1}

@@ -22,7 +22,10 @@ const statusMap = {
   delivered: { label: '已送达', tone: 'green' },
   pending_payment: { label: '待支付', tone: 'red' },
   paid: { label: '已支付', tone: 'blue' },
+  cancelled: { label: '已取消', tone: 'gray' },
 };
+
+const featureEnabled = computed(() => data.value?.featureEnabled !== false);
 
 const selectedProduct = ref(null);
 const orderOpen = ref(false);
@@ -98,9 +101,116 @@ async function saveAddress() {
 }
 
 function orderAction(order) {
-  if (order.status === 'transit') toast('物流轨迹正在同步自星际快递');
-  else if (order.status === 'delivered') toast('已加入补给清单');
-  else toast('支付通道正在接入星际网络');
+  if (order.status === 'transit') openOrderDetail(order);
+  else if (order.status === 'delivered' || order.status === 'cancelled') rebuy(order);
+  else if (order.status === 'pending_payment') payOrder(order);
+  else openOrderDetail(order);
+}
+
+function actionLabel(order) {
+  if (order.status === 'transit') return '查看物流';
+  if (order.status === 'delivered') return '再次购买';
+  if (order.status === 'cancelled') return '重新下单';
+  if (order.status === 'pending_payment') return '去支付';
+  return '查看详情';
+}
+
+const detailOpen = ref(false);
+const detailOrder = ref(null);
+const detailLoading = ref(false);
+const detailActionLoading = ref(false);
+
+async function openOrderDetail(order) {
+  detailOpen.value = true;
+  detailOrder.value = { ...order, timeline: [] };
+  detailLoading.value = true;
+  try {
+    const result = await api.get(`/supply/orders/${order.id}`, { force: true, ttl: 0 });
+    detailOrder.value = result.order;
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    detailLoading.value = false;
+  }
+}
+
+function syncWallet(result) {
+  if (!session.user) return;
+  const patch = {};
+  if (result.balanceCents !== undefined) patch.starEnergyCents = result.balanceCents;
+  if (result.particles !== undefined) patch.particles = result.particles;
+  if (Object.keys(patch).length) setUser({ ...session.user, ...patch });
+}
+
+async function rebuy(order) {
+  try {
+    const result = await api.post(`/supply/orders/${order.id}/rebuy`);
+    syncWallet(result);
+    toast(result.message || '已按原订单重新下单');
+    await reload({ silent: true });
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
+
+async function payOrder(order) {
+  detailActionLoading.value = true;
+  try {
+    const result = await api.post(`/supply/orders/${order.id}/pay`);
+    syncWallet(result);
+    if (detailOrder.value?.id === order.id) detailOrder.value = { ...result.order, timeline: detailOrder.value.timeline };
+    toast('支付成功，补给已进入跃迁队列');
+    await reload({ silent: true });
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    detailActionLoading.value = false;
+  }
+}
+
+async function cancelOrder(order) {
+  detailActionLoading.value = true;
+  try {
+    const result = await api.post(`/supply/orders/${order.id}/cancel`);
+    detailOrder.value = { ...result.order, timeline: detailOrder.value?.timeline || [] };
+    toast('订单已取消');
+    await reload({ silent: true });
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    detailActionLoading.value = false;
+  }
+}
+
+async function confirmDelivery(order) {
+  detailActionLoading.value = true;
+  try {
+    const result = await api.post(`/supply/orders/${order.id}/confirm`);
+    detailOrder.value = { ...result.order, timeline: detailOrder.value?.timeline || [] };
+    toast('已确认收货，补给已归档');
+    await reload({ silent: true });
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    detailActionLoading.value = false;
+  }
+}
+
+const allOrdersOpen = ref(false);
+const allOrders = ref([]);
+const allOrdersLoading = ref(false);
+
+async function loadAllOrders() {
+  allOrdersOpen.value = true;
+  allOrdersLoading.value = true;
+  try {
+    const result = await api.get('/supply/orders?limit=100', { force: true, ttl: 0 });
+    allOrders.value = result.orders || [];
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    allOrdersLoading.value = false;
+  }
 }
 </script>
 
@@ -176,7 +286,15 @@ function orderAction(order) {
               <em v-if="product.memberPriceCents < product.priceCents">{{ money(product.priceCents) }}</em>
             </div>
             <RouterLink v-if="!verified" class="btn btn-ghost btn-sm" to="/profile#verify">需认证</RouterLink>
-            <button v-else class="btn btn-primary btn-sm" type="button" @click="openOrder(product)">兑换</button>
+            <button
+              v-else
+              class="btn btn-primary btn-sm"
+              type="button"
+              :disabled="!featureEnabled"
+              @click="openOrder(product)"
+            >
+              {{ featureEnabled ? '兑换' : '暂停开放' }}
+            </button>
           </div>
         </article>
       </div>
@@ -190,7 +308,7 @@ function orderAction(order) {
     <section id="orders" class="card">
       <div class="card-head">
         <h2>补给订单</h2>
-        <button class="btn btn-text" @click="toast('已展示最近 90 天的全部订单')">查看全部</button>
+        <button class="btn btn-text" @click="loadAllOrders">查看全部</button>
       </div>
       <div class="table-wrap">
         <table class="data-table responsive orders">
@@ -209,7 +327,7 @@ function orderAction(order) {
               </td>
               <td class="actions">
                 <button class="btn btn-text" type="button" @click="orderAction(order)">
-                  {{ order.status === 'transit' ? '查看物流' : order.status === 'delivered' ? '再次购买' : '去支付' }}
+                  {{ actionLabel(order) }}
                 </button>
               </td>
             </tr>
@@ -320,4 +438,127 @@ function orderAction(order) {
       </button>
     </template>
   </BaseModal>
+
+  <BaseModal v-model="detailOpen" title="补给订单详情" width="540px">
+    <div v-if="detailLoading" class="feed">
+      <SkeletonBlock :rows="6" />
+    </div>
+    <template v-else-if="detailOrder">
+      <div class="modal-device">
+        <span class="device-icon lg"><AppIcon name="box" /></span>
+        <div>
+          <p class="modal-device-name">{{ detailOrder.item }}</p>
+          <p class="modal-device-sub">{{ detailOrder.code }} · {{ timeLabel(detailOrder.createdAt) }}</p>
+        </div>
+        <span class="badge" :class="`badge-${statusMap[detailOrder.status]?.tone || 'gray'}`">
+          {{ statusMap[detailOrder.status]?.label || detailOrder.status }}
+        </span>
+      </div>
+
+      <div class="timeline">
+        <div v-for="(step, index) in detailOrder.timeline || []" :key="index" class="timeline-row">
+          <span class="timeline-dot" />
+          <div>
+            <p class="timeline-title">{{ step.title }}</p>
+            <p class="timeline-sub">{{ step.detail }} · {{ timeLabel(step.at) }}</p>
+          </div>
+        </div>
+        <div v-if="!(detailOrder.timeline || []).length" class="quiet-text">物流轨迹正在同步。</div>
+      </div>
+
+      <dl class="detail-list">
+        <div class="detail-row"><dt>星能消耗</dt><dd>{{ money(detailOrder.energyCents) }} 星能</dd></div>
+        <div class="detail-row"><dt>运单号</dt><dd>{{ detailOrder.trackingNo || '待分配' }}</dd></div>
+        <div class="detail-row"><dt>承运方</dt><dd>{{ detailOrder.carrier || '星际快递' }}</dd></div>
+        <div v-if="detailOrder.address" class="detail-row">
+          <dt>收货坐标</dt>
+          <dd>{{ detailOrder.address.receiver }} · {{ maskPhone(detailOrder.address.phone) }} · {{ detailOrder.address.region }} {{ detailOrder.address.detail }}</dd>
+        </div>
+      </dl>
+    </template>
+    <template #footer>
+      <button class="btn btn-ghost btn-sm" type="button" @click="detailOpen = false">关闭</button>
+      <button
+        v-if="detailOrder?.canCancel"
+        class="btn btn-ghost btn-sm"
+        type="button"
+        :disabled="detailActionLoading"
+        @click="cancelOrder(detailOrder)"
+      >
+        取消订单
+      </button>
+      <button
+        v-if="detailOrder?.canPay"
+        class="btn btn-primary btn-sm"
+        type="button"
+        :disabled="detailActionLoading"
+        @click="payOrder(detailOrder)"
+      >
+        <span v-if="detailActionLoading" class="spinner" />
+        去支付
+      </button>
+      <button
+        v-if="detailOrder?.canConfirm"
+        class="btn btn-primary btn-sm"
+        type="button"
+        :disabled="detailActionLoading"
+        @click="confirmDelivery(detailOrder)"
+      >
+        <span v-if="detailActionLoading" class="spinner" />
+        确认收货
+      </button>
+      <button
+        v-if="detailOrder?.status === 'delivered' || detailOrder?.status === 'cancelled'"
+        class="btn btn-primary btn-sm"
+        type="button"
+        @click="detailOpen = false; rebuy(detailOrder)"
+      >
+        再次购买
+      </button>
+    </template>
+  </BaseModal>
+
+  <BaseModal v-model="allOrdersOpen" title="全部补给订单" width="720px">
+    <div v-if="allOrdersLoading" class="feed">
+      <SkeletonBlock :rows="6" />
+    </div>
+    <div v-else class="table-wrap modal-orders">
+      <table class="data-table responsive orders">
+        <thead>
+          <tr><th>订单</th><th>补给内容</th><th>星能</th><th>状态</th><th class="actions">操作</th></tr>
+        </thead>
+        <tbody>
+          <tr v-for="order in allOrders" :key="order.id">
+            <td class="num">{{ order.code }}</td>
+            <td>{{ order.item }}</td>
+            <td class="num">{{ money(order.energyCents) }}</td>
+            <td>
+              <span class="badge" :class="`badge-${statusMap[order.status]?.tone || 'gray'}`">
+                {{ statusMap[order.status]?.label || order.status }}
+              </span>
+            </td>
+            <td class="actions">
+              <button class="btn btn-text" type="button" @click="allOrdersOpen = false; orderAction(order)">
+                {{ actionLabel(order) }}
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div v-if="!allOrders.length" class="inline-empty">
+        <span class="inline-empty-icon"><AppIcon name="box" /></span>
+        <h3>还没有补给订单</h3>
+        <p>兑换星际物资后，订单会出现在这里。</p>
+      </div>
+    </div>
+  </BaseModal>
 </template>
+
+<style scoped>
+.timeline{display:flex;flex-direction:column;gap:12px;margin:14px 0}
+.timeline-row{display:flex;gap:11px;align-items:flex-start}
+.timeline-dot{width:9px;height:9px;border-radius:50%;background:var(--primary);margin-top:6px;flex:none;box-shadow:0 0 0 4px var(--primary-light)}
+.timeline-title{font-size:12.5px;font-weight:600}
+.timeline-sub{font-size:11.5px;color:var(--text-mute);line-height:1.6}
+.modal-orders{max-height:58vh;overflow:auto}
+</style>

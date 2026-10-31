@@ -1,6 +1,7 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import AppIcon from '../components/AppIcon.vue';
+import BaseModal from '../components/BaseModal.vue';
 import PageHeader from '../components/PageHeader.vue';
 import SkeletonBlock from '../components/SkeletonBlock.vue';
 import { api } from '../lib/api';
@@ -14,8 +15,26 @@ const tier = computed(() => data.value?.tier || {});
 const next = computed(() => data.value?.next || null);
 const progress = computed(() => data.value?.progress || 0);
 
+const rulesOpen = ref(false);
+const particlesOpen = ref(false);
+const particleLogs = ref([]);
+const particlesLoading = ref(false);
+
 function scrollToBenefits() {
   document.getElementById('benefits')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function openAllParticles() {
+  particlesOpen.value = true;
+  particlesLoading.value = true;
+  try {
+    const result = await api.get('/member/particles?limit=200', { force: true, ttl: 0 });
+    particleLogs.value = result.logs || [];
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    particlesLoading.value = false;
+  }
 }
 </script>
 
@@ -77,7 +96,7 @@ function scrollToBenefits() {
     <section id="levels" class="card">
       <div class="card-head">
         <h2>等级体系</h2>
-        <button class="btn btn-text" @click="toast('等级规则正在同步至星际终端')">了解规则</button>
+        <button class="btn btn-text" @click="rulesOpen = true">了解规则</button>
       </div>
       <div class="tier-grid">
         <article
@@ -98,7 +117,7 @@ function scrollToBenefits() {
     <section id="particles" class="card">
       <div class="card-head">
         <h2>粒子记录</h2>
-        <button class="btn btn-text" @click="toast('已展示最近 30 天的全部粒子记录')">查看全部</button>
+        <button class="btn btn-text" @click="openAllParticles">查看全部</button>
       </div>
       <div class="table-wrap">
         <table class="data-table responsive particles">
@@ -125,4 +144,59 @@ function scrollToBenefits() {
       </p>
     </section>
   </div>
+
+  <BaseModal v-model="rulesOpen" title="会员规则" width="500px">
+    <div class="rule-list">
+      <div v-for="rule in data?.rules || []" :key="rule.title" class="rule-row">
+        <span class="rule-mark"><AppIcon name="spark" /></span>
+        <div>
+          <p class="rule-title">{{ rule.title }}</p>
+          <p class="rule-text">{{ rule.text }}</p>
+        </div>
+      </div>
+    </div>
+  </BaseModal>
+
+  <BaseModal v-model="particlesOpen" title="全部粒子记录" width="620px">
+    <div v-if="particlesLoading" class="feed">
+      <SkeletonBlock :rows="6" />
+    </div>
+    <div v-else class="table-wrap modal-table">
+      <table class="data-table responsive particles">
+        <thead>
+          <tr><th>时间</th><th>事项</th><th>变动</th><th>余额</th></tr>
+        </thead>
+        <tbody>
+          <tr v-for="log in particleLogs" :key="log.id">
+            <td class="num">{{ dateTimeLabel(log.occurredAt) }}</td>
+            <td>{{ log.label }}</td>
+            <td>
+              <span class="badge" :class="log.delta >= 0 ? 'badge-green' : 'badge-red'">
+                {{ log.delta >= 0 ? '+' : '' }}{{ number(log.delta) }}
+              </span>
+            </td>
+            <td class="num">{{ number(log.balance) }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <div v-if="!particleLogs.length" class="inline-empty">
+        <span class="inline-empty-icon"><AppIcon name="spark" /></span>
+        <h3>暂无粒子记录</h3>
+        <p>签署协议或兑换补给后，粒子变动会记录在这里。</p>
+      </div>
+    </div>
+  </BaseModal>
 </template>
+
+<style scoped>
+.rule-list{display:flex;flex-direction:column;gap:14px;padding-bottom:6px}
+.rule-row{display:flex;gap:11px;align-items:flex-start}
+.rule-mark{
+  width:32px;height:32px;border-radius:9px;display:grid;place-items:center;flex:none;
+  color:var(--primary);background:var(--primary-light);
+}
+.rule-mark .icon{width:16px;height:16px}
+.rule-title{font-size:13px;font-weight:700;margin-bottom:3px}
+.rule-text{font-size:12px;line-height:1.7;color:var(--text-sub)}
+.modal-table{max-height:58vh;overflow:auto}
+</style>

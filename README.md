@@ -4,7 +4,8 @@ Vue 3 + Cloudflare Workers + D1 实现的「INU 无限宇宙」账号中心。�
 
 在此之上还实现了：
 
-- **超级管理台** `/admin`：配置 GitHub / Google 登录方式、管理第三方 OAuth 应用、演示账号与站点文案、查看审计日志与管理员。
+- **完整业务闭环**：星能钱包充值 / 提现、补给站订单支付 / 取消 / 确认收货 / 再次购买、协议模板与签署快照导出、通知收件箱与全站广播、手机号 / 邮箱绑定、真实头像配色、密码找回申请与管理员重置。
+- **超级管理台** `/admin`：配置 GitHub / Google 登录方式、管理第三方 OAuth 应用、站点功能开关、商品与协议内容、订单与提现复核、用户管理与密码重置、审计日志与管理员。
 - **INU OAuth 2.0 身份提供方**：其他应用可以用「使用 INU 账号登录」接入，支持授权码模式、PKCE、userinfo 与令牌撤销。
 
 演示账号：`xiaoyiyi@inu.space` / `inu2026`（默认不在登录页展示，且为只读模式；可在管理台调整）
@@ -21,18 +22,20 @@ Vue 3 + Cloudflare Workers + D1 实现的「INU 无限宇宙」账号中心。�
 
 ## 功能
 
-- **总览**：星能钱包、INU 粒子、会员进度、快捷入口、最近动态。
-- **个人资料**：昵称/邮箱/签名修改、星际 ID 复制、星际公民认证（演示）。
-- **账户安全**：安全评分、两步验证开关、登录保护策略、密码修改、安全日志。
-- **星际终端**：设备列表、设备详情、解绑、退出其余终端、登录记录。
-- **通知偏好**：通知类型、渠道开关、免打扰时段、每周摘要。
-- **会员中心**：等级进度、四档会员权益、粒子流水。
-- **协议中心**：协议列表、待签署提醒、签署后发放 50 INU 粒子。
-- **补给站**：会员价商品、星能兑换下单、订单记录、收货坐标。
-- **超级管理台**：登录方式配置、OAuth 应用与密钥管理、演示账号与站点设置、接入指引、审计日志、管理员授权。
+- **总览**：星能钱包、INU 粒子、会员进度、快捷入口、最近动态；钱包卡片可直接进入充值 / 提现。
+- **个人资料**：昵称/邮箱/签名修改、头像配色、星际 ID 复制、手机号与邮箱验证码绑定（控制台验证码模式）、星际公民认证。
+- **账户安全**：安全评分、两步验证开关、登录保护策略、密码修改、安全日志（支持分页 / 筛选）。
+- **星际终端**：设备列表、设备详情、新增设备、解绑、退出其余终端、登录记录。
+- **通知偏好**：通知类型、渠道开关、免打扰时段、每周摘要，以及站内信收件箱（标记已读 / 全部已读 / 删除）。
+- **会员中心**：等级进度、四档会员权益、粒子流水（分页）。
+- **协议中心**：协议列表、正文详情、待签署提醒、签署时写入协议快照、签署后发放 50 INU 粒子、已签协议导出文本。
+- **补给站**：会员价商品、星能兑换下单、订单详情与物流时间线、待支付订单支付 / 取消、确认收货、再次购买、收货坐标。
+- **星能钱包**：充值（模拟支付 / 关闭）、提现申请（管理员复核）、钱包流水、充值订单状态。
+- **找回密码**：登录页提交找回申请，管理员在「用户管理」中重置密码并标记处理。
+- **超级管理台**：登录方式配置、OAuth 应用与密钥管理、站点功能开关、商品与协议模板、全站广播、财务与订单复核、用户搜索与调整、密码重置、接入指引、审计日志、管理员授权。
 - **INU 授权登录**：第三方应用通过 `/oauth/authorize` 获取授权码，兑换令牌后读取用户资料。
 
-> 演示环境中的「星际公民认证」为模拟核验，会直接解锁补给站下单能力；生产环境请接入真实的实名/活体核验服务。
+> 「星际公民认证」提供两种模式：`console`（控制台输出验证码，开发 / 演示）与 `off`（关闭）。生产环境请接入真实的实名 / 活体核验服务。支付当前为模拟模式，接入真实支付渠道后可保持同一套订单与流水结构。
 
 ## 本地运行
 
@@ -84,12 +87,14 @@ npm run dev          # 终端 B，Vite 在 5173，/api 已代理到 8787
 3. 初始化远程库：
 
    ```bash
-   # 首次部署：建表 + 演示数据 + OAuth + 管理台
+   # 首次部署：建表 + 演示数据 + OAuth + 管理台 + 功能表
    npm run db:remote
 
-   # 已有数据的库升级：只执行建表 / OAuth / 管理台迁移，不会重置演示账号
+   # 已有数据的库升级：执行 0001 与 0003–0006，不会重置演示账号
    npm run db:migrate:remote
    ```
+
+   `0005_features.sql` 含 `ALTER TABLE`，对已升级过的库重复执行会报「duplicate column」；已手动执行过该文件的库可跳过它，只补 `0006_password_reset.sql`。
 
 4. 配置 Worker 密钥：
 
@@ -134,10 +139,11 @@ npm run dev          # 终端 B，Vite 在 5173，/api 已代理到 8787
 ### 上线前必做
 
 - 演示账号默认不在登录页展示且为只读模式；如不需要，可继续隐藏入口，或修改密码 / 删除演示账号。
-- 如面向公网，考虑关闭演示认证接口 `/api/profile/verify`，接入真实实名服务。
+- 如面向公网，把 `verification_mode` 设为 `off` 或接入真实实名服务，避免控制台验证码模式被滥用。
 - 在 Workers Paid 方案下，将 `worker/index.js` 的 `PBKDF2_ITERATIONS` 提高到
   `100000` 以上（哈希串内已记录迭代次数，调整后旧密码仍可验证，用户下次改密时自动升级）。
-- 为生产邮箱/短信/支付接入真实服务；当前相关按钮为演示提示。
+- 支付当前为 `payment_mode=mock` 模拟模式；接入真实支付渠道时，在 `/api/wallet/recharge/:id/pay` 与 `/api/supply/orders/:id/pay` 中替换为支付网关回调，并保持订单 / 流水表结构不变。
+- 提现为「用户申请 → 管理员复核（通过并打款 / 驳回并退款）」流程，生产环境请结合真实结算渠道与风控。
 
 ## 超级管理台
 
@@ -151,10 +157,13 @@ npm run dev          # 终端 B，Vite 在 5173，/api 已代理到 8787
 | 分区 | 能力 |
 | --- | --- |
 | 登录方式 | 配置 GitHub / Google 的 Client ID、Client Secret、启用状态，保存即生效 |
-| 站点设置 | 演示账号入口显隐、演示账号只读、站点公告（内容与级别）、登录页欢迎语、页脚文案 |
+| 站点设置 | 演示账号入口显隐与只读、站点公告、欢迎语与页脚、客服邮箱与钱包卡号尾号、8 项功能开关、支付 / 验证模式、充值预设、提现门槛、改名冷却、维护模式 |
+| 内容与商品 | 全站广播（按通知偏好送达站内信）、补给站商品增删改（名称、价格、会员价、库存、图标、色系、上下架）、协议模板增删改（标题、版本、正文、奖励粒子、启用状态） |
+| 财务与订单 | 收入 / 支出 / 待复核提现 / 订单数统计、提现复核（通过并打款 / 驳回并退款）、补给订单状态与物流（承运商、单号、时间线）、充值订单列表 |
+| 用户管理 | 用户搜索（邮箱 / 昵称 / INU ID / 手机号）、认证与管理员标记、粒子与余额增减、昵称修改、重置登录密码、处理密码找回申请 |
 | 应用接入 | 创建、编辑、停用、删除 OAuth 应用，重置 Client Secret，配置回调地址与权限范围 |
 | 接入指引 | 展示端点、scope、接入步骤和服务端示例代码，可下载 / 复制 AI 可直接执行的 Markdown 接入文档 |
-| 审计日志 | 记录创建/删除应用、重置密钥、修改登录方式、更新站点设置、授予/移除管理员等操作 |
+| 审计日志 | 记录创建/删除应用、重置密钥、修改登录方式、更新站点设置、商品与模板变更、广播、订单 / 提现处理、用户调整、授予/移除管理员等操作 |
 | 管理员 | 按邮箱授予或移除超级管理员，内置「至少保留一名管理员」与禁止自我移除保护 |
 
 保存在 D1 的社交登录 Secret 使用 `CONFIG_KEY` 派生的 AES-GCM 密钥加密，管理接口永远不会回传明文。未设置 `CONFIG_KEY` 时，管理台只能保留已有密钥，不能写入新的 Secret。第三方应用的 Client Secret 只在创建和轮换时显示一次，D1 仅保存 SHA-256 摘要。
@@ -172,6 +181,25 @@ npm run dev          # 终端 B，Vite 在 5173，/api 已代理到 8787
 | `site.notice_level` | `info` | `info` / `success` / `warn` |
 | `site.footer_text` | `© 2026 INU 无限宇宙 · 星际通行证` | 登录页与内页页脚 |
 | `site.login_welcome` | `使用你的 INU 星际档案继续旅程。` | 登录页欢迎语 |
+| `site.support_email` | `support@inu.space` | 客服邮箱（登录页找回密码与帮助入口） |
+| `site.wallet_card_last4` | `0721` | 钱包卡片尾号展示 |
+| `site.feature_recharge` | `1` | 星能充值开关，关闭后 `/api/wallet/recharge` 返回功能关闭 |
+| `site.feature_withdraw` | `0` | 提现开关，默认关闭 |
+| `site.feature_phone_bind` | `1` | 手机号绑定与解绑 |
+| `site.feature_email_change` | `1` | 邮箱换绑 |
+| `site.feature_avatar` | `1` | 头像配色修改 |
+| `site.feature_supply` | `1` | 补给站下单（关闭后仅可浏览） |
+| `site.feature_agreements` | `1` | 协议签署（关闭后仅可浏览） |
+| `site.feature_register` | `0` | 开放邮箱自助注册 |
+| `site.payment_mode` | `mock` | `mock` 模拟支付 / `off` 关闭在线支付 |
+| `site.verification_mode` | `console` | `console` 返回验证码 devCode 并开放模拟认证 / `off` 关闭验证码与模拟认证 |
+| `site.recharge_presets` | `50,100,200,500,1000` | 充值金额预设（元，1–8 个） |
+| `site.withdraw_min_cents` | `10000` | 最低提现金额（分） |
+| `site.name_change_days` | `30` | 昵称修改冷却天数，`0` 表示不限制 |
+| `site.maintenance_enabled` | `0` | 维护模式，非管理员访问业务接口返回维护提示 |
+| `site.maintenance_text` | 空 | 维护提示文案 |
+
+功能开关与站点设置会通过 `/api/auth/providers` 的 `site.features` / `site.wallet` 字段下发给前端，未开放的功能在页面上隐藏或禁用，服务端同时校验，不能靠改前端绕过。
 
 演示密码不会写进前端静态包：只有 `site.demo_visible=1` 时，`/api/auth/providers` 才会返回演示凭据供登录页预填；关闭后接口与页面都不再出现演示密码。只读模式下服务端对演示账号的非 GET 请求返回 `403 DEMO_READONLY`，并在页面顶部展示只读提示。
 
@@ -251,45 +279,85 @@ https://<你的域名>/api/auth/oauth/google/callback
 - `state` 存在 HttpOnly Cookie 中；Google 额外使用 PKCE（S256）。回调校验失败会回到登录页提示。
 - 绑定关系存于 `oauth_accounts`（`migrations/0003_oauth.sql`），同一 `provider + subject` 唯一。
 
+## 钱包、订单与找回密码
+
+- **充值**：`POST /api/wallet/recharge` 创建充值单，金额 10–50000 星能，支付方式 `inu_pay` / `alipay` / `wechat`。`mock` 模式下立即入账并写入 `wallet_transactions`；`off` 模式下接口返回 `PAYMENT_UNAVAILABLE`。
+- **提现**：要求已完成星际公民认证并绑定手机号，单次不低于 `site.withdraw_min_cents`。申请时冻结扣减余额，状态为 `processing`；管理员「通过并打款」后变为 `paid`，「驳回并退款」会把金额退回余额并记流水。
+- **补给订单**：状态为 `pending_payment` / `transit` / `delivered` / `cancelled`。待支付可支付或取消，支付扣减星能并写流水；管理员可在财务页填写承运商、运单号并推进物流时间线；用户确认收货或再次购买（生成新订单）。
+- **验证码**：手机号绑定、邮箱换绑使用 6 位验证码，10 分钟有效、最多尝试 5 次、每小时最多 5 条；`console` 模式会直接返回 `devCode` 供联调，关闭后接口拒绝。
+- **密码找回**：登录页提交邮箱后生成 `password_reset_requests` 记录（10 分钟内去重）并通知管理员；管理员在「用户管理」中重置密码后，待处理申请自动标记为已处理。接口对邮箱是否存在都返回同一句话，避免账号枚举。
+
 ## API
 
-所有 `/api/*` 响应均为 `private, no-store`。除登录、社交登录回调、提供方状态等公开端点外，其余接口都需要登录态；`/api/admin/*` 还需要超级管理员权限。
+所有 `/api/*` 响应均为 `private, no-store`。除登录、注册、找回密码、社交登录回调、提供方状态等公开端点外，其余接口都需要登录态；`/api/admin/*` 还需要超级管理员权限。
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | POST | `/api/auth/login` | 邮箱密码登录，失败 5 次锁定 15 分钟 |
+| POST | `/api/auth/register` | 自助注册（受 `site.feature_register` 控制），注册后自动登录 |
+| POST | `/api/auth/password-reset` | 提交密码找回申请（公开，统一返回，不暴露邮箱是否存在） |
 | POST | `/api/auth/logout` | 退出并清除会话 |
-| GET | `/api/auth/providers` | 社交登录提供方启用状态（公开） |
+| GET | `/api/auth/providers` | 社交登录提供方启用状态与公开站点设置（公开） |
 | GET | `/api/auth/oauth/:provider/start` | 发起 GitHub / Google 登录（公开） |
 | GET | `/api/auth/oauth/:provider/callback` | 社交登录回调（公开） |
 | GET | `/api/me` | 当前用户 |
 | GET | `/api/overview` | 总览聚合数据 |
-| GET / PATCH | `/api/profile` | 读取 / 更新资料 |
-| POST | `/api/profile/verify` | 星际公民认证（演示） |
+| GET | `/api/overview/activities` | 最近动态分页 |
+| GET / PATCH | `/api/profile` | 读取 / 更新资料（昵称受冷却限制） |
+| POST | `/api/profile/avatar` | 更换头像配色 |
+| POST | `/api/profile/phone/code`、`/api/profile/phone/verify` | 发送 / 校验绑定手机验证码 |
+| DELETE | `/api/profile/phone` | 解绑手机号（需密码） |
+| POST | `/api/profile/email/code`、`/api/profile/email/verify` | 发送 / 校验换绑邮箱验证码 |
+| POST | `/api/profile/verify` | 星际公民认证（受 `site.verification_mode` 控制） |
 | GET | `/api/security` | 安全评分、凭证、策略、日志 |
+| GET | `/api/security/logs` | 安全日志分页 |
 | POST | `/api/security/2fa` | 两步验证开关 |
 | PATCH | `/api/security/guards` | 登录保护开关 |
 | POST | `/api/security/password` | 修改密码并吊销其它会话 |
 | GET | `/api/devices` | 终端与登录记录 |
+| GET | `/api/devices/logs` | 登录记录分页 |
+| POST | `/api/devices` | 新增受信设备 |
 | POST | `/api/devices/:id/unbind` | 解绑终端 |
 | POST | `/api/devices/logout-others` | 退出其余会话 |
 | GET | `/api/notifications` | 通知偏好聚合 |
+| GET | `/api/notifications/messages` | 站内信列表（分页 / 未读筛选） |
+| POST | `/api/notifications/messages/:id/read`、`/read-all` | 标记已读 / 全部已读 |
+| DELETE | `/api/notifications/messages/:id` | 删除站内信 |
 | PATCH | `/api/notifications/prefs` | 更新通知类型/渠道 |
 | PATCH | `/api/notifications/settings` | 免打扰与摘要 |
 | GET | `/api/member` | 会员等级、权益、粒子流水 |
+| GET | `/api/member/particles` | 粒子流水分页 |
 | GET | `/api/agreements` | 协议列表 |
+| GET | `/api/agreements/:id` | 协议正文与签署状态 |
+| GET | `/api/agreements/:id/export` | 导出已签协议文本（含快照） |
 | POST | `/api/agreements/:id/sign` | 签署协议 +50 粒子 |
 | GET | `/api/supply` | 补给站聚合数据 |
+| GET | `/api/supply/orders`、`/api/supply/orders/:id` | 订单列表 / 详情与物流 |
 | POST | `/api/supply/orders` | 星能兑换下单 |
+| POST | `/api/supply/orders/:id/pay` | 支付待支付订单 |
+| POST | `/api/supply/orders/:id/cancel` | 取消待支付订单并退款 |
+| POST | `/api/supply/orders/:id/confirm` | 确认收货 |
+| POST | `/api/supply/orders/:id/rebuy` | 按原商品再次购买 |
 | PATCH | `/api/supply/address` | 保存收货坐标 |
+| GET | `/api/wallet` | 余额、流水、充值单、提现单与开关 |
+| POST | `/api/wallet/recharge` | 创建充值单（mock 模式立即到账） |
+| POST | `/api/wallet/recharge/:id/pay`、`/cancel` | 支付 / 取消充值单 |
+| POST | `/api/wallet/withdraw` | 提交提现申请（冻结余额，等待复核） |
 | GET | `/api/oauth/authorize/context` | 读取授权请求、用户与 scope（需登录） |
 | POST | `/api/oauth/authorize/decision` | 同意 / 拒绝授权并签发授权码 |
 | GET | `/api/admin` | 管理台聚合数据（管理员） |
-| PATCH | `/api/admin/settings` | 保存演示账号、站点公告与页面文案设置（管理员） |
+| PATCH | `/api/admin/settings` | 保存站点设置与功能开关（管理员） |
 | PATCH | `/api/admin/providers/:id` | 保存 GitHub / Google 登录配置（管理员） |
 | POST | `/api/admin/oauth-clients` | 创建 OAuth 应用（管理员） |
 | PATCH / DELETE | `/api/admin/oauth-clients/:id` | 编辑 / 删除 OAuth 应用（管理员） |
 | POST | `/api/admin/oauth-clients/:id/rotate-secret` | 重置 Client Secret（管理员） |
+| POST / PATCH / DELETE | `/api/admin/products`、`/api/admin/products/:id` | 补给站商品增删改（管理员） |
+| POST / PATCH / DELETE | `/api/admin/agreement-templates`、`/:id` | 协议模板增删改（管理员） |
+| POST | `/api/admin/notifications` | 全站广播站内信（管理员） |
+| PATCH | `/api/admin/orders/:id` | 更新订单状态、承运商、运单号与时间线（管理员） |
+| PATCH | `/api/admin/withdrawals/:id` | 提现复核：通过并打款 / 驳回并退款（管理员） |
+| GET / PATCH | `/api/admin/users`、`/api/admin/users/:id` | 用户搜索 / 调整资料、粒子余额、重置密码（管理员） |
+| PATCH | `/api/admin/password-resets/:id` | 标记密码找回申请已处理（管理员） |
 | GET | `/api/admin/audit` | 审计日志（管理员） |
 | POST / DELETE | `/api/admin/admins`、`/api/admin/admins/:userId` | 授予 / 移除管理员（管理员） |
 
@@ -325,7 +393,9 @@ inu-cloud/
 │  ├─ 0001_schema.sql       # D1 表结构与索引
 │  ├─ 0002_seed.sql         # 演示账号与演示数据
 │  ├─ 0003_oauth.sql        # GitHub / Google 登录绑定表
-│  └─ 0004_admin_oauth.sql  # 管理台、OAuth 应用、授权码/令牌/同意记录
+│  ├─ 0004_admin_oauth.sql  # 管理台、OAuth 应用、授权码/令牌/同意记录
+│  ├─ 0005_features.sql     # 钱包/充值/提现/验证码/协议模板/站内信/商品与订单字段
+│  └─ 0006_password_reset.sql # 密码找回申请
 ├─ src/
 │  ├─ views/                # 8 个业务页面 + 登录 / 管理台 / 授权同意页
 │  ├─ components/           # AppShell、TopBar、SideBar、Modal、Toast 等

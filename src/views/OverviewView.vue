@@ -1,15 +1,16 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import AppIcon from '../components/AppIcon.vue';
+import BaseModal from '../components/BaseModal.vue';
 import PageHeader from '../components/PageHeader.vue';
 import SkeletonBlock from '../components/SkeletonBlock.vue';
 import { api } from '../lib/api';
 import { number, moneyParts, timeLabel } from '../lib/format';
-import { session } from '../lib/session';
+import { session, setUser } from '../lib/session';
 import { toast } from '../lib/toast';
 import { useAsyncData } from '../lib/useAsyncData';
 
-const { data, loading } = useAsyncData(({ force }) => api.get('/overview', { force }));
+const { data, reload } = useAsyncData(({ force }) => api.get('/overview', { force }));
 
 const user = computed(() => data.value?.user || session.user || {});
 const wallet = computed(() => data.value?.wallet || { balanceCents: user.value.starEnergyCents || 0, cardLast4: '0721' });
@@ -17,6 +18,70 @@ const balance = computed(() => moneyParts(wallet.value.balanceCents));
 const particles = computed(() => user.value.particles || 0);
 const progress = computed(() => Math.min(99, Math.floor((particles.value / 10000) * 100)));
 const remaining = computed(() => Math.max(0, 10000 - particles.value));
+
+const rechargeOpen = ref(false);
+const rechargeAmount = ref(0);
+const rechargeMethod = ref('inu_pay');
+const recharging = ref(false);
+const rechargeError = ref('');
+
+const presets = computed(() => session.site?.wallet?.presets || [50, 100, 200, 500, 1000]);
+const rechargeEnabled = computed(() => session.site?.features?.recharge !== false);
+const paymentMode = computed(() => session.site?.payment?.mode || 'mock');
+
+function openRecharge() {
+  if (!rechargeEnabled.value) {
+    toast('星能充值暂未开放，请联系管理员', 'error');
+    return;
+  }
+  rechargeAmount.value = presets.value[1] || presets.value[0] || 100;
+  rechargeMethod.value = 'inu_pay';
+  rechargeError.value = '';
+  rechargeOpen.value = true;
+}
+
+async function submitRecharge() {
+  const amount = Number(rechargeAmount.value);
+  if (!Number.isFinite(amount) || amount < 10) {
+    rechargeError.value = '单次充值至少 10 星能';
+    return;
+  }
+  rechargeError.value = '';
+  recharging.value = true;
+  try {
+    const result = await api.post('/wallet/recharge', {
+      amountCents: Math.round(amount * 100),
+      method: rechargeMethod.value,
+    });
+    if (session.user) {
+      setUser({ ...session.user, starEnergyCents: result.balanceCents });
+    }
+    rechargeOpen.value = false;
+    toast(result.paid ? `${amount} 星能已到账` : result.message || '充值订单已创建');
+    await reload({ silent: true });
+  } catch (error) {
+    rechargeError.value = error.message;
+  } finally {
+    recharging.value = false;
+  }
+}
+
+const activitiesOpen = ref(false);
+const activities = ref([]);
+const activitiesLoading = ref(false);
+
+async function openActivities() {
+  activitiesOpen.value = true;
+  activitiesLoading.value = true;
+  try {
+    const result = await api.get('/overview/activities?limit=50', { force: true, ttl: 0 });
+    activities.value = result.activities || [];
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    activitiesLoading.value = false;
+  }
+}
 
 const quicks = computed(() => [
   {
@@ -75,7 +140,7 @@ const quicks = computed(() => [
       <div class="wallet-foot">
         <span class="wallet-num">INU ···· {{ wallet.cardLast4 }}</span>
         <div class="wallet-actions">
-          <button class="btn btn-sm btn-wallet" @click="toast('充值通道正在接入星际网络，敬请期待')">充值</button>
+          <button class="btn btn-sm btn-wallet" @click="openRecharge">充值</button>
           <RouterLink class="btn btn-sm btn-glass" to="/supply">明细</RouterLink>
         </div>
       </div>
@@ -129,10 +194,10 @@ const quicks = computed(() => [
     <section class="card">
       <div class="card-head">
         <h2>最近动态</h2>
-        <button class="btn btn-text" @click="toast('已展示最近 30 天的全部动态')">查看全部</button>
+        <button class="btn btn-text" @click="openActivities">查看全部</button>
       </div>
 
-      <div v-if="!data && loading" class="feed">
+      <div v-if="!data" class="feed">
         <SkeletonBlock :rows="4" />
       </div>
       <div v-else class="feed">
@@ -152,4 +217,102 @@ const quicks = computed(() => [
       </div>
     </section>
   </div>
+
+  <BaseModal v-model="rechargeOpen" title="星能充值" width="460px">
+    <div class="modal-device">
+      <span class="device-icon lg"><AppIcon name="spark" /></span>
+      <div>
+        <p class="modal-device-name">星际钱包 · INU PAY</p>
+        <p class="modal-device-sub">当前余额 {{ balance.integer }}.{{ balance.decimal }} 星能</p>
+      </div>
+      <span class="badge badge-green">{{ paymentMode === 'mock' ? '演示支付' : '在线支付' }}</span>
+    </div>
+
+    <div class="field">
+      <label>充值金额（星能）</label>
+      <div class="preset-grid">
+        <button
+          v-for="preset in presets"
+          :key="preset"
+          type="button"
+          class="preset-btn"
+          :class="{ active: Number(rechargeAmount) === Number(preset) }"
+          @click="rechargeAmount = preset"
+        >
+          +{{ preset }}
+        </button>
+      </div>
+      <input v-model.number="rechargeAmount" class="input mono" type="number" min="10" max="50000" step="1" />
+      <p class="hint">单次充值 10–50000 星能{{ paymentMode === 'mock' ? ' · 演示支付会即时到账' : '' }}</p>
+    </div>
+
+    <div class="field">
+      <label>支付方式</label>
+      <div class="method-row">
+        <button
+          v-for="item in [
+            { key: 'inu_pay', label: 'INU PAY' },
+            { key: 'alipay', label: '支付宝' },
+            { key: 'wechat', label: '微信支付' },
+          ]"
+          :key="item.key"
+          type="button"
+          class="method-btn"
+          :class="{ active: rechargeMethod === item.key }"
+          @click="rechargeMethod = item.key"
+        >
+          {{ item.label }}
+        </button>
+      </div>
+    </div>
+
+    <p v-if="rechargeError" class="form-error"><AppIcon name="shield" /><span>{{ rechargeError }}</span></p>
+
+    <template #footer>
+      <button class="btn btn-ghost btn-sm" type="button" @click="rechargeOpen = false">取消</button>
+      <button class="btn btn-primary btn-sm" type="button" :disabled="recharging" @click="submitRecharge">
+        <span v-if="recharging" class="spinner" />
+        {{ recharging ? '正在支付…' : `确认充值 ${rechargeAmount || 0} 星能` }}
+      </button>
+    </template>
+  </BaseModal>
+
+  <BaseModal v-model="activitiesOpen" title="全部星际动态" width="520px">
+    <div v-if="activitiesLoading" class="feed">
+      <SkeletonBlock :rows="6" />
+    </div>
+    <div v-else class="feed feed-scroll">
+      <div v-for="item in activities" :key="item.id" class="feed-item">
+        <span class="feed-chip" :class="`chip-${item.tone}`"><AppIcon :name="item.icon" /></span>
+        <div class="feed-body">
+          <p class="feed-title">{{ item.title }}</p>
+          <p class="feed-sub">{{ item.detail }}</p>
+        </div>
+        <span class="feed-time">{{ timeLabel(item.occurredAt) }}</span>
+      </div>
+      <div v-if="!activities.length" class="inline-empty">
+        <span class="inline-empty-icon"><AppIcon name="orbit" /></span>
+        <h3>暂无更多动态</h3>
+        <p>完成认证、签署协议或兑换补给后，记录会出现在这里。</p>
+      </div>
+    </div>
+  </BaseModal>
 </template>
+
+<style scoped>
+.preset-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:10px}
+.preset-btn{
+  height:36px;border-radius:9px;border:1px solid var(--border-soft);background:var(--soft);
+  color:var(--text-sub);font-size:12.5px;font-weight:600;cursor:pointer;transition:all .16s;
+}
+.preset-btn:hover{border-color:#C9D2E3;color:var(--text)}
+.preset-btn.active{border-color:var(--primary);background:var(--primary-light);color:var(--primary)}
+.method-row{display:flex;gap:8px;flex-wrap:wrap}
+.method-btn{
+  flex:1;min-width:96px;height:38px;border-radius:9px;border:1px solid var(--border-soft);
+  background:var(--soft);color:var(--text-sub);font-size:12.5px;font-weight:500;cursor:pointer;transition:all .16s;
+}
+.method-btn.active{border-color:var(--primary);background:var(--primary-light);color:var(--primary);font-weight:600}
+.feed-scroll{max-height:56vh;overflow-y:auto}
+@media (max-width:520px){.preset-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+</style>

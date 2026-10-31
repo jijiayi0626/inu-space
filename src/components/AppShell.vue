@@ -5,7 +5,6 @@ import TopBar from './TopBar.vue';
 import SideBar from './SideBar.vue';
 import AppIcon from './AppIcon.vue';
 import { session } from '../lib/session';
-import { toast } from '../lib/toast';
 
 const route = useRoute();
 const drawerOpen = ref(false);
@@ -20,6 +19,11 @@ const noticeIcon = computed(() => {
   return 'spark';
 });
 const footerText = computed(() => session.site?.footerText || '© 2026 INU 无限宇宙 · 星际通行证');
+const supportEmail = computed(() => session.site?.supportEmail || 'support@inu.space');
+const maintenance = computed(() => {
+  const value = session.site?.maintenance;
+  return value?.enabled && value?.text ? value : null;
+});
 
 function closeDrawer() {
   drawerOpen.value = false;
@@ -55,6 +59,11 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
+        <div v-if="maintenance && !session.user?.isAdmin" class="site-notice is-warn">
+          <AppIcon name="shield" />
+          <span>维护模式：{{ maintenance.text }}</span>
+        </div>
+
         <div v-if="notice" class="site-notice" :class="`is-${notice.level}`">
           <AppIcon :name="noticeIcon" />
           <span>{{ notice.text }}</span>
@@ -69,7 +78,7 @@ onBeforeUnmount(() => {
             <span>·</span>
             <RouterLink to="/agreements">隐私政策</RouterLink>
             <span>·</span>
-            <button type="button" class="footer-link-btn" @click="toast('帮助终端正在接入星际网络')">帮助终端</button>
+            <a class="footer-link-btn" :href="`mailto:${supportEmail}`">帮助终端</a>
           </span>
         </footer>
       </div>

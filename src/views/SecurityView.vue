@@ -2,6 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue';
 import AppIcon from '../components/AppIcon.vue';
 import BaseModal from '../components/BaseModal.vue';
+import ContactVerifyModal from '../components/ContactVerifyModal.vue';
 import PageHeader from '../components/PageHeader.vue';
 import SkeletonBlock from '../components/SkeletonBlock.vue';
 import { api } from '../lib/api';
@@ -14,6 +15,7 @@ const { data, reload } = useAsyncData(({ force }) => api.get('/security', { forc
 
 const user = computed(() => data.value?.user || session.user || {});
 const score = computed(() => data.value?.score || 82);
+const features = computed(() => session.site?.features || {});
 
 const twoFa = ref(false);
 const twoFaSaving = ref(false);
@@ -107,6 +109,47 @@ async function changePassword() {
     pwdSaving.value = false;
   }
 }
+
+const phoneOpen = ref(false);
+const emailOpen = ref(false);
+
+function openPhone() {
+  if (features.value.phoneBind === false) {
+    toast('手机号绑定功能暂未开放', 'error');
+    return;
+  }
+  phoneOpen.value = true;
+}
+
+function openEmail() {
+  if (features.value.emailChange === false) {
+    toast('安全邮箱更换功能暂未开放', 'error');
+    return;
+  }
+  emailOpen.value = true;
+}
+
+function onContactUpdated(nextUser) {
+  if (session.user) setUser(nextUser);
+  reload({ silent: true });
+}
+
+const logsOpen = ref(false);
+const allLogs = ref([]);
+const logsLoading = ref(false);
+
+async function openAllLogs() {
+  logsOpen.value = true;
+  logsLoading.value = true;
+  try {
+    const result = await api.get('/security/logs?limit=100', { force: true, ttl: 0 });
+    allLogs.value = result.logs || [];
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    logsLoading.value = false;
+  }
+}
 </script>
 
 <template>
@@ -172,15 +215,14 @@ async function changePassword() {
           </div>
           <div class="sec-right">
             <span class="badge" :class="data.credentials.phone ? 'badge-green' : 'badge-red'">
-              {{ data.credentials.phone ? '已绑定' : '未绑定' }}
+              {{ data.credentials.phone ? (data.credentials.phoneVerified ? '已验证' : '待验证') : '未绑定' }}
             </span>
             <button
-              v-if="!data.credentials.phone"
               class="btn btn-text"
               type="button"
-              @click="toast('短信验证通道正在接入星际网络…')"
+              @click="openPhone"
             >
-              去绑定
+              {{ data.credentials.phone ? '更换' : '去绑定' }}
             </button>
           </div>
         </div>
@@ -192,8 +234,10 @@ async function changePassword() {
             <p class="sec-sub">{{ data.credentials.email }}</p>
           </div>
           <div class="sec-right">
-            <span class="badge badge-green">已验证</span>
-            <button class="btn btn-text" type="button" @click="toast('邮箱更换需通过星际终端二次确认')">
+            <span class="badge" :class="data.credentials.emailVerified ? 'badge-green' : 'badge-orange'">
+              {{ data.credentials.emailVerified ? '已验证' : '待验证' }}
+            </span>
+            <button class="btn btn-text" type="button" @click="openEmail">
               更换
             </button>
           </div>
@@ -303,7 +347,7 @@ async function changePassword() {
       <section id="logs" class="card">
         <div class="card-head">
           <h2>安全日志</h2>
-          <button class="btn btn-text" @click="toast('已展示最近 30 天的全部安全日志')">查看全部</button>
+          <button class="btn btn-text" @click="openAllLogs">查看全部</button>
         </div>
         <div class="feed">
           <div v-for="log in data.logs" :key="log.id" class="feed-item">
@@ -374,4 +418,32 @@ async function changePassword() {
       </button>
     </template>
   </BaseModal>
+
+  <BaseModal v-model="logsOpen" title="全部安全日志" width="560px">
+    <div v-if="logsLoading" class="feed">
+      <SkeletonBlock :rows="6" />
+    </div>
+    <div v-else class="feed feed-scroll">
+      <div v-for="log in allLogs" :key="log.id" class="feed-item">
+        <span class="feed-chip" :class="`chip-${log.tone}`"><AppIcon :name="log.icon" /></span>
+        <div class="feed-body">
+          <p class="feed-title">{{ log.event }}</p>
+          <p class="feed-sub">{{ log.detail }}</p>
+        </div>
+        <span class="feed-time">{{ timeLabel(log.occurredAt) }}</span>
+      </div>
+      <div v-if="!allLogs.length" class="inline-empty">
+        <span class="inline-empty-icon"><AppIcon name="clock" /></span>
+        <h3>暂无安全日志</h3>
+        <p>登录、密码与保护策略的变化都会记录在这里。</p>
+      </div>
+    </div>
+  </BaseModal>
+
+  <ContactVerifyModal v-model="phoneOpen" kind="phone" :current="data?.credentials?.phone" @updated="onContactUpdated" />
+  <ContactVerifyModal v-model="emailOpen" kind="email" :current="data?.credentials?.email" @updated="onContactUpdated" />
 </template>
+
+<style scoped>
+.feed-scroll{max-height:56vh;overflow-y:auto}
+</style>
