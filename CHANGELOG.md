@@ -2,6 +2,19 @@
 
 本文件记录 INU 星际通行证的重要变更。版本按发布日期归档，仓库地址：<https://github.com/jijiayi0626/inu-space>。
 
+## [1.3.1] - 2026-11-01
+
+### 变更
+
+- **管理台组件级拆分**：`AdminView.vue` 从 2600 余行收敛为管理台外壳（页头、横幅、统计、分区导航与通用确认弹窗），九个分区各自拆成独立组件：`AdminProviders`、`AdminSettings`、`AdminContent`、`AdminFinance`、`AdminUsers`、`AdminClients`、`AdminAccess`、`AdminAudit`、`AdminAdmins`。
+- **按分区懒加载**：每个管理分区通过 `defineAsyncComponent` 独立按需加载，构建后生成独立 JS chunk；切换分区不再携带其他分区的表单、弹窗与逻辑。
+- **共享管理台样式**：原 `scoped` 样式迁移到 `src/assets/admin.css`，由管理台外壳统一引入，所有分区组件共用，避免子组件样式失效。
+- **共享管理辅助函数**：复制、图标、订单状态、提现状态、通知分类等常量与工具集中到 `src/lib/adminHelpers.js`。
+
+### 修复
+
+- 拆分后保留全部分区路由、表单校验、弹窗、确认操作与数据刷新行为不变。
+
 ## [1.3.0] - 2026-10-31
 
 ### 新增

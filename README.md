@@ -406,9 +406,11 @@ inu-cloud/
 │  └─ 0006_password_reset.sql # 密码找回申请
 ├─ src/
 │  ├─ views/                # 业务页面 + 登录 / 管理台 / 授权同意页
+│  │  └─ admin/             # 管理台九个分区组件，按需懒加载
 │  ├─ components/           # AppShell、TopBar、SideBar、Modal、Toast 等
-│  ├─ lib/                  # API 客户端、session、adminSections、格式化、主题、toast
+│  ├─ lib/                  # API 客户端、session、adminSections、adminHelpers、格式化、主题、toast
 │  ├─ assets/base.css       # 设计系统与页面样式
+│  ├─ assets/admin.css      # 管理台共享样式
 │  ├─ router.js
 │  └─ main.js
 ├─ public/
