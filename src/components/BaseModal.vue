@@ -1,6 +1,6 @@
 <script setup>
-import { onBeforeUnmount, watch } from 'vue';
-import AppIcon from './AppIcon.vue';
+import { computed } from 'vue';
+import { Dialog } from 'fuxsto-design-pro';
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -10,48 +10,35 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue']);
 
-function close() {
-  emit('update:modelValue', false);
-}
-
-function onKeydown(event) {
-  if (event.key === 'Escape') close();
-}
-
-watch(
-  () => props.modelValue,
-  (open) => {
-    document.body.classList.toggle('modal-open', open);
-    if (open) document.addEventListener('keydown', onKeydown);
-    else document.removeEventListener('keydown', onKeydown);
-  },
-);
-
-onBeforeUnmount(() => {
-  document.body.classList.remove('modal-open');
-  document.removeEventListener('keydown', onKeydown);
+const dialogSize = computed(() => {
+  const px = Number.parseInt(props.width, 10) || 448;
+  if (px <= 480) return 'md';
+  if (px <= 580) return 'lg';
+  return 'xl';
 });
+
+function onOpenChange(open) {
+  emit('update:modelValue', open);
+}
 </script>
 
 <template>
-  <Teleport to="body">
-    <Transition name="modal">
-      <div v-if="modelValue" class="modal-mask show" @click.self="close">
-        <div class="modal" role="dialog" aria-modal="true" :aria-label="title" :style="{ maxWidth: width }">
-          <div class="modal-head">
-            <h3>{{ title }}</h3>
-            <button class="icon-btn" type="button" aria-label="关闭弹窗" @click="close">
-              <AppIcon name="x" />
-            </button>
-          </div>
-          <div class="modal-body">
-            <slot />
-          </div>
-          <div v-if="$slots.footer" class="modal-foot">
-            <slot name="footer" />
-          </div>
-        </div>
-      </div>
-    </Transition>
-  </Teleport>
+  <Dialog
+    :open="modelValue"
+    :title="title"
+    :size="dialogSize"
+    :show-confirm="false"
+    :show-cancel="false"
+    :mask-closable="true"
+    :esc-closable="true"
+    :close-on-back="true"
+    @update:open="onOpenChange"
+  >
+    <div class="modal-body">
+      <slot />
+    </div>
+    <template v-if="$slots.footer" #footer>
+      <slot name="footer" />
+    </template>
+  </Dialog>
 </template>

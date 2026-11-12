@@ -1,0 +1,2 @@
+/* 固定层叠顺序：应用重置先于 Fuxsto 组件，应用样式最后覆盖。 */
+@layer reset, theme, components, app;

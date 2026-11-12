@@ -1,5 +1,6 @@
 <script setup>
 import { computed, reactive, watch } from 'vue';
+import { Button, FxField, Input, Select, Switch, Textarea } from 'fuxsto-design-pro';
 import AppIcon from '../../components/AppIcon.vue';
 import { api } from '../../lib/api';
 import { toast } from '../../lib/toast';
@@ -11,6 +12,20 @@ const props = defineProps({
 });
 
 const settings = computed(() => props.data?.settings || {});
+
+const noticeLevelOptions = [
+  { label: '信息 · 蓝色', value: 'info' },
+  { label: '完成 · 绿色', value: 'success' },
+  { label: '提醒 · 橙色', value: 'warn' },
+];
+const paymentModeOptions = [
+  { label: '模拟支付 · 下单即到账', value: 'mock' },
+  { label: '关闭支付', value: 'off' },
+];
+const verificationModeOptions = [
+  { label: '控制台调试 · 返回 devCode 并开放模拟认证', value: 'console' },
+  { label: '关闭验证码与模拟认证', value: 'off' },
+];
 
 const siteForm = reactive({
   demoVisible: false,
@@ -165,29 +180,21 @@ async function saveSiteSettings() {
           <div><strong>演示账号</strong><span>{{ settings.demoEmail }}</span></div>
         </div>
 
-        <label class="setting-row">
+        <div class="setting-row">
           <span>
             <strong>在登录页展示演示入口</strong>
             <em>关闭后登录页不再显示演示账号与密码，但手动输入仍可登录。</em>
           </span>
-          <span class="switch">
-            <input v-model="siteForm.demoVisible" type="checkbox" />
-            <span class="track" />
-            <span class="thumb" />
-          </span>
-        </label>
+          <Switch v-model="siteForm.demoVisible" aria-label="在登录页展示演示入口" />
+        </div>
 
-        <label class="setting-row">
+        <div class="setting-row">
           <span>
             <strong>演示账号只读</strong>
             <em>开启后，演示账号的所有写操作都会被服务端拒绝，只保留浏览、登录与授权。</em>
           </span>
-          <span class="switch">
-            <input v-model="siteForm.demoReadOnly" type="checkbox" />
-            <span class="track" />
-            <span class="thumb" />
-          </span>
-        </label>
+          <Switch v-model="siteForm.demoReadOnly" aria-label="演示账号只读" />
+        </div>
 
         <div class="settings-cred">
           <span>演示凭据</span>
@@ -201,38 +208,27 @@ async function saveSiteSettings() {
           <div><strong>站点公告</strong><span>同时显示在登录页与登录后的页面顶部</span></div>
         </div>
 
-        <label class="setting-row">
+        <div class="setting-row">
           <span>
             <strong>启用站点公告</strong>
             <em>适合发布维护通知、活动提醒或重要变更。</em>
           </span>
-          <span class="switch">
-            <input v-model="siteForm.noticeEnabled" type="checkbox" />
-            <span class="track" />
-            <span class="thumb" />
-          </span>
-        </label>
+          <Switch v-model="siteForm.noticeEnabled" aria-label="启用站点公告" />
+        </div>
 
         <div class="field">
-          <label for="notice-text">公告内容</label>
-          <textarea
-            id="notice-text"
+          <span class="field-label">公告内容</span>
+          <Textarea aria-label="公告内容"
             v-model="siteForm.noticeText"
-            class="input modal-textarea"
-            rows="3"
-            maxlength="200"
+            :rows="3"
+            :maxlength="200"
             placeholder="例如：今晚 23:00 进行服务维护，预计 30 分钟。"
           />
         </div>
 
-        <div class="field">
-          <label for="notice-level">公告级别</label>
-          <select id="notice-level" v-model="siteForm.noticeLevel" class="input">
-            <option value="info">信息 · 蓝色</option>
-            <option value="success">完成 · 绿色</option>
-            <option value="warn">提醒 · 橙色</option>
-          </select>
-        </div>
+        <FxField v-select-label="'公告级别'" label="公告级别">
+          <Select v-model="siteForm.noticeLevel" :options="noticeLevelOptions" />
+        </FxField>
       </article>
 
       <article class="card settings-card settings-card-wide">
@@ -243,12 +239,12 @@ async function saveSiteSettings() {
 
         <div class="settings-fields">
           <div class="field">
-            <label for="login-welcome">登录页欢迎语</label>
-            <input id="login-welcome" v-model="siteForm.loginWelcome" class="input" maxlength="120" placeholder="登录后继续管理你的资料与安全。" />
+            <span class="field-label">登录页欢迎语</span>
+            <Input aria-label="登录页欢迎语" v-model="siteForm.loginWelcome" maxlength="120" placeholder="登录后继续管理你的资料与安全。" />
           </div>
           <div class="field">
-            <label for="footer-text">页脚文案</label>
-            <input id="footer-text" v-model="siteForm.footerText" class="input" maxlength="120" placeholder="© 2026 INU 账号中心" />
+            <span class="field-label">页脚文案</span>
+            <Input aria-label="页脚文案" v-model="siteForm.footerText" maxlength="120" placeholder="© 2026 INU 账号中心" />
           </div>
         </div>
       </article>
@@ -260,7 +256,7 @@ async function saveSiteSettings() {
         </div>
 
         <div class="feature-grid">
-          <label
+          <div
             v-for="item in [
               { key: 'featureRecharge', title: '余额充值', desc: '钱包充值入口与支付订单' },
               { key: 'featureWithdraw', title: '余额提现', desc: '提交提现申请并进入人工复核' },
@@ -279,12 +275,12 @@ async function saveSiteSettings() {
               <strong>{{ item.title }}</strong>
               <em>{{ item.desc }}</em>
             </span>
-            <span class="switch">
-              <input v-model="siteForm[item.key]" type="checkbox" />
-              <span class="track" />
-              <span class="thumb" />
-            </span>
-          </label>
+            <Switch
+              :model-value="siteForm[item.key]"
+              :aria-label="item.title"
+              @update:model-value="siteForm[item.key] = $event"
+            />
+          </div>
         </div>
       </article>
 
@@ -294,37 +290,29 @@ async function saveSiteSettings() {
           <div><strong>支付与验证</strong><span>充值、提现与验证码通道</span></div>
         </div>
 
-        <div class="field">
-          <label for="payment-mode">支付模式</label>
-          <select id="payment-mode" v-model="siteForm.paymentMode" class="input">
-            <option value="mock">模拟支付 · 下单即到账</option>
-            <option value="off">关闭支付</option>
-          </select>
-        </div>
+        <FxField v-select-label="'支付模式'" label="支付模式">
+          <Select v-model="siteForm.paymentMode" :options="paymentModeOptions" />
+        </FxField>
 
-        <div class="field">
-          <label for="verify-mode">验证码通道</label>
-          <select id="verify-mode" v-model="siteForm.verificationMode" class="input">
-            <option value="console">控制台调试 · 返回 devCode 并开放模拟认证</option>
-            <option value="off">关闭验证码与模拟认证</option>
-          </select>
+        <FxField v-select-label="'验证码通道'" label="验证码通道">
+          <Select v-model="siteForm.verificationMode" :options="verificationModeOptions" />
           <p class="hint">关闭后手机 / 邮箱验证码与实名用户自助认证都不可用；「实名认证」功能开关关闭时，认证入口显示为暂未开放。</p>
-        </div>
+        </FxField>
 
         <div class="field">
-          <label for="recharge-presets">充值快捷金额（余额）</label>
-          <input id="recharge-presets" v-model="siteForm.rechargePresets" class="input" placeholder="50,100,200,500,1000" />
+          <span class="field-label">充值快捷金额（余额）</span>
+          <Input aria-label="充值快捷金额（余额）" v-model="siteForm.rechargePresets" placeholder="50,100,200,500,1000" />
           <p class="hint">1–8 个金额，用英文逗号分隔，仅影响前端快捷选项。</p>
         </div>
 
         <div class="settings-fields">
           <div class="field">
-            <label for="withdraw-min">提现门槛（余额）</label>
-            <input id="withdraw-min" v-model.number="siteForm.withdrawMinYuan" class="input" type="number" min="10" max="50000" />
+            <span class="field-label">提现门槛（余额）</span>
+            <Input aria-label="提现门槛（余额）" :model-value="siteForm.withdrawMinYuan" type="number" min="10" max="50000" @update:model-value="siteForm.withdrawMinYuan = Number($event)" />
           </div>
           <div class="field">
-            <label for="name-days">昵称修改间隔（天）</label>
-            <input id="name-days" v-model.number="siteForm.nameChangeDays" class="input" type="number" min="0" max="365" />
+            <span class="field-label">昵称修改间隔（天）</span>
+            <Input aria-label="昵称修改间隔（天）" :model-value="siteForm.nameChangeDays" type="number" min="0" max="365" @update:model-value="siteForm.nameChangeDays = Number($event)" />
           </div>
         </div>
       </article>
@@ -336,14 +324,14 @@ async function saveSiteSettings() {
         </div>
 
         <div class="field">
-          <label for="support-email">客服邮箱</label>
-          <input id="support-email" v-model="siteForm.supportEmail" class="input" type="email" placeholder="support@inu.space" />
+          <span class="field-label">客服邮箱</span>
+          <Input aria-label="客服邮箱" v-model="siteForm.supportEmail" type="email" placeholder="support@inu.space" />
           <p class="hint">用于帮助中心、积分商城与安全中心的客服入口。</p>
         </div>
 
         <div class="field">
-          <label for="wallet-last4">钱包尾号</label>
-          <input id="wallet-last4" v-model="siteForm.walletCardLast4" class="input" maxlength="4" placeholder="0721" />
+          <span class="field-label">钱包尾号</span>
+          <Input aria-label="钱包尾号" v-model="siteForm.walletCardLast4" maxlength="4" placeholder="0721" />
         </div>
       </article>
 
@@ -353,26 +341,20 @@ async function saveSiteSettings() {
           <div><strong>维护模式</strong><span>开启后普通用户无法执行写操作，超级管理员不受影响</span></div>
         </div>
 
-        <label class="setting-row">
+        <div class="setting-row">
           <span>
             <strong>启用维护模式</strong>
             <em>登录、注册、浏览、健康检查与 OAuth 授权仍然可用。</em>
           </span>
-          <span class="switch">
-            <input v-model="siteForm.maintenanceEnabled" type="checkbox" />
-            <span class="track" />
-            <span class="thumb" />
-          </span>
-        </label>
+          <Switch v-model="siteForm.maintenanceEnabled" aria-label="启用维护模式" />
+        </div>
 
         <div class="field">
-          <label for="maintenance-text">维护提示</label>
-          <textarea
-            id="maintenance-text"
+          <span class="field-label">维护提示</span>
+          <Textarea aria-label="维护提示"
             v-model="siteForm.maintenanceText"
-            class="input modal-textarea"
-            rows="2"
-            maxlength="200"
+            :rows="2"
+            :maxlength="200"
             placeholder="例如：服务正在升级，预计 30 分钟后恢复。"
           />
         </div>
@@ -381,10 +363,10 @@ async function saveSiteSettings() {
 
     <div class="settings-foot">
       <p class="hint">保存后写入 D1：新的登录页立即生效；已登录页面刷新后同步最新公告与页脚。</p>
-      <button class="btn btn-primary" type="button" :disabled="siteForm.saving" @click="saveSiteSettings">
+      <Button variant="primary" type="button" :disabled="siteForm.saving" @click="saveSiteSettings">
         <span v-if="siteForm.saving" class="spinner" />
         <span>{{ siteForm.saving ? '保存中…' : '保存站点设置' }}</span>
-      </button>
+      </Button>
     </div>
   </section>
 </template>

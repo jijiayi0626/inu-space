@@ -4,24 +4,26 @@
 
 ## 1. 颜色
 
-设计令牌由 Fuxsto Design Pro 提供，业务样式只引用 `--fx-*` 或 `src/assets/base.css` 中的语义变量。
+设计令牌由 Fuxsto Design Pro 提供，业务样式只引用 `--fx-*` 或 `src/assets/base.css` 中的语义变量。品牌色为蓝紫：亮色 `#4F46E5`，暗色 `#A5B4FC`。
 
-| 角色 | 令牌 | 值 |
-| --- | --- | --- |
-| 页面 / 面板 | `--fx-background` / `--fx-surface` | `#FFFFFF` |
-| 主文字 | `--fx-foreground` | `#09090B` |
-| 次文字 | `--text-sub` | 主文字与底色 `68%` 混合 |
-| 弱文字 | `--fx-muted-foreground` | `#71717A` |
-| 下沉区域 | `--fx-muted` | `#F4F4F5` |
-| 分割线 | `--fx-border` | `#E4E4E7` |
-| 主操作 | `--fx-primary` | `#18181B` |
-| 主操作文字 | `--fx-primary-foreground` | `#FAFAFA` |
-| 链接 / 强调 | `--accent` | 跟随 `--fx-primary` |
-| 危险 | `--fx-destructive` | `#EF4444` |
-| 成功 | `--fx-success` | `#10B981` |
-| 警告 | `--fx-warning` | `#F59E0B` |
+| 角色 | 令牌 | 亮色 | 暗色 |
+| --- | --- | --- | --- |
+| 页面背景 | `--fx-background` | `#FAFAFF` | `#0A0912` |
+| 面板 / 卡片 | `--fx-surface` | `#FFFFFF` | `#131120` |
+| 主文字 | `--fx-foreground` | `#14121F` | `#F5F4FB` |
+| 次文字 | `--text-sub` | 主文字与底色 `68%` 混合 | 同左 |
+| 弱文字 | `--fx-muted-foreground` | `#6F6B82` | `#AAA5BF` |
+| 下沉区域 | `--fx-muted` | `#F3F2FA` | `#201D32` |
+| 分割线 | `--fx-border` | `#E7E5F2` | `#2C2844` |
+| 主操作 | `--fx-primary` | `#4F46E5` | `#A5B4FC` |
+| 主操作文字 | `--fx-primary-foreground` | `#FFFFFF` | `#1E1B4B` |
+| 浅色强调面 | `--fx-secondary` | `#EEF2FF` | `#2A2547` |
+| 链接 / 焦点环 | `--fx-ring` | `#6366F1` | `#A5B4FC` |
+| 危险 | `--fx-destructive` | `#EF4444` | 由 Fuxsto 暗色令牌提供 |
+| 成功 | `--fx-success` | `#10B981` | 由 Fuxsto 暗色令牌提供 |
+| 警告 | `--fx-warning` | `#F59E0B` | 由 Fuxsto 暗色令牌提供 |
 
-暗色主题由 `[data-theme="dark"]` 切换，颜色由 Fuxsto 暗色令牌提供；深色强调面板在暗色下改用 `--fx-muted` 与主文字色。
+暗色主题由 `[data-theme="dark"]` 切换。`base.css` 必须在该选择器内把 `--fx-*` 重新映射到 `--fx-dark-*`，否则库的暗色令牌会被应用层的亮色值覆盖。深色强调面板（余额 / 会员卡）使用 `--panel-strong` 系列变量。
 
 规则：
 - 大面积背景不用品牌色、不用渐变。
@@ -117,18 +119,19 @@
 - 宽度 240px；独立面板，12px 外边距，圆角 16px。
 - 分组标题 11px / 600 / 弱文字；组间 24px。
 - 菜单行高 40px，圆角 8px，图标 18px，图文间距 10px。
-- 当前项：`--soft` 底 + `--text` 字，不加彩色、不加右侧装饰。
+- 当前项：`--fx-secondary` 底 + `--fx-secondary-foreground` 字，不加渐变、发光或右侧装饰。
 - 悬停：`--hover-soft` 底。
 - 底部认证提示使用普通浅色面板，不使用渐变。
 
-## 9. 组件清单
+## 9. 组件与实现
 
-- 按钮：主（深色实底）、次（浅灰底）、文字、危险。高度 36/40，圆角 8。
-- 输入：高度 40，圆角 8，1px 边框，聚焦 3px 低透明焦点环。
-- 开关：42×24，选中用主色。
-- 徽章：只用于状态，不用作装饰；中性底 + 语义文字。
-- 弹窗：半径 16，遮罩 `rgba(0,0,0,.4)`，无边框，阴影 `--shadow-float`。
-- Toast：顶部居中，中性面板，成功/失败只用图标颜色区分。
+- 交互组件全部来自 Fuxsto Design Pro：`Button` / `Input` / `Textarea` / `Select` / `Switch` / `Checkbox` / `Dialog` / `Message`；项目只负责布局、品牌令牌与少量排版覆盖。
+- 导入顺序固定：`layers.css` → `fuxsto-design-pro/styles.css` → `base.css`。层顺序为 `reset, theme, components, app`：应用层覆盖组件，重置层不压过组件。
+- 按钮：执行动作使用 `Button` 的 `primary` / `secondary` / `outline` / `ghost` / `destructive`；路由跳转保留 `RouterLink` + `.btn` 视觉类。
+- 表单：标签在上，控件使用 `Input` / `Textarea` / `Select`。控件不透传 `id`，统一用 `aria-label` 提供可访问名称；`Select` 包在 `FxField` 中并用 `v-select-label` 补上触发器名称；数字输入显式转换为 `Number`。
+- 开关与勾选：设置项使用 `Switch`，同意条款与多选项使用 `Checkbox`，不再使用原生 checkbox。
+- 弹窗：页面通过 `BaseModal` 使用 `Dialog`，`width` 自动映射 `md` / `lg` / `xl`；`Dialog` 不接受 `class`，不要依赖外部样式选择器。
+- 轻提示：统一调用 `src/lib/toast.js` 的 `toast()`，由 `Message` 渲染，顶部居中、自动消失。
 
 ## 10. 验收清单
 

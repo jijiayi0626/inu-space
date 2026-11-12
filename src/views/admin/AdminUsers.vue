@@ -1,5 +1,6 @@
 <script setup>
 import { computed, reactive, ref, watch } from 'vue';
+import { Button, Input, Switch } from 'fuxsto-design-pro';
 import AppIcon from '../../components/AppIcon.vue';
 import BaseModal from '../../components/BaseModal.vue';
 import { api } from '../../lib/api';
@@ -129,7 +130,7 @@ function resolveResetRequest(row) {
             <em>{{ row.userInuId }} · {{ dateTimeLabel(row.createdAt) }}</em>
           </div>
           <div class="manage-actions">
-            <button class="btn btn-ghost btn-sm" type="button" @click="resolveResetRequest(row)">标记已处理</button>
+            <Button variant="secondary" size="sm" type="button" @click="resolveResetRequest(row)">标记已处理</Button>
           </div>
         </div>
       </div>
@@ -138,16 +139,11 @@ function resolveResetRequest(row) {
 
     <div class="card">
       <div class="user-search">
-        <input
-          v-model="userQuery"
-          class="input"
-          placeholder="搜索邮箱 / 昵称 / INU ID / 手机号"
-          @keyup.enter="searchAdminUsers"
-        />
-        <button class="btn btn-primary" type="button" :disabled="usersLoading" @click="searchAdminUsers">
+        <Input v-model="userQuery" placeholder="搜索邮箱 / 昵称 / INU ID / 手机号" @keyup.enter="searchAdminUsers" />
+        <Button variant="primary" type="button" :disabled="usersLoading" @click="searchAdminUsers">
           <span v-if="usersLoading" class="spinner" />
           <span>{{ usersLoading ? '搜索中…' : '搜索用户' }}</span>
-        </button>
+        </Button>
       </div>
 
       <div v-if="!adminUsers.length" class="admin-empty compact">
@@ -169,7 +165,7 @@ function resolveResetRequest(row) {
             <em>{{ money(user.balanceCents) }} 余额 · {{ user.particles }} 积分 · {{ user.phone || '未绑定手机' }} · {{ dateTimeLabel(user.createdAt) }}</em>
           </div>
           <div class="manage-actions">
-            <button class="btn btn-ghost btn-sm" type="button" @click="openUserAdjust(user)">调整</button>
+            <Button variant="secondary" size="sm" type="button" @click="openUserAdjust(user)">调整</Button>
           </div>
         </div>
       </div>
@@ -185,48 +181,37 @@ function resolveResetRequest(row) {
         <span>当前 {{ money(userTarget.balanceCents) }} 余额 · {{ userTarget.particles }} 积分</span>
       </div>
       <div class="field">
-        <label for="user-name">昵称</label>
-        <input id="user-name" v-model="userForm.name" class="input" maxlength="20" />
+        <span class="field-label">昵称</span>
+        <Input aria-label="昵称" v-model="userForm.name" maxlength="20" />
       </div>
-      <label class="public-toggle">
-        <span class="switch">
-          <input v-model="userForm.verified" type="checkbox" />
-          <span class="track" />
-          <span class="thumb" />
-        </span>
+      <div class="public-toggle">
+        <Switch v-model="userForm.verified" aria-label="实名认证" />
         <span><strong>实名认证</strong><em>开启后可下单、提现并使用全部功能</em></span>
-      </label>
+      </div>
       <div class="field">
-        <label for="user-password">重置登录密码</label>
-        <input
-          id="user-password"
-          v-model="userForm.password"
-          class="input"
-          type="password"
-          autocomplete="new-password"
-          placeholder="留空表示不修改；至少 8 位且包含字母与数字"
-        />
+        <span class="field-label">重置登录密码</span>
+        <Input aria-label="重置登录密码" v-model="userForm.password" type="password" autocomplete="new-password" placeholder="留空表示不修改；至少 8 位且包含字母与数字" />
         <p class="hint">重置后用户需使用新密码登录，待处理的密码找回申请会自动完成。</p>
       </div>
       <div class="settings-fields">
         <div class="field">
-          <label for="user-particles">积分增减</label>
-          <input id="user-particles" v-model.number="userForm.particlesDelta" class="input" type="number" placeholder="正数增加，负数扣减" />
+          <span class="field-label">积分增减</span>
+          <Input aria-label="积分增减" :model-value="userForm.particlesDelta" type="number" placeholder="正数增加，负数扣减" @update:model-value="userForm.particlesDelta = Number($event)" />
         </div>
         <div class="field">
-          <label for="user-balance">余额增减</label>
-          <input id="user-balance" v-model.number="userForm.balanceDeltaYuan" class="input" type="number" step="0.01" placeholder="正数增加，负数扣减" />
+          <span class="field-label">余额增减</span>
+          <Input aria-label="余额增减" :model-value="userForm.balanceDeltaYuan" type="number" step="0.01" placeholder="正数增加，负数扣减" @update:model-value="userForm.balanceDeltaYuan = Number($event)" />
         </div>
       </div>
       <p class="hint">积分和余额的调整会写入用户流水与安全日志，并发送站内信。</p>
       <p v-if="userError" class="modal-error">{{ userError }}</p>
     </div>
     <template #footer>
-      <button class="btn btn-ghost" type="button" @click="userModal = false">取消</button>
-      <button class="btn btn-primary" type="button" :disabled="userSaving" @click="submitUserAdjust">
+      <Button variant="secondary" type="button" @click="userModal = false">取消</Button>
+      <Button variant="primary" type="button" :disabled="userSaving" @click="submitUserAdjust">
         <span v-if="userSaving" class="spinner" />
         <span>{{ userSaving ? '保存中…' : '保存调整' }}</span>
-      </button>
+      </Button>
     </template>
   </BaseModal>
 </template>

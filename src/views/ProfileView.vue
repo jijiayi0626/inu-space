@@ -1,5 +1,6 @@
 <script setup>
 import { computed, reactive, ref, watch } from 'vue';
+import { Button, Checkbox, Input } from 'fuxsto-design-pro';
 import AppIcon from '../components/AppIcon.vue';
 import BaseModal from '../components/BaseModal.vue';
 import ContactVerifyModal from '../components/ContactVerifyModal.vue';
@@ -241,62 +242,61 @@ const linkItems = computed(() => [
               {{ user.lastLogin?.location || user.region }}
             </p>
           </div>
-          <button class="btn btn-ghost btn-sm identity-btn" @click="openAvatar">
+          <Button class="identity-btn" variant="secondary" size="sm" @click="openAvatar">
             更换头像
-          </button>
+          </Button>
         </div>
 
         <div class="divider" />
 
         <form class="form-grid" @submit.prevent="save">
           <div class="field">
-            <label for="nickname">昵称</label>
-            <input id="nickname" v-model="form.name" class="input" type="text" maxlength="16" />
+            <span class="field-label">昵称</span>
+            <Input aria-label="昵称" v-model="form.name" type="text" maxlength="16" />
             <p class="hint">{{ nameChangeDays > 0 ? `昵称每 ${nameChangeDays} 天可修改一次` : '昵称修改次数不受限制' }}</p>
           </div>
           <div class="field">
-            <label for="email">邮箱</label>
+            <span class="field-label">邮箱</span>
             <div class="input-inline">
-              <input id="email" v-model="form.email" class="input" type="email" readonly />
-              <button class="btn btn-text" type="button" @click="openEmail">更换</button>
+              <Input aria-label="邮箱" v-model="form.email" type="email" readonly />
+              <Button variant="ghost" size="sm" type="button" @click="openEmail">更换</Button>
             </div>
             <p class="hint">
               用于接收商品与安全通知 · {{ user.emailVerified === false ? '待验证' : '已验证' }}
             </p>
           </div>
           <div class="field span-2">
-            <label for="bio">个人签名</label>
-            <input id="bio" v-model="form.bio" class="input" type="text" maxlength="60" placeholder="一句话介绍自己" />
+            <span class="field-label">个人签名</span>
+            <Input aria-label="个人签名" v-model="form.bio" type="text" maxlength="60" placeholder="一句话介绍自己" />
             <p class="hint">最多 60 个字符，会展示在实名资料卡上</p>
           </div>
           <div class="field span-2">
-            <label for="phone">手机号</label>
+            <span class="field-label">手机号</span>
             <div class="input-inline">
-              <input id="phone" class="input" type="tel" :value="user.phone || '未绑定手机号'" readonly />
+              <Input aria-label="手机号" type="tel" :model-value="user.phone || '未绑定手机号'" readonly />
               <span class="badge" :class="user.phone ? 'badge-green' : 'badge-red'">
                 {{ user.phone ? '已绑定' : '未绑定' }}
               </span>
-              <button class="btn btn-text" type="button" @click="openPhone">
+              <Button variant="ghost" size="sm" type="button" @click="openPhone">
                 {{ user.phone ? '更换' : '去绑定' }}
-              </button>
+              </Button>
             </div>
           </div>
           <div class="field span-2">
-            <label for="inuid">INU ID</label>
+            <span class="field-label">INU ID</span>
             <div class="input-inline">
-              <input id="inuid" class="input mono" type="text" :value="user.inuId" readonly />
-              <button class="btn btn-ghost btn-sm" type="button" @click="copyInuId">复制</button>
+              <Input aria-label="INU ID" class="mono" type="text" :model-value="user.inuId" readonly />
+              <Button variant="secondary" size="sm" type="button" @click="copyInuId">复制</Button>
             </div>
             <p class="hint">INU ID 是你的唯一账号标识，不可修改</p>
           </div>
         </form>
 
         <div class="card-actions">
-          <button class="btn btn-primary" type="button" :disabled="saving" @click="save">
-            <span v-if="saving" class="spinner" />
-            {{ saving ? '保存中…' : '保存修改' }}
-          </button>
-          <button class="btn btn-ghost" type="button" :disabled="saving" @click="resetForm">取消</button>
+          <Button variant="primary" type="button" :loading="saving" loading-text="保存中…" @click="save">
+            保存修改
+          </Button>
+          <Button variant="secondary" type="button" :disabled="saving" @click="resetForm">取消</Button>
         </div>
       </section>
 
@@ -345,15 +345,9 @@ const linkItems = computed(() => [
         </p>
 
         <div class="card-actions">
-          <button
-            v-if="!user.verified"
-            class="btn btn-primary"
-            type="button"
-            :disabled="!verificationAvailable"
-            @click="openVerify"
-          >
+          <Button variant="primary" v-if="!user.verified" type="button" :disabled="!verificationAvailable" @click="openVerify">
             {{ verificationAvailable ? '立即认证' : '认证通道已关闭' }}
-          </button>
+          </Button>
           <RouterLink v-else class="btn btn-ghost" to="/supply">前往积分商城</RouterLink>
           <RouterLink class="btn btn-text" to="/agreements">查看认证协议</RouterLink>
         </div>
@@ -459,16 +453,18 @@ const linkItems = computed(() => [
       <AppIcon name="info" />
       <span>确认后将完成身份核验，并解锁积分商城下单能力。</span>
     </p>
-    <label class="agree-row">
-      <input v-model="verifyAgreed" type="checkbox" class="check" />
+    <div class="agree-row" @click="verifyAgreed = !verifyAgreed">
+      <span class="agree-check" @click.stop>
+        <Checkbox v-model="verifyAgreed" aria-label="同意实名认证服务协议" />
+      </span>
       <span>我已阅读并同意《实名认证服务协议》，并确认以上认证信息真实有效。</span>
-    </label>
+    </div>
     <template #footer>
-      <button class="btn btn-ghost btn-sm" type="button" @click="verifyOpen = false">取消</button>
-      <button class="btn btn-primary btn-sm" type="button" :disabled="verifying" @click="confirmVerify">
+      <Button variant="secondary" size="sm" type="button" @click="verifyOpen = false">取消</Button>
+      <Button variant="primary" size="sm" type="button" :disabled="verifying" @click="confirmVerify">
         <span v-if="verifying" class="spinner" />
         {{ verifying ? '正在核验…' : '确认认证' }}
-      </button>
+      </Button>
     </template>
   </BaseModal>
 
@@ -482,13 +478,13 @@ const linkItems = computed(() => [
     </div>
 
     <div class="field">
-      <label for="avatar-text">头像字符</label>
-      <input id="avatar-text" v-model="avatarForm.text" class="input" type="text" maxlength="2" placeholder="1–2 个字符" />
+      <span class="field-label">头像字符</span>
+      <Input aria-label="头像字符" v-model="avatarForm.text" type="text" maxlength="2" placeholder="1–2 个字符" />
       <p class="hint">支持中文、字母或符号，最多 2 个字符</p>
     </div>
 
     <div class="field">
-      <label>头像配色</label>
+      <span class="field-label">头像配色</span>
       <div class="tone-row">
         <button
           v-for="tone in avatarTones"
@@ -505,11 +501,11 @@ const linkItems = computed(() => [
     <p v-if="avatarError" class="form-error"><AppIcon name="shield" /><span>{{ avatarError }}</span></p>
 
     <template #footer>
-      <button class="btn btn-ghost btn-sm" type="button" @click="avatarOpen = false">取消</button>
-      <button class="btn btn-primary btn-sm" type="button" :disabled="avatarSaving" @click="saveAvatar">
+      <Button variant="secondary" size="sm" type="button" @click="avatarOpen = false">取消</Button>
+      <Button variant="primary" size="sm" type="button" :disabled="avatarSaving" @click="saveAvatar">
         <span v-if="avatarSaving" class="spinner" />
         {{ avatarSaving ? '保存中…' : '保存头像' }}
-      </button>
+      </Button>
     </template>
   </BaseModal>
 

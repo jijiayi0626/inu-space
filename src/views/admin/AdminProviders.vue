@@ -1,5 +1,6 @@
 <script setup>
 import { computed, reactive, watch } from 'vue';
+import { Button, Input, Switch } from 'fuxsto-design-pro';
 import AppIcon from '../../components/AppIcon.vue';
 import { api } from '../../lib/api';
 import { copyText, sourceLabel } from '../../lib/adminHelpers';
@@ -85,11 +86,10 @@ async function saveProvider(provider) {
               <span v-if="provider.backup" class="badge badge-orange">备用</span>
             </span>
           </div>
-          <label class="switch" :aria-label="`启用 ${provider.label} 登录`">
-            <input v-model="providerForms[provider.id].enabled" type="checkbox" />
-            <span class="track" />
-            <span class="thumb" />
-          </label>
+          <Switch
+            v-model="providerForms[provider.id].enabled"
+            :aria-label="`启用 ${provider.label} 登录`"
+          />
         </div>
 
         <p v-if="provider.secretError" class="provider-warn">
@@ -98,25 +98,12 @@ async function saveProvider(provider) {
 
         <div class="provider-fields">
           <div class="field">
-            <label :for="`${provider.id}-client-id`">Client ID</label>
-            <input
-              :id="`${provider.id}-client-id`"
-              v-model="providerForms[provider.id].clientId"
-              class="input"
-              autocomplete="off"
-              placeholder="填写 OAuth App 的 Client ID"
-            />
+            <span class="field-label">Client ID</span>
+            <Input aria-label="Client ID" v-model="providerForms[provider.id].clientId" autocomplete="off" placeholder="填写 OAuth App 的 Client ID" />
           </div>
           <div class="field">
-            <label :for="`${provider.id}-client-secret`">Client Secret</label>
-            <input
-              :id="`${provider.id}-client-secret`"
-              v-model="providerForms[provider.id].clientSecret"
-              class="input"
-              type="password"
-              autocomplete="new-password"
-              :placeholder="provider.hasSecret ? '已保存，留空表示不修改' : '填写 Client Secret'"
-            />
+            <span class="field-label">Client Secret</span>
+            <Input aria-label="Client Secret" v-model="providerForms[provider.id].clientSecret" type="password" autocomplete="new-password" :placeholder="provider.hasSecret ? '已保存，留空表示不修改' : '填写 Client Secret'" />
           </div>
         </div>
 
@@ -134,10 +121,10 @@ async function saveProvider(provider) {
           <span class="provider-hint">
             {{ provider.id === 'github' ? 'GitHub 只允许填写一个回调地址' : 'Google 支持多个回调地址' }}
           </span>
-          <button class="btn btn-primary btn-sm" type="button" :disabled="providerForms[provider.id].saving" @click="saveProvider(provider)">
+          <Button variant="primary" size="sm" type="button" :disabled="providerForms[provider.id].saving" @click="saveProvider(provider)">
             <span v-if="providerForms[provider.id].saving" class="spinner" />
             <span>{{ providerForms[provider.id].saving ? '保存中…' : '保存配置' }}</span>
-          </button>
+          </Button>
         </div>
       </article>
     </div>

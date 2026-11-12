@@ -1,5 +1,6 @@
 <script setup>
 import { computed, reactive, ref } from 'vue';
+import { Button, FxField, Input, Select, Textarea } from 'fuxsto-design-pro';
 import AppIcon from '../../components/AppIcon.vue';
 import BaseModal from '../../components/BaseModal.vue';
 import { api } from '../../lib/api';
@@ -22,6 +23,7 @@ const finance = computed(() => props.data?.finance || {});
 const orderList = computed(() => props.data?.orders || []);
 const withdrawalList = computed(() => props.data?.withdrawals || []);
 const rechargeList = computed(() => props.data?.recharges || []);
+const orderStatusOptions = ORDER_STATUS_OPTIONS.map((item) => ({ label: item.label, value: item.key }));
 
 /* ---------- 订单管理 ---------- */
 
@@ -152,7 +154,7 @@ async function processWithdraw(action) {
             <em>{{ row.code }} · 收款账号 {{ row.account }} · {{ dateTimeLabel(row.createdAt) }}</em>
           </div>
           <div class="manage-actions">
-            <button v-if="row.status === 'processing'" class="btn btn-primary btn-sm" type="button" @click="openWithdraw(row)">处理</button>
+            <Button variant="primary" size="sm" v-if="row.status === 'processing'" type="button" @click="openWithdraw(row)">处理</Button>
           </div>
         </div>
       </div>
@@ -182,7 +184,7 @@ async function processWithdraw(action) {
             <em>{{ money(order.energyCents) }} 余额 · {{ dateTimeLabel(order.createdAt) }}{{ order.trackingNo ? ` · ${order.carrier || '快递'} ${order.trackingNo}` : '' }}</em>
           </div>
           <div class="manage-actions">
-            <button class="btn btn-ghost btn-sm" type="button" @click="openOrderAdmin(order)">处理</button>
+            <Button variant="secondary" size="sm" type="button" @click="openOrderAdmin(order)">处理</Button>
           </div>
         </div>
       </div>
@@ -223,31 +225,28 @@ async function processWithdraw(action) {
         <strong>{{ orderTarget.item }}</strong>
         <span>{{ orderTarget.code }} · {{ orderTarget.userName }} · {{ money(orderTarget.energyCents) }} 余额</span>
       </div>
-      <div class="field">
-        <label for="order-status">订单状态</label>
-        <select id="order-status" v-model="orderForm.status" class="input">
-          <option v-for="item in ORDER_STATUS_OPTIONS" :key="item.key" :value="item.key">{{ item.label }}</option>
-        </select>
+      <FxField v-select-label="'订单状态'" label="订单状态">
+        <Select v-model="orderForm.status" :options="orderStatusOptions" />
         <p class="hint">取消已支付订单会自动把余额退回用户钱包；标记签收会通知用户。</p>
-      </div>
+      </FxField>
       <div class="settings-fields">
         <div class="field">
-          <label for="order-carrier">承运方</label>
-          <input id="order-carrier" v-model="orderForm.carrier" class="input" maxlength="30" placeholder="例如：快递" />
+          <span class="field-label">承运方</span>
+          <Input aria-label="承运方" v-model="orderForm.carrier" maxlength="30" placeholder="例如：快递" />
         </div>
         <div class="field">
-          <label for="order-tracking">运单号</label>
-          <input id="order-tracking" v-model="orderForm.trackingNo" class="input" maxlength="60" placeholder="填写后通知用户物流更新" />
+          <span class="field-label">运单号</span>
+          <Input aria-label="运单号" v-model="orderForm.trackingNo" maxlength="60" placeholder="填写后通知用户物流更新" />
         </div>
       </div>
       <p v-if="orderError" class="modal-error">{{ orderError }}</p>
     </div>
     <template #footer>
-      <button class="btn btn-ghost" type="button" @click="orderModal = false">取消</button>
-      <button class="btn btn-primary" type="button" :disabled="savingOrder" @click="submitOrder">
+      <Button variant="secondary" type="button" @click="orderModal = false">取消</Button>
+      <Button variant="primary" type="button" :disabled="savingOrder" @click="submitOrder">
         <span v-if="savingOrder" class="spinner" />
         <span>{{ savingOrder ? '保存中…' : '保存订单状态' }}</span>
-      </button>
+      </Button>
     </template>
   </BaseModal>
 
@@ -260,8 +259,8 @@ async function processWithdraw(action) {
         <span>收款账号：{{ withdrawTarget.account }}</span>
       </div>
       <div class="field">
-        <label for="withdraw-note">复核备注（可选）</label>
-        <textarea id="withdraw-note" v-model="withdrawNote" class="input modal-textarea" rows="3" maxlength="200" placeholder="驳回时建议填写原因，会随站内信发送给用户。" />
+        <span class="field-label">复核备注（可选）</span>
+        <Textarea aria-label="复核备注（可选）" v-model="withdrawNote" :rows="3" :maxlength="200" placeholder="驳回时建议填写原因，会随站内信发送给用户。" />
       </div>
       <div class="modal-note warn">
         <AppIcon name="shield" />
@@ -269,12 +268,12 @@ async function processWithdraw(action) {
       </div>
     </div>
     <template #footer>
-      <button class="btn btn-ghost" type="button" @click="withdrawModal = false">取消</button>
-      <button class="btn btn-danger" type="button" :disabled="withdrawBusy" @click="processWithdraw('reject')">驳回并退款</button>
-      <button class="btn btn-primary" type="button" :disabled="withdrawBusy" @click="processWithdraw('approve')">
+      <Button variant="secondary" type="button" @click="withdrawModal = false">取消</Button>
+      <Button variant="destructive" type="button" :disabled="withdrawBusy" @click="processWithdraw('reject')">驳回并退款</Button>
+      <Button variant="primary" type="button" :disabled="withdrawBusy" @click="processWithdraw('approve')">
         <span v-if="withdrawBusy" class="spinner" />
         <span>{{ withdrawBusy ? '处理中…' : '通过并打款' }}</span>
-      </button>
+      </Button>
     </template>
   </BaseModal>
 </template>

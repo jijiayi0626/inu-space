@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
+import { Button } from 'fuxsto-design-pro';
 import { useRoute } from 'vue-router';
 import AppIcon from '../components/AppIcon.vue';
 import { api } from '../lib/api';
@@ -159,12 +160,12 @@ onMounted(async () => {
         </p>
 
         <div class="consent-actions">
-          <button class="btn btn-glass" type="button" :disabled="submitting" @click="decide('deny')">拒绝</button>
-          <button class="btn btn-primary" type="button" :disabled="submitting" @click="decide('approve')">
+          <Button variant="glass" class="btn-glass" type="button" :disabled="submitting" @click="decide('deny')">拒绝</Button>
+          <Button variant="primary" type="button" :disabled="submitting" @click="decide('approve')">
             <span v-if="submitting" class="spinner" />
             <span>{{ submitting ? '处理中…' : '授权并继续' }}</span>
             <AppIcon name="chevron" />
-          </button>
+          </Button>
         </div>
 
         <p class="consent-legal">
@@ -260,8 +261,8 @@ onMounted(async () => {
 
 .consent-note{font-size:var(--fx-text-xs);line-height:1.7;color:var(--fx-muted-foreground);margin-top:var(--s-4)}
 .consent-actions{display:grid;grid-template-columns:.8fr 1.2fr;gap:var(--s-2);margin-top:var(--s-4)}
-.consent-actions .btn{height:44px}
-.consent-actions .btn-primary .icon{width:15px;height:15px}
+.consent-actions .btn,.consent-actions .fx-button{height:44px}
+.consent-actions .fx-button .icon{width:15px;height:15px}
 .consent-actions .spinner{border-color:color-mix(in srgb, var(--fx-primary-foreground) 30%, transparent);border-top-color:var(--fx-primary-foreground)}
 .consent-legal{font-size:var(--fx-text-2xs);line-height:1.65;color:var(--fx-muted-foreground);text-align:center;margin-top:var(--s-3)}
 
@@ -273,7 +274,7 @@ onMounted(async () => {
 .consent-error-icon .icon{width:22px;height:22px}
 .consent-error h1{font-size:var(--fx-text-lg);font-weight:var(--fx-weight-medium)}
 .consent-error p{font-size:var(--fx-text-sm);color:var(--fx-muted-foreground);line-height:1.7;max-width:340px}
-.consent-error .btn{margin-top:var(--s-2)}
+.consent-error .btn,.consent-error .fx-button{margin-top:var(--s-2)}
 
 .consent-overlay{
   position:absolute;inset:0;z-index:2;border-radius:var(--r-md);display:flex;flex-direction:column;

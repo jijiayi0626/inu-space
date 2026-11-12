@@ -1,4 +1,5 @@
 import { createApp } from 'vue';
+import './assets/layers.css';
 import 'fuxsto-design-pro/styles.css';
 import './assets/base.css';
 import App from './App.vue';
@@ -20,7 +21,17 @@ window.addEventListener('inu:unauthorized', () => {
   });
 });
 
-const app = createApp(App).use(router);
+const app = createApp(App);
+
+// Fuxsto 的 Select 不会把 aria-label 透传到触发器，这里补上可访问名称。
+app.directive('select-label', {
+  mounted(el, binding) {
+    const target = el.matches('[role="combobox"]') ? el : el.querySelector('[role="combobox"]');
+    if (target) target.setAttribute('aria-label', String(binding.value ?? ''));
+  },
+});
+
+app.use(router);
 
 router.isReady().then(() => {
   app.mount('#app');

@@ -1,5 +1,7 @@
 <script setup>
 import { computed, reactive, ref, watch } from 'vue';
+import { Button, Input } from 'fuxsto-design-pro';
+import { Switch } from 'fuxsto-design-pro';
 import AppIcon from '../components/AppIcon.vue';
 import BaseModal from '../components/BaseModal.vue';
 import ContactVerifyModal from '../components/ContactVerifyModal.vue';
@@ -34,8 +36,9 @@ watch(
   { immediate: true },
 );
 
-async function toggleTwoFa(event) {
-  const enabled = event.target.checked;
+async function toggleTwoFa(enabled) {
+  const previous = twoFa.value;
+  twoFa.value = enabled;
   twoFaSaving.value = true;
   try {
     const result = await api.post('/security/2fa', { enabled });
@@ -44,25 +47,25 @@ async function toggleTwoFa(event) {
     toast(enabled ? '两步验证已开启，个人资料更安全了' : '两步验证已关闭');
     reload({ silent: true });
   } catch (error) {
-    event.target.checked = twoFa.value;
+    twoFa.value = previous;
     toast(error.message, 'error');
   } finally {
     twoFaSaving.value = false;
   }
 }
 
-async function toggleGuard(key, event) {
-  const enabled = event.target.checked;
+async function toggleGuard(key, enabled) {
+  const previous = guards[key];
+  guards[key] = enabled;
   guardSaving[key] = true;
   try {
     await api.patch('/security/guards', { key, enabled });
-    guards[key] = enabled;
     if (session.user) setUser({ ...session.user, guards: { ...session.user.guards, [key]: enabled } });
     const labels = { geo: '异地登录验证', device: '新设备验证', sensitive: '敏感操作二次确认' };
     toast(`${labels[key]}已${enabled ? '开启' : '关闭'}`);
     reload({ silent: true });
   } catch (error) {
-    event.target.checked = guards[key];
+    guards[key] = previous;
     toast(error.message, 'error');
   } finally {
     guardSaving[key] = false;
@@ -260,10 +263,12 @@ async function openAllLogs() {
             <p class="sec-sub">使用验证器应用生成 6 位动态码</p>
           </div>
           <div class="sec-right">
-            <label class="switch" aria-label="两步验证开关">
-              <input type="checkbox" :checked="twoFa" :disabled="twoFaSaving" @change="toggleTwoFa" />
-              <span class="track" /><span class="thumb" />
-            </label>
+            <Switch
+              :model-value="twoFa"
+              :disabled="twoFaSaving"
+              aria-label="两步验证开关"
+              @update:model-value="toggleTwoFa"
+            />
           </div>
         </div>
 
@@ -297,15 +302,12 @@ async function openAllLogs() {
             <p class="sec-sub">新地点登录时要求二次验证</p>
           </div>
           <div class="sec-right">
-            <label class="switch" aria-label="异地登录验证">
-              <input
-                type="checkbox"
-                :checked="guards.geo"
-                :disabled="guardSaving.geo"
-                @change="toggleGuard('geo', $event)"
-              />
-              <span class="track" /><span class="thumb" />
-            </label>
+            <Switch
+              :model-value="guards.geo"
+              :disabled="guardSaving.geo"
+              aria-label="异地登录验证"
+              @update:model-value="toggleGuard('geo', $event)"
+            />
           </div>
         </div>
         <div class="sec-row">
@@ -314,15 +316,12 @@ async function openAllLogs() {
             <p class="sec-sub">首次登录需短信或邮箱确认</p>
           </div>
           <div class="sec-right">
-            <label class="switch" aria-label="新设备验证">
-              <input
-                type="checkbox"
-                :checked="guards.device"
-                :disabled="guardSaving.device"
-                @change="toggleGuard('device', $event)"
-              />
-              <span class="track" /><span class="thumb" />
-            </label>
+            <Switch
+              :model-value="guards.device"
+              :disabled="guardSaving.device"
+              aria-label="新设备验证"
+              @update:model-value="toggleGuard('device', $event)"
+            />
           </div>
         </div>
         <div class="sec-row">
@@ -331,15 +330,12 @@ async function openAllLogs() {
             <p class="sec-sub">提现、解绑与协议签署前复核</p>
           </div>
           <div class="sec-right">
-            <label class="switch" aria-label="敏感操作二次确认">
-              <input
-                type="checkbox"
-                :checked="guards.sensitive"
-                :disabled="guardSaving.sensitive"
-                @change="toggleGuard('sensitive', $event)"
-              />
-              <span class="track" /><span class="thumb" />
-            </label>
+            <Switch
+              :model-value="guards.sensitive"
+              :disabled="guardSaving.sensitive"
+              aria-label="敏感操作二次确认"
+              @update:model-value="toggleGuard('sensitive', $event)"
+            />
           </div>
         </div>
       </section>
@@ -375,47 +371,26 @@ async function openAllLogs() {
   <BaseModal v-model="pwdOpen" title="修改登录密码">
     <form id="pwdForm" @submit.prevent="changePassword">
       <div class="field">
-        <label for="oldPwd">当前密码</label>
-        <input
-          id="oldPwd"
-          v-model="pwd.current"
-          class="input"
-          type="password"
-          placeholder="输入当前登录密码"
-          autocomplete="current-password"
-        />
+        <span class="field-label">当前密码</span>
+        <Input aria-label="当前密码" v-model="pwd.current" type="password" placeholder="输入当前登录密码" autocomplete="current-password" />
       </div>
       <div class="field">
-        <label for="newPwd">新密码</label>
-        <input
-          id="newPwd"
-          v-model="pwd.next"
-          class="input"
-          type="password"
-          placeholder="至少 8 位，包含字母与数字"
-          autocomplete="new-password"
-        />
+        <span class="field-label">新密码</span>
+        <Input aria-label="新密码" v-model="pwd.next" type="password" placeholder="至少 8 位，包含字母与数字" autocomplete="new-password" />
         <p class="hint">建议使用 12 位以上，且不与其它站点重复</p>
       </div>
       <div class="field">
-        <label for="confirmPwd">确认新密码</label>
-        <input
-          id="confirmPwd"
-          v-model="pwd.confirm"
-          class="input"
-          type="password"
-          placeholder="再次输入新密码"
-          autocomplete="new-password"
-        />
+        <span class="field-label">确认新密码</span>
+        <Input aria-label="确认新密码" v-model="pwd.confirm" type="password" placeholder="再次输入新密码" autocomplete="new-password" />
       </div>
       <p v-if="pwdError" class="form-error"><AppIcon name="shield" /><span>{{ pwdError }}</span></p>
     </form>
     <template #footer>
-      <button class="btn btn-ghost btn-sm" type="button" @click="pwdOpen = false">取消</button>
-      <button class="btn btn-primary btn-sm" type="submit" form="pwdForm" :disabled="pwdSaving">
+      <Button variant="secondary" size="sm" type="button" @click="pwdOpen = false">取消</Button>
+      <Button variant="primary" size="sm" type="submit" form="pwdForm" :disabled="pwdSaving">
         <span v-if="pwdSaving" class="spinner" />
         {{ pwdSaving ? '正在更新…' : '更新密码' }}
-      </button>
+      </Button>
     </template>
   </BaseModal>
 

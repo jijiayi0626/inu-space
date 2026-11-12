@@ -1,5 +1,6 @@
 <script setup>
 import { computed, reactive, ref } from 'vue';
+import { Button, FxField, Input, Select } from 'fuxsto-design-pro';
 import AppIcon from '../components/AppIcon.vue';
 import BaseModal from '../components/BaseModal.vue';
 import PageHeader from '../components/PageHeader.vue';
@@ -94,6 +95,11 @@ const addOpen = ref(false);
 const addSaving = ref(false);
 const addError = ref('');
 const addForm = reactive({ name: '', kind: 'laptop', os: '' });
+const deviceKindOptions = [
+  { label: '笔记本 · Laptop', value: 'laptop' },
+  { label: '手机 · Phone', value: 'phone' },
+  { label: '平板 · Tablet', value: 'tablet' },
+];
 
 function openAdd() {
   addForm.name = '';
@@ -187,7 +193,7 @@ async function openAllLogs() {
       <section id="device-list" class="card">
         <div class="card-head">
           <h2>已绑定设备</h2>
-          <button class="btn btn-ghost btn-sm" @click="openAdd">添加设备</button>
+          <Button variant="secondary" size="sm" @click="openAdd">添加设备</Button>
         </div>
 
         <div class="device-list">
@@ -205,8 +211,8 @@ async function openAllLogs() {
               </p>
             </div>
             <div class="device-actions">
-              <button class="btn btn-ghost btn-sm" @click="openDetail(device)">详情</button>
-              <button v-if="!device.current" class="btn btn-danger btn-sm" @click="askUnbind(device)">解绑</button>
+              <Button variant="secondary" size="sm" @click="openDetail(device)">详情</Button>
+              <Button variant="destructive" size="sm" v-if="!device.current" @click="askUnbind(device)">解绑</Button>
             </div>
           </div>
 
@@ -258,14 +264,9 @@ async function openAllLogs() {
             </div>
             <div class="device-actions">
               <button class="btn btn-text btn-sm" type="button" @click="openRename(item)">重命名</button>
-              <button
-                v-if="!item.current"
-                class="btn btn-danger btn-sm"
-                type="button"
-                @click="askRevokeSession(item)"
-              >
+              <Button variant="destructive" size="sm" v-if="!item.current" type="button" @click="askRevokeSession(item)">
                 退出会话
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -299,7 +300,7 @@ async function openAllLogs() {
           <div class="detail-row"><dt>登录方式</dt><dd>{{ currentMeta.method || '密码登录' }}</dd></div>
         </dl>
         <div class="cta-stack">
-          <button class="btn btn-danger" type="button" @click="askLogoutOthers">退出其他设备</button>
+          <Button variant="destructive" type="button" @click="askLogoutOthers">退出其他设备</Button>
         </div>
       </section>
 
@@ -339,15 +340,10 @@ async function openAllLogs() {
       </dl>
     </template>
     <template #footer>
-      <button class="btn btn-ghost btn-sm" type="button" @click="detailOpen = false">取消</button>
-      <button
-        v-if="selected && !selected.current"
-        class="btn btn-danger btn-sm"
-        type="button"
-        @click="detailOpen = false; askUnbind(selected)"
-      >
+      <Button variant="secondary" size="sm" type="button" @click="detailOpen = false">取消</Button>
+      <Button variant="destructive" size="sm" v-if="selected && !selected.current" type="button" @click="detailOpen = false; askUnbind(selected)">
         解绑该设备
-      </button>
+      </Button>
     </template>
   </BaseModal>
 
@@ -381,11 +377,11 @@ async function openAllLogs() {
       }}
     </p>
     <template #footer>
-      <button class="btn btn-ghost btn-sm" type="button" @click="confirmOpen = false">取消</button>
-      <button class="btn btn-danger btn-sm" type="button" :disabled="confirmLoading" @click="confirmAction">
+      <Button variant="secondary" size="sm" type="button" @click="confirmOpen = false">取消</Button>
+      <Button variant="destructive" size="sm" type="button" :disabled="confirmLoading" @click="confirmAction">
         <span v-if="confirmLoading" class="spinner" />
         {{ confirmLoading ? '正在执行…' : '确认操作' }}
-      </button>
+      </Button>
     </template>
   </BaseModal>
 
@@ -400,30 +396,25 @@ async function openAllLogs() {
     </div>
 
     <div class="field">
-      <label for="device-name">设备名称</label>
-      <input id="device-name" v-model="addForm.name" class="input" maxlength="24" placeholder="例如：工作站" />
+      <span class="field-label">设备名称</span>
+      <Input aria-label="设备名称" v-model="addForm.name" maxlength="24" placeholder="例如：工作站" />
     </div>
+    <FxField v-select-label="'设备类型'" label="设备类型">
+      <Select v-model="addForm.kind" :options="deviceKindOptions" />
+    </FxField>
     <div class="field">
-      <label for="device-kind">设备类型</label>
-      <select id="device-kind" v-model="addForm.kind" class="input">
-        <option value="laptop">笔记本 · Laptop</option>
-        <option value="phone">手机 · Phone</option>
-        <option value="tablet">平板 · Tablet</option>
-      </select>
-    </div>
-    <div class="field">
-      <label for="device-os">系统版本（可选）</label>
-      <input id="device-os" v-model="addForm.os" class="input" maxlength="40" placeholder="例如：macOS 15 / Windows 11" />
+      <span class="field-label">系统版本（可选）</span>
+      <Input aria-label="系统版本（可选）" v-model="addForm.os" maxlength="40" placeholder="例如：macOS 15 / Windows 11" />
     </div>
 
     <p v-if="addError" class="form-error"><AppIcon name="shield" /><span>{{ addError }}</span></p>
 
     <template #footer>
-      <button class="btn btn-ghost btn-sm" type="button" @click="addOpen = false">取消</button>
-      <button class="btn btn-primary btn-sm" type="button" :disabled="addSaving" @click="submitAdd">
+      <Button variant="secondary" size="sm" type="button" @click="addOpen = false">取消</Button>
+      <Button variant="primary" size="sm" type="button" :disabled="addSaving" @click="submitAdd">
         <span v-if="addSaving" class="spinner" />
         {{ addSaving ? '正在绑定…' : '绑定设备' }}
-      </button>
+      </Button>
     </template>
   </BaseModal>
 
@@ -436,23 +427,17 @@ async function openAllLogs() {
       </div>
     </div>
     <div class="field">
-      <label for="session-name">会话名称</label>
-      <input
-        id="session-name"
-        v-model="renameValue"
-        class="input"
-        maxlength="24"
-        placeholder="例如：家里的笔记本"
-      />
+      <span class="field-label">会话名称</span>
+      <Input aria-label="会话名称" v-model="renameValue" maxlength="24" placeholder="例如：家里的笔记本" />
       <p class="hint">留空则恢复为系统识别的设备名称，最多 24 个字符。</p>
     </div>
     <p v-if="renameError" class="form-error"><AppIcon name="shield" /><span>{{ renameError }}</span></p>
     <template #footer>
-      <button class="btn btn-ghost btn-sm" type="button" @click="renameOpen = false">取消</button>
-      <button class="btn btn-primary btn-sm" type="button" :disabled="renameSaving" @click="submitRename">
+      <Button variant="secondary" size="sm" type="button" @click="renameOpen = false">取消</Button>
+      <Button variant="primary" size="sm" type="button" :disabled="renameSaving" @click="submitRename">
         <span v-if="renameSaving" class="spinner" />
         {{ renameSaving ? '正在保存…' : '保存名称' }}
-      </button>
+      </Button>
     </template>
   </BaseModal>
 

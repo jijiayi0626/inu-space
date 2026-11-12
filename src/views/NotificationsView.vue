@@ -1,5 +1,7 @@
 <script setup>
 import { computed, reactive, ref, watch } from 'vue';
+import { Button, Checkbox, Input } from 'fuxsto-design-pro';
+import { Switch } from 'fuxsto-design-pro';
 import AppIcon from '../components/AppIcon.vue';
 import BaseModal from '../components/BaseModal.vue';
 import ContactVerifyModal from '../components/ContactVerifyModal.vue';
@@ -66,19 +68,20 @@ async function saveCategories() {
   }
 }
 
-async function toggleChannel(channel, event) {
-  const enabled = event.target.checked;
+async function toggleChannel(channel, enabled) {
+  if (channelSaving.value[channel.key]) return;
+  const previous = channel.enabled;
+  channel.enabled = enabled;
   channelSaving.value = { ...channelSaving.value, [channel.key]: true };
   try {
     await api.patch('/notifications/prefs', { prefs: { [channel.key]: enabled } });
-    channel.enabled = enabled;
     if (channel.key !== 'channel_email') {
       channel.status = { label: enabled ? '已开启' : '已关闭', tone: enabled ? 'green' : 'gray' };
     }
     toast(`${channel.title}通知已${enabled ? '开启' : '关闭'}`);
     await reload({ silent: true });
   } catch (error) {
-    event.target.checked = channel.enabled;
+    channel.enabled = previous;
     toast(error.message, 'error');
   } finally {
     channelSaving.value = { ...channelSaving.value, [channel.key]: false };
@@ -103,15 +106,14 @@ async function saveSettings() {
   }
 }
 
-async function toggleDigest(event) {
-  const enabled = event.target.checked;
+async function toggleDigest(enabled) {
+  const previous = settings.digestEnabled;
   settings.digestEnabled = enabled;
   try {
     await api.patch('/notifications/settings', { digestEnabled: enabled });
     toast(`每周邮件摘要已${enabled ? '开启' : '关闭'}`);
   } catch (error) {
-    settings.digestEnabled = !enabled;
-    event.target.checked = !enabled;
+    settings.digestEnabled = previous;
     toast(error.message, 'error');
   }
 }
@@ -231,18 +233,20 @@ async function onPhoneUpdated() {
           <span class="head-note">{{ categories.length }} 类通知</span>
         </div>
         <div class="notify-list">
-          <label v-for="item in categories" :key="item.key" class="notify-row">
+          <div v-for="item in categories" :key="item.key" class="notify-row" @click="item.enabled = !item.enabled; markDirty()">
             <span class="notify-copy"><strong>{{ item.title }}</strong><em>{{ item.sub }}</em></span>
-            <input v-model="item.enabled" type="checkbox" class="check" @change="markDirty" />
-          </label>
+            <span class="notify-check" @click.stop>
+              <Checkbox v-model="item.enabled" :aria-label="item.title" @change="markDirty" />
+            </span>
+          </div>
         </div>
         <p class="notify-note"><AppIcon name="shield" />安全提醒建议保持开启</p>
         <div class="card-actions">
-          <button class="btn btn-primary" type="button" :disabled="savingTypes || !dirty" @click="saveCategories">
+          <Button variant="primary" type="button" :disabled="savingTypes || !dirty" @click="saveCategories">
             <span v-if="savingTypes" class="spinner" />
             {{ savingTypes ? '正在保存…' : '保存偏好' }}
-          </button>
-          <button class="btn btn-ghost" type="button" :disabled="savingTypes" @click="resetCategories">还原</button>
+          </Button>
+          <Button variant="secondary" type="button" :disabled="savingTypes" @click="resetCategories">还原</Button>
         </div>
       </section>
 
@@ -259,15 +263,13 @@ async function onPhoneUpdated() {
               <span class="channel-sub">{{ channel.sub }}</span>
             </span>
             <span class="badge" :class="`badge-${channel.status.tone}`">{{ channel.status.label }}</span>
-            <label v-if="channel.available" class="switch" :aria-label="`${channel.title}通知`">
-              <input
-                type="checkbox"
-                :checked="channel.enabled"
-                :disabled="channelSaving[channel.key]"
-                @change="toggleChannel(channel, $event)"
-              />
-              <span class="track" /><span class="thumb" />
-            </label>
+            <Switch
+              v-if="channel.available"
+              :model-value="channel.enabled"
+              :disabled="channelSaving[channel.key]"
+              :aria-label="`${channel.title}通知`"
+              @update:model-value="toggleChannel(channel, $event)"
+            />
             <button
               v-else
               class="btn btn-text"
@@ -300,27 +302,24 @@ async function onPhoneUpdated() {
             <p class="sec-sub">安全提醒仍会正常送达</p>
           </div>
           <div class="sec-right">
-            <label class="switch" aria-label="免打扰开关">
-              <input v-model="settings.dndEnabled" type="checkbox" />
-              <span class="track" /><span class="thumb" />
-            </label>
+            <Switch v-model="settings.dndEnabled" aria-label="免打扰开关" />
           </div>
         </div>
         <div class="form-grid dnd-times">
           <div class="field">
-            <label for="dndStart">开始时间</label>
-            <input id="dndStart" v-model="settings.dndStart" class="input" type="time" lang="zh-CN" />
+            <span class="field-label">开始时间</span>
+            <Input aria-label="开始时间" v-model="settings.dndStart" type="time" lang="zh-CN" />
           </div>
           <div class="field">
-            <label for="dndEnd">结束时间</label>
-            <input id="dndEnd" v-model="settings.dndEnd" class="input" type="time" lang="zh-CN" />
+            <span class="field-label">结束时间</span>
+            <Input aria-label="结束时间" v-model="settings.dndEnd" type="time" lang="zh-CN" />
           </div>
         </div>
         <div class="cta-stack">
-          <button class="btn btn-ghost" type="button" :disabled="savingSettings" @click="saveSettings">
+          <Button variant="secondary" type="button" :disabled="savingSettings" @click="saveSettings">
             <span v-if="savingSettings" class="spinner" />
             {{ savingSettings ? '正在保存…' : '保存时段' }}
-          </button>
+          </Button>
         </div>
       </section>
 
@@ -335,10 +334,11 @@ async function onPhoneUpdated() {
             <p class="sec-sub">汇总积分、权益与商城动态</p>
           </div>
           <div class="sec-right">
-            <label class="switch" aria-label="每周邮件摘要">
-              <input type="checkbox" :checked="settings.digestEnabled" @change="toggleDigest" />
-              <span class="track" /><span class="thumb" />
-            </label>
+            <Switch
+              :model-value="settings.digestEnabled"
+              aria-label="每周邮件摘要"
+              @update:model-value="toggleDigest"
+            />
           </div>
         </div>
         <p class="quiet-text dnd-hint">摘要在每周一 09:00 发送至安全邮箱，可随时关闭。</p>

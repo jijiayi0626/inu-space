@@ -1,6 +1,8 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { Button, Input } from 'fuxsto-design-pro';
+import { Lock, Mail } from 'lucide-vue-next';
 import AppIcon from '../components/AppIcon.vue';
 import BaseModal from '../components/BaseModal.vue';
 import { api } from '../lib/api';
@@ -12,7 +14,6 @@ const router = useRouter();
 
 const email = ref('');
 const password = ref('');
-const showPassword = ref(false);
 const loading = ref(false);
 const error = ref('');
 const providers = ref([]);
@@ -196,43 +197,27 @@ async function submitReset() {
 
         <form class="login-form" novalidate @submit.prevent="submit">
           <div class="field">
-            <label for="loginEmail">邮箱</label>
-            <div class="input-icon">
-              <AppIcon name="mail" />
-              <input
-                id="loginEmail"
-                v-model="email"
-                class="input"
-                type="email"
-                autocomplete="username"
-                placeholder="you@inu.space"
-                :disabled="loading"
-              />
-            </div>
+            <span class="field-label">邮箱</span>
+            <Input aria-label="邮箱"
+              v-model="email"
+              type="email"
+              autocomplete="username"
+              placeholder="you@inu.space"
+              :disabled="loading"
+              :prefix-icon="Mail"
+            />
           </div>
 
           <div class="field">
-            <label for="loginPassword">密码</label>
-            <div class="input-icon">
-              <AppIcon name="lock" />
-              <input
-                id="loginPassword"
-                v-model="password"
-                class="input"
-                :type="showPassword ? 'text' : 'password'"
-                autocomplete="current-password"
-                placeholder="输入登录密码"
-                :disabled="loading"
-              />
-              <button
-                type="button"
-                class="pwd-toggle"
-                :aria-label="showPassword ? '隐藏密码' : '显示密码'"
-                @click="showPassword = !showPassword"
-              >
-                <AppIcon :name="showPassword ? 'eye-off' : 'eye'" />
-              </button>
-            </div>
+            <span class="field-label">密码</span>
+            <Input aria-label="密码"
+              v-model="password"
+              type="password"
+              autocomplete="current-password"
+              placeholder="输入登录密码"
+              :disabled="loading"
+              :prefix-icon="Lock"
+            />
           </div>
 
           <div class="login-row">
@@ -246,11 +231,19 @@ async function submitReset() {
             <span>{{ error }}</span>
           </p>
 
-          <button class="btn btn-primary login-submit" type="submit" :disabled="loading">
-            <span v-if="loading" class="spinner" />
-            <span>{{ loading ? '正在登录…' : '登录' }}</span>
-            <AppIcon v-if="!loading" name="chevron" />
-          </button>
+          <Button
+            class="login-submit"
+            variant="primary"
+            type="submit"
+            block
+            :loading="loading"
+            loading-text="正在登录…"
+          >
+            登录
+            <template #suffix>
+              <AppIcon name="chevron" />
+            </template>
+          </Button>
         </form>
 
         <div v-if="enabledProviders.length" class="oauth-block">
@@ -308,11 +301,9 @@ async function submitReset() {
         如急需处理，也可邮件联系 <a :href="`mailto:${supportEmail}`">{{ supportEmail }}</a>。
       </p>
       <div class="field">
-        <label for="reset-email">注册邮箱</label>
-        <input
-          id="reset-email"
+        <span class="field-label">注册邮箱</span>
+        <Input aria-label="注册邮箱"
           v-model="resetEmail"
-          class="input"
           type="email"
           autocomplete="username"
           placeholder="you@inu.space"
@@ -322,13 +313,19 @@ async function submitReset() {
       <p v-if="resetMessage" class="reset-message" :class="{ done: resetDone }">{{ resetMessage }}</p>
     </div>
     <template #footer>
-      <button class="btn btn-ghost" type="button" @click="resetOpen = false">
+      <Button variant="secondary" type="button" @click="resetOpen = false">
         {{ resetDone ? '关闭' : '取消' }}
-      </button>
-      <button v-if="!resetDone" class="btn btn-primary" type="button" :disabled="resetSending" @click="submitReset">
-        <span v-if="resetSending" class="spinner" />
-        <span>{{ resetSending ? '提交中…' : '提交找回申请' }}</span>
-      </button>
+      </Button>
+      <Button
+        v-if="!resetDone"
+        variant="primary"
+        type="button"
+        :loading="resetSending"
+        loading-text="提交中…"
+        @click="submitReset"
+      >
+        提交找回申请
+      </Button>
     </template>
   </BaseModal>
 </template>

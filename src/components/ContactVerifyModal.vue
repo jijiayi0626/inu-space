@@ -1,5 +1,6 @@
 <script setup>
 import { computed, reactive, ref, watch } from 'vue';
+import { Button, Input } from 'fuxsto-design-pro';
 import AppIcon from './AppIcon.vue';
 import BaseModal from './BaseModal.vue';
 import { api } from '../lib/api';
@@ -103,21 +104,13 @@ async function verify() {
     </div>
 
     <div class="field">
-      <label :for="`contact-${kind}`">{{ targetLabel }}</label>
+      <span class="field-label">{{ targetLabel }}</span>
       <div class="input-inline">
-        <input
-          :id="`contact-${kind}`"
-          v-model="form.target"
-          class="input"
-          :type="isPhone ? 'tel' : 'email'"
-          :maxlength="isPhone ? 11 : 80"
-          :placeholder="isPhone ? '11 位手机号' : 'name@example.com'"
-          autocomplete="off"
-        />
-        <button class="btn btn-ghost btn-sm" type="button" :disabled="sending" @click="requestCode">
+        <Input :aria-label="targetLabel" v-model="form.target" :type="isPhone ? 'tel' : 'email'" :maxlength="isPhone ? 11 : 80" :placeholder="isPhone ? '11 位手机号' : 'name@example.com'" autocomplete="off" />
+        <Button variant="secondary" size="sm" type="button" :disabled="sending" @click="requestCode">
           <span v-if="sending" class="spinner" />
           {{ sending ? '发送中…' : '获取验证码' }}
-        </button>
+        </Button>
       </div>
       <p v-if="devCode" class="dev-code">
         演示验证码 <strong>{{ devCode }}</strong> · 10 分钟内有效
@@ -126,27 +119,18 @@ async function verify() {
     </div>
 
     <div class="field">
-      <label for="contact-code">验证码</label>
-      <input
-        id="contact-code"
-        v-model="form.code"
-        class="input mono"
-        type="text"
-        inputmode="numeric"
-        maxlength="6"
-        placeholder="输入 6 位验证码"
-        autocomplete="one-time-code"
-      />
+      <span class="field-label">验证码</span>
+      <Input aria-label="验证码" v-model="form.code" class="mono" type="text" inputmode="numeric" maxlength="6" placeholder="输入 6 位验证码" autocomplete="one-time-code" />
     </div>
 
     <p v-if="error" class="form-error"><AppIcon name="shield" /><span>{{ error }}</span></p>
 
     <template #footer>
-      <button class="btn btn-ghost btn-sm" type="button" @click="emit('update:modelValue', false)">取消</button>
-      <button class="btn btn-primary btn-sm" type="button" :disabled="verifying" @click="verify">
+      <Button variant="secondary" size="sm" type="button" @click="emit('update:modelValue', false)">取消</Button>
+      <Button variant="primary" size="sm" type="button" :disabled="verifying" @click="verify">
         <span v-if="verifying" class="spinner" />
         {{ verifying ? '正在验证…' : '确认绑定' }}
-      </button>
+      </Button>
     </template>
   </BaseModal>
 </template>

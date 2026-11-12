@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue';
+import { Button } from 'fuxsto-design-pro';
 import AppIcon from '../../components/AppIcon.vue';
 import { copyText } from '../../lib/adminHelpers';
 import { toast } from '../../lib/toast';
@@ -58,11 +59,11 @@ async function copyIntegrationDoc() {
         <p>端点、PKCE 流程、令牌交换、错误处理与安全检查已整理成 Markdown，下载后可直接交给其他项目的 AI 执行接入。</p>
       </div>
       <div class="doc-card-actions">
-        <button class="btn btn-primary btn-sm" type="button" @click="downloadIntegrationDoc">
+        <Button variant="primary" size="sm" type="button" @click="downloadIntegrationDoc">
           <AppIcon name="file" />
           <span>下载 MD</span>
-        </button>
-        <button class="btn btn-ghost btn-sm" type="button" @click="copyIntegrationDoc">复制全文</button>
+        </Button>
+        <Button variant="secondary" size="sm" type="button" @click="copyIntegrationDoc">复制全文</Button>
       </div>
     </div>
 

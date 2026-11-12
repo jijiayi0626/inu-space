@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue';
+import { Button } from 'fuxsto-design-pro';
 import AppIcon from '../components/AppIcon.vue';
 import BaseModal from '../components/BaseModal.vue';
 import PageHeader from '../components/PageHeader.vue';
@@ -57,7 +58,7 @@ async function openAllParticles() {
         <p class="hero-level">{{ tier.label }} <small>{{ tier.en }}</small></p>
         <p class="hero-desc">{{ tier.desc }}</p>
         <div class="hero-actions">
-          <button class="btn btn-sm btn-wallet" type="button" @click="scrollToBenefits">查看权益</button>
+          <Button variant="secondary" size="sm" class="btn-wallet" type="button" @click="scrollToBenefits">查看权益</Button>
           <RouterLink class="btn btn-sm btn-glass" to="/supply">积分商品</RouterLink>
         </div>
       </div>

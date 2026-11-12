@@ -23,7 +23,9 @@ Vue 3 + Cloudflare Workers + D1 实现的「INU」账号中心。包含账号业
 
 ## 设计系统
 
-界面基于 [Fuxsto Design Pro](https://pro.design.fuxsto.com/) 0.1.5：颜色、圆角、阴影、间距、字号与动效均使用 `--fx-*` 令牌，`FxConfigProvider` 统一管理主题、动效与减少动态效果偏好，图标使用 lucide 线性图标。项目约定与设计细则见 `AGENTS.md`、`docs/design-rules.md` 与 `docs/product-principles.md`，每次开发前优先阅读。
+界面基于 [Fuxsto Design Pro](https://pro.design.fuxsto.com/) 0.1.5，并完成组件级接入：按钮、输入框、文本域、下拉选择、开关、复选框、对话框与轻提示全部使用库组件；颜色、圆角、阴影、间距、字号与动效均使用 `--fx-*` 令牌。主题为蓝紫品牌色（亮色 `#4F46E5`，暗色 `#A5B4FC`），`FxConfigProvider` 统一管理主题、动效与减少动态效果偏好，业务图标使用 lucide 线性图标。
+
+样式导入顺序为 `layers.css` → 库 `styles.css` → `base.css`，通过 `@layer reset, theme, components, app` 固定层叠优先级，避免重置样式压过组件样式。项目约定与设计细则见 `AGENTS.md`、`docs/design-rules.md` 与 `docs/product-principles.md`，每次开发前优先阅读。
 
 ## 功能
 
@@ -96,11 +98,11 @@ npm run dev          # 设备 2，Vite 在 5173，/api 已代理到 8787
    # 首次部署：建表 + 演示数据 + OAuth + 管理台 + 功能表
    npm run db:remote
 
-   # 已有数据的库升级：执行 0001 与 0003–0008，不会重置演示账号
+   # 已有数据的库升级：执行 0001 与 0003–0009，不会重置演示账号
    npm run db:migrate:remote
    ```
 
-   `0005_features.sql` 与 `0008_session_names.sql` 含 `ALTER TABLE`，对已升级过的库重复执行会报「duplicate column」，可跳过已执行过的文件；`0007_neutral_tiers.sql` 是等级键数据更新，可安全重复执行。
+   `0005_features.sql` 与 `0008_session_names.sql` 含 `ALTER TABLE`，对已升级过的库重复执行会报「duplicate column」，可跳过已执行过的文件；`0007_neutral_tiers.sql` 与 `0009_neutral_content.sql` 是数据更新，可安全重复执行。
 
 4. 配置 Worker 密钥：
 

@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue';
+import { Button, Input } from 'fuxsto-design-pro';
 import AppIcon from '../components/AppIcon.vue';
 import BaseModal from '../components/BaseModal.vue';
 import PageHeader from '../components/PageHeader.vue';
@@ -107,13 +108,13 @@ const quicks = computed(() => [
     to: '/devices',
     icon: 'device',
     title: '登录设备',
-    sub: `${data.value?.counts?.devices ?? 0} 台设备已绑定`,
+    sub: data.value ? `${data.value.counts?.devices ?? 0} 台设备已绑定` : '正在读取…',
   },
   {
     to: '/agreements',
     icon: 'file',
     title: '协议记录',
-    sub: `${data.value?.counts?.agreementsSigned ?? 0} 份协议已签署`,
+    sub: data.value ? `${data.value.counts?.agreementsSigned ?? 0} 份协议已签署` : '正在读取…',
   },
 ]);
 </script>
@@ -139,7 +140,7 @@ const quicks = computed(() => [
       <div class="wallet-foot">
         <span class="wallet-num">INU ···· {{ wallet.cardLast4 }}</span>
         <div class="wallet-actions">
-          <button class="btn btn-sm btn-wallet" @click="openRecharge">充值</button>
+          <Button variant="secondary" size="sm" class="btn-wallet" @click="openRecharge">充值</Button>
           <RouterLink class="btn btn-sm btn-glass" to="/supply">明细</RouterLink>
         </div>
       </div>
@@ -227,7 +228,7 @@ const quicks = computed(() => [
     </div>
 
     <div class="field">
-      <label>充值金额</label>
+      <span class="field-label">充值金额</span>
       <div class="preset-grid">
         <button
           v-for="preset in presets"
@@ -240,12 +241,12 @@ const quicks = computed(() => [
           +{{ preset }}
         </button>
       </div>
-      <input v-model.number="rechargeAmount" class="input mono" type="number" min="10" max="50000" step="1" />
+      <Input :model-value="rechargeAmount" class="mono" type="number" min="10" max="50000" step="1" @update:model-value="rechargeAmount = Number($event)" />
       <p class="hint">单次充值 10–50000{{ paymentMode === 'mock' ? ' · 演示支付会即时到账' : '' }}</p>
     </div>
 
     <div class="field">
-      <label>支付方式</label>
+      <span class="field-label">支付方式</span>
       <div class="method-row">
         <button
           v-for="item in [
@@ -267,11 +268,11 @@ const quicks = computed(() => [
     <p v-if="rechargeError" class="form-error"><AppIcon name="shield" /><span>{{ rechargeError }}</span></p>
 
     <template #footer>
-      <button class="btn btn-ghost btn-sm" type="button" @click="rechargeOpen = false">取消</button>
-      <button class="btn btn-primary btn-sm" type="button" :disabled="recharging" @click="submitRecharge">
+      <Button variant="secondary" size="sm" type="button" @click="rechargeOpen = false">取消</Button>
+      <Button variant="primary" size="sm" type="button" :disabled="recharging" @click="submitRecharge">
         <span v-if="recharging" class="spinner" />
         {{ recharging ? '正在支付…' : `确认充值 ${rechargeAmount || 0}` }}
-      </button>
+      </Button>
     </template>
   </BaseModal>
 

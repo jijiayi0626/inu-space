@@ -1,5 +1,6 @@
 <script setup>
 import { computed, reactive, ref } from 'vue';
+import { Button, Input } from 'fuxsto-design-pro';
 import AppIcon from '../components/AppIcon.vue';
 import BaseModal from '../components/BaseModal.vue';
 import PageHeader from '../components/PageHeader.vue';
@@ -20,7 +21,7 @@ const verified = computed(() => data.value?.verified ?? session.user?.verified ?
 const statusMap = {
   transit: { label: '配送中', tone: 'orange' },
   delivered: { label: '已送达', tone: 'green' },
-  pending_payment: { label: '待支付', tone: 'red' },
+  pending_payment: { label: '待支付', tone: 'orange' },
   paid: { label: '已支付', tone: 'blue' },
   cancelled: { label: '已取消', tone: 'gray' },
 };
@@ -285,15 +286,9 @@ async function loadAllOrders() {
               <em v-if="product.memberPriceCents < product.priceCents">{{ money(product.priceCents) }}</em>
             </div>
             <RouterLink v-if="!verified" class="btn btn-ghost btn-sm" to="/profile#verify">需认证</RouterLink>
-            <button
-              v-else
-              class="btn btn-primary btn-sm"
-              type="button"
-              :disabled="!featureEnabled"
-              @click="openOrder(product)"
-            >
+            <Button variant="primary" size="sm" v-else type="button" :disabled="!featureEnabled" @click="openOrder(product)">
               {{ featureEnabled ? '兑换' : '暂停开放' }}
-            </button>
+            </Button>
           </div>
         </article>
       </div>
@@ -356,14 +351,14 @@ async function loadAllOrders() {
               <p class="address-detail">{{ address.region }} · {{ address.detail }}</p>
               <p class="address-meta">最近更新 {{ timeLabel(address.updatedAt) }}</p>
             </div>
-            <button class="btn btn-ghost btn-sm" type="button" @click="openAddress">编辑</button>
+            <Button variant="secondary" size="sm" type="button" @click="openAddress">编辑</Button>
           </div>
         </template>
         <div v-else class="inline-empty">
           <span class="inline-empty-icon"><AppIcon name="map" /></span>
           <h3>还没有默认地址</h3>
           <p>添加收货地址后，商品会通过快递寄送。</p>
-          <button class="btn btn-primary btn-sm" type="button" @click="openAddress">添加地址</button>
+          <Button variant="primary" size="sm" type="button" @click="openAddress">添加地址</Button>
         </div>
       </section>
 
@@ -399,11 +394,11 @@ async function loadAllOrders() {
       </p>
     </template>
     <template #footer>
-      <button class="btn btn-ghost btn-sm" type="button" @click="orderOpen = false">取消</button>
-      <button class="btn btn-primary btn-sm" type="button" :disabled="ordering" @click="confirmOrder">
+      <Button variant="secondary" size="sm" type="button" @click="orderOpen = false">取消</Button>
+      <Button variant="primary" size="sm" type="button" :disabled="ordering" @click="confirmOrder">
         <span v-if="ordering" class="spinner" />
         {{ ordering ? '正在兑换…' : '确认兑换' }}
-      </button>
+      </Button>
     </template>
   </BaseModal>
 
@@ -411,30 +406,30 @@ async function loadAllOrders() {
     <form id="addressForm" @submit.prevent="saveAddress">
       <div class="form-grid">
         <div class="field">
-          <label for="receiver">收货人</label>
-          <input id="receiver" v-model="addressForm.receiver" class="input" type="text" maxlength="20" placeholder="收货人姓名" />
+          <span class="field-label">收货人</span>
+          <Input aria-label="收货人" v-model="addressForm.receiver" type="text" maxlength="20" placeholder="收货人姓名" />
         </div>
         <div class="field">
-          <label for="addrPhone">手机号</label>
-          <input id="addrPhone" v-model="addressForm.phone" class="input" type="tel" maxlength="11" placeholder="11 位手机号" />
+          <span class="field-label">手机号</span>
+          <Input aria-label="手机号" v-model="addressForm.phone" type="tel" maxlength="11" placeholder="11 位手机号" />
         </div>
         <div class="field span-2">
-          <label for="region">所在地区</label>
-          <input id="region" v-model="addressForm.region" class="input" type="text" maxlength="30" placeholder="上海 · 中国" />
+          <span class="field-label">所在地区</span>
+          <Input aria-label="所在地区" v-model="addressForm.region" type="text" maxlength="30" placeholder="上海 · 中国" />
         </div>
         <div class="field span-2">
-          <label for="detail">详细地址</label>
-          <input id="detail" v-model="addressForm.detail" class="input" type="text" maxlength="80" placeholder="街道、门牌号与房间号" />
+          <span class="field-label">详细地址</span>
+          <Input aria-label="详细地址" v-model="addressForm.detail" type="text" maxlength="80" placeholder="街道、门牌号与房间号" />
         </div>
       </div>
       <p v-if="addressError" class="form-error"><AppIcon name="shield" /><span>{{ addressError }}</span></p>
     </form>
     <template #footer>
-      <button class="btn btn-ghost btn-sm" type="button" @click="addressOpen = false">取消</button>
-      <button class="btn btn-primary btn-sm" type="submit" form="addressForm" :disabled="addressSaving">
+      <Button variant="secondary" size="sm" type="button" @click="addressOpen = false">取消</Button>
+      <Button variant="primary" size="sm" type="submit" form="addressForm" :disabled="addressSaving">
         <span v-if="addressSaving" class="spinner" />
         {{ addressSaving ? '保存中…' : '保存地址' }}
-      </button>
+      </Button>
     </template>
   </BaseModal>
 
@@ -476,44 +471,21 @@ async function loadAllOrders() {
       </dl>
     </template>
     <template #footer>
-      <button class="btn btn-ghost btn-sm" type="button" @click="detailOpen = false">关闭</button>
-      <button
-        v-if="detailOrder?.canCancel"
-        class="btn btn-ghost btn-sm"
-        type="button"
-        :disabled="detailActionLoading"
-        @click="cancelOrder(detailOrder)"
-      >
+      <Button variant="secondary" size="sm" type="button" @click="detailOpen = false">关闭</Button>
+      <Button variant="secondary" size="sm" v-if="detailOrder?.canCancel" type="button" :disabled="detailActionLoading" @click="cancelOrder(detailOrder)">
         取消订单
-      </button>
-      <button
-        v-if="detailOrder?.canPay"
-        class="btn btn-primary btn-sm"
-        type="button"
-        :disabled="detailActionLoading"
-        @click="payOrder(detailOrder)"
-      >
+      </Button>
+      <Button variant="primary" size="sm" v-if="detailOrder?.canPay" type="button" :disabled="detailActionLoading" @click="payOrder(detailOrder)">
         <span v-if="detailActionLoading" class="spinner" />
         去支付
-      </button>
-      <button
-        v-if="detailOrder?.canConfirm"
-        class="btn btn-primary btn-sm"
-        type="button"
-        :disabled="detailActionLoading"
-        @click="confirmDelivery(detailOrder)"
-      >
+      </Button>
+      <Button variant="primary" size="sm" v-if="detailOrder?.canConfirm" type="button" :disabled="detailActionLoading" @click="confirmDelivery(detailOrder)">
         <span v-if="detailActionLoading" class="spinner" />
         确认收货
-      </button>
-      <button
-        v-if="detailOrder?.status === 'delivered' || detailOrder?.status === 'cancelled'"
-        class="btn btn-primary btn-sm"
-        type="button"
-        @click="detailOpen = false; rebuy(detailOrder)"
-      >
+      </Button>
+      <Button variant="primary" size="sm" v-if="detailOrder?.status === 'delivered' || detailOrder?.status === 'cancelled'" type="button" @click="detailOpen = false; rebuy(detailOrder)">
         再次购买
-      </button>
+      </Button>
     </template>
   </BaseModal>
 

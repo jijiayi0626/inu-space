@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue';
+import { Button, Input } from 'fuxsto-design-pro';
 import AppIcon from '../../components/AppIcon.vue';
 import { api } from '../../lib/api';
 import { toast } from '../../lib/toast';
@@ -66,19 +67,19 @@ function removeAdmin(admin) {
             <strong>{{ admin.name }}<span v-if="admin.email === data?.admins?.[0]?.email" class="badge badge-blue">首位管理员</span></strong>
             <span>{{ admin.email }} · {{ admin.inuId }}</span>
           </div>
-          <button class="btn btn-danger btn-sm" type="button" @click="removeAdmin(admin)">移除</button>
+          <Button variant="destructive" size="sm" type="button" @click="removeAdmin(admin)">移除</Button>
         </div>
       </div>
 
       <div class="admin-grant">
         <div class="field">
-          <label for="grant-email">授予其他账号管理员权限</label>
-          <input id="grant-email" v-model="adminEmail" class="input" type="email" autocomplete="off" placeholder="输入已注册的 INU 账号邮箱" @keyup.enter="grantAdmin" />
+          <span class="field-label">授予其他账号管理员权限</span>
+          <Input aria-label="授予其他账号管理员权限" v-model="adminEmail" type="email" autocomplete="off" placeholder="输入已注册的 INU 账号邮箱" @keyup.enter="grantAdmin" />
         </div>
-        <button class="btn btn-primary" type="button" :disabled="granting" @click="grantAdmin">
+        <Button variant="primary" type="button" :disabled="granting" @click="grantAdmin">
           <span v-if="granting" class="spinner" />
           <span>{{ granting ? '授予中…' : '授予权限' }}</span>
-        </button>
+        </Button>
       </div>
       <p class="hint">也可以通过 Worker 环境变量 ADMIN_EMAILS 指定自动授予管理员的邮箱，多个邮箱用逗号分隔。</p>
     </div>

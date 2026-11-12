@@ -1,5 +1,6 @@
 <script setup>
 import { computed, defineAsyncComponent, reactive } from 'vue';
+import { Button } from 'fuxsto-design-pro';
 import { useRoute, useRouter } from 'vue-router';
 import AppIcon from '../components/AppIcon.vue';
 import BaseModal from '../components/BaseModal.vue';
@@ -142,11 +143,16 @@ async function runConfirm() {
   <BaseModal v-model="confirmState.open" :title="confirmState.title" width="440px">
     <p class="confirm-copy">{{ confirmState.message }}</p>
     <template #footer>
-      <button class="btn btn-ghost" type="button" @click="confirmState.open = false">取消</button>
-      <button class="btn" :class="confirmState.danger ? 'btn-danger' : 'btn-primary'" type="button" :disabled="confirmState.loading" @click="runConfirm">
-        <span v-if="confirmState.loading" class="spinner" />
-        <span>{{ confirmState.loading ? '处理中…' : confirmState.confirmText }}</span>
-      </button>
+      <Button variant="secondary" type="button" @click="confirmState.open = false">取消</Button>
+      <Button
+        :variant="confirmState.danger ? 'destructive' : 'primary'"
+        type="button"
+        :loading="confirmState.loading"
+        loading-text="处理中…"
+        @click="runConfirm"
+      >
+        {{ confirmState.confirmText }}
+      </Button>
     </template>
   </BaseModal>
 </template>

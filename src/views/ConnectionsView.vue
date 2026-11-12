@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue';
+import { Button } from 'fuxsto-design-pro';
 import AppIcon from '../components/AppIcon.vue';
 import BaseModal from '../components/BaseModal.vue';
 import PageHeader from '../components/PageHeader.vue';
@@ -104,7 +105,7 @@ async function revokeConnection() {
             </a>
           </div>
           <div class="connection-actions">
-            <button class="btn btn-danger btn-sm" type="button" @click="askRevoke(item)">撤销授权</button>
+            <Button variant="destructive" size="sm" type="button" @click="askRevoke(item)">撤销授权</Button>
           </div>
         </div>
 
@@ -162,11 +163,11 @@ async function revokeConnection() {
       <p class="hint">应用如需再次访问，需要重新发起授权并经过你确认。</p>
     </div>
     <template #footer>
-      <button class="btn btn-ghost btn-sm" type="button" @click="revokeOpen = false">取消</button>
-      <button class="btn btn-danger btn-sm" type="button" :disabled="revokeLoading" @click="revokeConnection">
+      <Button variant="secondary" size="sm" type="button" @click="revokeOpen = false">取消</Button>
+      <Button variant="destructive" size="sm" type="button" :disabled="revokeLoading" @click="revokeConnection">
         <span v-if="revokeLoading" class="spinner" />
         {{ revokeLoading ? '正在撤销…' : '撤销授权' }}
-      </button>
+      </Button>
     </template>
   </BaseModal>
 </template>

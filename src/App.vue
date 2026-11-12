@@ -3,7 +3,6 @@ import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { FxConfigProvider } from 'fuxsto-design-pro';
 import AppShell from './components/AppShell.vue';
-import ToastHost from './components/ToastHost.vue';
 import { theme } from './lib/theme';
 
 const route = useRoute();
@@ -33,7 +32,5 @@ const isPublic = computed(() => Boolean(route.meta.public));
  </Transition>
  </RouterView>
  </AppShell>
-
- <ToastHost />
  </FxConfigProvider>
 </template>

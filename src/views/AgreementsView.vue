@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue';
+import { Button, Checkbox } from 'fuxsto-design-pro';
 import AppIcon from '../components/AppIcon.vue';
 import BaseModal from '../components/BaseModal.vue';
 import PageHeader from '../components/PageHeader.vue';
@@ -184,21 +185,23 @@ function exportAgreement(item) {
       <p class="quiet-text">
         签署后即表示你已阅读并同意该协议的全部条款，签署记录会保存到你的协议记录。
       </p>
-      <label class="agree-row">
-        <input v-model="agreed" type="checkbox" class="check" />
+      <div class="agree-row" @click="agreed = !agreed">
+        <span class="agree-check" @click.stop>
+          <Checkbox v-model="agreed" :aria-label="`同意《${selected.title}》`" />
+        </span>
         <span>我已阅读并同意《{{ selected.title }}》的全部内容</span>
-      </label>
+      </div>
       <p class="card-note">
         <AppIcon name="info" />
         <span>完成签署将获得 {{ selected.reward || 50 }} 积分，并计入你的账户记录。</span>
       </p>
     </template>
     <template #footer>
-      <button class="btn btn-ghost btn-sm" type="button" @click="signOpen = false">取消</button>
-      <button class="btn btn-primary btn-sm" type="button" :disabled="signing" @click="confirmSign">
+      <Button variant="secondary" size="sm" type="button" @click="signOpen = false">取消</Button>
+      <Button variant="primary" size="sm" type="button" :disabled="signing" @click="confirmSign">
         <span v-if="signing" class="spinner" />
         {{ signing ? '正在签署…' : '确认签署' }}
-      </button>
+      </Button>
     </template>
   </BaseModal>
 
@@ -215,11 +218,11 @@ function exportAgreement(item) {
     </div>
     <div v-else class="agreement-content">{{ contentText }}</div>
     <template #footer>
-      <button class="btn btn-ghost btn-sm" type="button" @click="contentOpen = false">关闭</button>
-      <button v-if="contentItem" class="btn btn-ghost btn-sm" type="button" @click="exportAgreement(contentItem)">
+      <Button variant="secondary" size="sm" type="button" @click="contentOpen = false">关闭</Button>
+      <Button variant="secondary" size="sm" v-if="contentItem" type="button" @click="exportAgreement(contentItem)">
         <AppIcon name="file" />
         导出 Markdown
-      </button>
+      </Button>
     </template>
   </BaseModal>
 </template>

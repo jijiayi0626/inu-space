@@ -1,26 +1,17 @@
-import { reactive } from 'vue';
+import { Message } from 'fuxsto-design-pro';
 
-export const toastState = reactive({
-  show: false,
-  message: '',
-  tone: 'success',
-});
-
-let timer = null;
+const TONES = {
+  success: 'success',
+  error: 'error',
+  warning: 'warning',
+  info: 'info',
+};
 
 export function toast(message, tone = 'success', duration = 2600) {
-  if (timer) clearTimeout(timer);
-  toastState.message = message;
-  toastState.tone = tone;
-  toastState.show = true;
-  timer = setTimeout(() => {
-    toastState.show = false;
-    timer = null;
-  }, duration);
+  const method = Message[TONES[tone] || 'success'];
+  return method(message, { duration });
 }
 
 export function dismissToast() {
-  if (timer) clearTimeout(timer);
-  timer = null;
-  toastState.show = false;
+  Message.closeAll();
 }

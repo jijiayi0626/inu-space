@@ -98,7 +98,6 @@
 .setting-row>span:first-child{display:flex;flex-direction:column;gap:2px;min-width:0}
 .setting-row strong{font-size:12.5px;font-weight:600}
 .setting-row em{font-style:normal;font-size:11px;color:var(--text-mute);line-height:1.6}
-.setting-row .switch{flex:none;margin-top:2px}
 .settings-cred{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:11px;color:var(--text-mute)}
 .settings-cred code{
   font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--text-sub);
@@ -130,7 +129,7 @@
 .admin-empty-icon .icon{width:24px;height:24px}
 .admin-empty h3{font-size:15px;font-weight:700}
 .admin-empty p{font-size:12.5px;color:var(--text-mute);max-width:400px;line-height:1.7}
-.admin-empty .btn{margin-top:8px}
+.admin-empty .btn,.admin-empty .fx-button{margin-top:8px}
 
 .client-list{display:flex;flex-direction:column;gap:14px}
 .client-card{padding:20px}
@@ -219,7 +218,7 @@
 .admin-grant .field{flex:1}
 
 .modal-form{display:flex;flex-direction:column;gap:15px}
-.modal-textarea{height:auto;padding:10px 12px;line-height:1.65;resize:vertical}
+.modal-form .hint{margin-top:6px}
 .scope-picker{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
 .scope-option{
   display:flex;align-items:flex-start;gap:9px;padding:11px 12px;border-radius:10px;
@@ -232,7 +231,7 @@
 .scope-option em{font-style:normal;font-size:10.5px;color:var(--text-mute);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 .scope-option.active{border-color:var(--fx-foreground);background:var(--fx-muted)}
 .scope-option.active .icon{color:var(--primary)}
-.public-toggle{display:flex;align-items:flex-start;gap:11px;padding:12px;border-radius:10px;background:var(--soft);cursor:pointer}
+.public-toggle{display:flex;align-items:flex-start;gap:11px;padding:12px;border-radius:10px;background:var(--soft)}
 .public-toggle>span:last-child{display:flex;flex-direction:column;gap:2px}
 .public-toggle strong{font-size:12.5px;font-weight:600}
 .public-toggle em{font-style:normal;font-size:11px;color:var(--text-mute);line-height:1.55}
@@ -283,7 +282,7 @@
 .finance-grid .admin-stat em{margin-left:0}
 
 .user-search{display:flex;gap:10px;padding-bottom:16px;border-bottom:1px solid var(--border-soft);margin-bottom:4px}
-.user-search .input{flex:1}
+.user-search .fx-input{flex:1}
 
 .modal-summary{display:flex;flex-direction:column;gap:3px;padding:12px 14px;border-radius:10px;background:var(--soft);border:1px solid var(--border-soft)}
 .modal-summary strong{font-size:14px;font-weight:700}
@@ -314,7 +313,6 @@
   .admin-tab{flex:1 0 auto;justify-content:center;padding:0 10px;font-size:12.5px}
   .client-head{flex-wrap:wrap}
   .client-badges{order:3;width:100%;padding-left:52px}
-  .client-head>.switch{margin-left:auto}
   .client-grid{grid-template-columns:1fr}
   .client-cell-wide{grid-column:auto}
   .endpoint-row{flex-direction:column;align-items:stretch;gap:7px}
@@ -331,5 +329,5 @@
   .user-search{flex-direction:column}
   .doc-card{align-items:flex-start}
   .doc-card-actions{width:100%}
-  .doc-card-actions .btn{flex:1}
+  .doc-card-actions .btn,.doc-card-actions .fx-button{flex:1}
 }
