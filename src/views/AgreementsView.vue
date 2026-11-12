@@ -44,7 +44,7 @@ async function confirmSign() {
   try {
     const result = await api.post(`/agreements/${selected.value.id}/sign`);
     signOpen.value = false;
-    toast(`《${result.item.title}》已签署，+${result.reward} INU 粒子`);
+    toast(`《${result.item.title}》已签署，+${result.reward} 积分`);
     await reload({ silent: true });
   } catch (error) {
     toast(error.message, 'error');
@@ -60,7 +60,7 @@ async function viewAgreement(item) {
   contentLoading.value = true;
   try {
     const result = await api.get(`/agreements/${item.id}`, { force: true, ttl: 0 });
-    contentText.value = result.item?.content || '协议正文正在归档中，请稍后再试。';
+    contentText.value = result.item?.content || '协议正文加载中，请稍后再试。';
   } catch (error) {
     contentText.value = '';
     toast(error.message, 'error');
@@ -80,12 +80,12 @@ function exportAgreement(item) {
 </script>
 
 <template>
-  <PageHeader title="协议中心" sub="查阅星际法条、签署记录与待办协议。">
+  <PageHeader title="协议中心" sub="查阅协议、签署记录与待办协议。">
     <template #meta>
       <span class="badge" :class="stats.pending ? 'badge-orange' : 'badge-green'">
         {{ stats.pending ? `${stats.pending} 份待签署` : '全部已签署' }}
       </span>
-      <span class="head-date">共 {{ stats.total }} 份 · STARFLEET LEGAL</span>
+      <span class="head-date">共 {{ stats.total }} 份</span>
     </template>
   </PageHeader>
 
@@ -98,13 +98,12 @@ function exportAgreement(item) {
       <article class="stat-card">
         <div class="stat-top">
           <span class="stat-icon"><AppIcon name="file" /></span>
-          <span class="badge badge-green">+2 本月</span>
         </div>
         <div>
           <p class="stat-name">已签署协议</p>
           <p class="stat-value">{{ stats.signed }}<small>份</small></p>
         </div>
-        <p class="stat-foot">全部协议均已完成星际法条归档</p>
+        <p class="stat-foot">签署后会自动归档并支持导出</p>
       </article>
       <article class="stat-card">
         <div class="stat-top">
@@ -115,7 +114,7 @@ function exportAgreement(item) {
           <p class="stat-name">待签署</p>
           <p class="stat-value">{{ stats.pending }}<small>份</small></p>
         </div>
-        <p class="stat-foot">完成签署可获得对应协议奖励的 INU 粒子</p>
+        <p class="stat-foot">完成签署可获得协议对应的积分奖励</p>
       </article>
       <article class="stat-card">
         <div class="stat-top">
@@ -133,7 +132,7 @@ function exportAgreement(item) {
     <section id="agreement-list" class="card">
       <div class="card-head">
         <h2>全部协议</h2>
-        <span class="head-note">共 {{ stats.total }} 份 · STARFLEET LEGAL</span>
+        <span class="head-note">共 {{ stats.total }} 份</span>
       </div>
       <div class="table-wrap">
         <table class="data-table responsive agreements">
@@ -168,7 +167,7 @@ function exportAgreement(item) {
       </div>
       <p class="card-note">
         <AppIcon name="shield" />
-        <span>协议签署记录具有星际法条效力，可在需要时导出 PDF 存档。</span>
+        <span>协议签署记录具有协议效力，可在需要时导出 Markdown 存档。</span>
       </p>
     </section>
   </template>
@@ -183,22 +182,22 @@ function exportAgreement(item) {
         </div>
       </div>
       <p class="quiet-text">
-        签署后即表示你已阅读并同意该协议的全部条款，签署记录将写入星际法条库。
+        签署后即表示你已阅读并同意该协议的全部条款，签署记录会保存到你的协议记录。
       </p>
       <label class="agree-row">
         <input v-model="agreed" type="checkbox" class="check" />
         <span>我已阅读并同意《{{ selected.title }}》的全部内容</span>
       </label>
       <p class="card-note">
-        <AppIcon name="spark" />
-        <span>完成签署将获得 {{ selected.reward || 50 }} INU 粒子，并同步更新你的星际信用档案。</span>
+        <AppIcon name="info" />
+        <span>完成签署将获得 {{ selected.reward || 50 }} 积分，并计入你的账户记录。</span>
       </p>
     </template>
     <template #footer>
       <button class="btn btn-ghost btn-sm" type="button" @click="signOpen = false">取消</button>
       <button class="btn btn-primary btn-sm" type="button" :disabled="signing" @click="confirmSign">
         <span v-if="signing" class="spinner" />
-        {{ signing ? '正在归档…' : '确认签署' }}
+        {{ signing ? '正在签署…' : '确认签署' }}
       </button>
     </template>
   </BaseModal>

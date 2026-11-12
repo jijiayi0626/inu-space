@@ -21,14 +21,14 @@ const baseGroups = [
       { to: '/profile', icon: 'user', label: '个人资料', key: 'profile' },
       { to: '/security', icon: 'shield', label: '账户安全', key: 'security' },
       { to: '/connections', icon: 'globe', label: '授权应用', key: 'connections' },
-      { to: '/devices', icon: 'device', label: '星际终端', key: 'devices' },
+      { to: '/devices', icon: 'device', label: '登录设备', key: 'devices' },
       { to: '/notifications', icon: 'bell', label: '通知偏好', key: 'notifications' },
     ],
   },
   {
-    label: '星际业务',
+    label: '服务',
     links: [
-      { to: '/supply', icon: 'box', label: '星际补给站', key: 'supply' },
+      { to: '/supply', icon: 'box', label: '积分商城', key: 'supply' },
       { to: '/agreements', icon: 'file', label: '协议中心', key: 'agreements' },
     ],
   },
@@ -51,7 +51,7 @@ const groups = computed(() => {
   } else {
     list.push({
       label: '超级管理台',
-      links: [{ to: '/admin', icon: 'key', label: '控制中枢', key: 'admin' }],
+      links: [{ to: '/admin', icon: 'key', label: '管理后台', key: 'admin' }],
     });
   }
   return list;
@@ -79,23 +79,22 @@ function isActive(link) {
         >
           <AppIcon :name="link.icon" />
           <span>{{ link.label }}</span>
-          <span class="side-orbit"><AppIcon name="orbit" /></span>
         </RouterLink>
       </nav>
     </template>
 
     <div v-if="!user.verified && verificationAvailable" class="side-promo">
-      <div class="promo-head"><AppIcon name="spark" /><span>解锁跃迁权限</span></div>
-      <p>完成星际公民认证，开启补给站与星能提现能力。</p>
+      <div class="promo-head"><AppIcon name="idcard" /><span>解锁完整权限</span></div>
+      <p>完成实名认证，开启积分商城与余额提现能力。</p>
       <RouterLink class="btn btn-primary btn-sm promo-btn" to="/profile#verify" @click="$emit('close')">
         立即认证
       </RouterLink>
     </div>
     <div v-else-if="user.verified" class="side-promo side-promo-done">
-      <div class="promo-head"><AppIcon name="shield" /><span>星际公民 · 已认证</span></div>
-      <p>你的星际档案已完成核验，补给站与星能权限已解锁。</p>
+      <div class="promo-head"><AppIcon name="shield" /><span>已实名认证</span></div>
+      <p>你的个人资料已完成核验，积分商城与余额权限已解锁。</p>
       <RouterLink class="btn btn-ghost btn-sm promo-btn" to="/supply" @click="$emit('close')">
-        前往补给站
+        前往积分商城
       </RouterLink>
     </div>
   </aside>

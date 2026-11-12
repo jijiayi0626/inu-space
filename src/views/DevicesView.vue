@@ -22,7 +22,7 @@ const currentMeta = computed(() => {
   return {
     ...value,
     lastActiveAt: value.lastActiveAt || value.createdAt || '',
-    method: value.method || '通行证会话',
+    method: value.method || '账号会话',
   };
 });
 
@@ -35,9 +35,9 @@ const confirmTarget = ref(null);
 const confirmLoading = ref(false);
 
 const confirmTitle = computed(() => {
-  if (confirmType.value === 'logout') return '退出其余星际终端';
+  if (confirmType.value === 'logout') return '退出其余登录设备';
   if (confirmType.value === 'session') return '退出该登录会话';
-  return '解绑星际终端';
+  return '解绑登录设备';
 });
 
 function iconFor(kind) {
@@ -72,13 +72,13 @@ async function confirmAction() {
   try {
     if (confirmType.value === 'unbind') {
       await api.post(`/devices/${confirmTarget.value.id}/unbind`);
-      toast('已发送解绑请求，该终端已退出星际网络');
+      toast('已发送解绑请求，该设备已退出服务');
     } else if (confirmType.value === 'session') {
       const result = await api.post(`/devices/sessions/${confirmTarget.value.id}/revoke`);
       toast(result.message || '该会话已退出');
     } else {
       const result = await api.post('/devices/logout-others');
-      toast(result.removed ? `已退出其余 ${result.removed} 个终端` : '当前没有其它在线终端');
+      toast(result.removed ? `已退出其余 ${result.removed} 个设备` : '当前没有其它在线设备');
     }
     confirmOpen.value = false;
     detailOpen.value = false;
@@ -107,14 +107,14 @@ async function submitAdd() {
   addError.value = '';
   const name = addForm.name.trim();
   if ([...name].length < 2 || [...name].length > 24) {
-    addError.value = '终端名称需为 2–24 个字符';
+    addError.value = '设备名称需为 2–24 个字符';
     return;
   }
   addSaving.value = true;
   try {
     await api.post('/devices', { name, kind: addForm.kind, os: addForm.os.trim() });
     addOpen.value = false;
-    toast('新终端已加入可信列表');
+    toast('新设备已加入可信列表');
     await reload({ silent: true });
   } catch (error) {
     addError.value = error.message;
@@ -126,6 +126,35 @@ async function submitAdd() {
 const logsOpen = ref(false);
 const allLogs = ref([]);
 const logsLoading = ref(false);
+
+const renameOpen = ref(false);
+const renameTarget = ref(null);
+const renameValue = ref('');
+const renameSaving = ref(false);
+const renameError = ref('');
+
+function openRename(item) {
+  renameTarget.value = item;
+  renameValue.value = item.customName ? item.name : '';
+  renameError.value = '';
+  renameOpen.value = true;
+}
+
+async function submitRename() {
+  if (!renameTarget.value) return;
+  renameSaving.value = true;
+  renameError.value = '';
+  try {
+    await api.patch(`/devices/sessions/${renameTarget.value.id}/name`, { name: renameValue.value.trim() });
+    renameOpen.value = false;
+    toast('会话名称已更新');
+    await reload({ silent: true });
+  } catch (error) {
+    renameError.value = error.message;
+  } finally {
+    renameSaving.value = false;
+  }
+}
 
 async function openAllLogs() {
   logsOpen.value = true;
@@ -142,10 +171,10 @@ async function openAllLogs() {
 </script>
 
 <template>
-  <PageHeader title="星际终端" sub="查看已绑定设备、登录记录并管理终端权限。">
+  <PageHeader title="登录设备" sub="查看已绑定设备、登录记录并管理设备权限。">
     <template #meta>
       <span class="badge badge-blue">{{ devices.length }} 台已绑定</span>
-      <span class="head-date">当前设备 · {{ current?.name || '同步中' }}</span>
+      <span class="head-date">当前设备 · {{ current?.name || '读取中' }}</span>
     </template>
   </PageHeader>
 
@@ -157,8 +186,8 @@ async function openAllLogs() {
     <div class="profile-main">
       <section id="device-list" class="card">
         <div class="card-head">
-          <h2>已绑定终端</h2>
-          <button class="btn btn-ghost btn-sm" @click="openAdd">添加终端</button>
+          <h2>已绑定设备</h2>
+          <button class="btn btn-ghost btn-sm" @click="openAdd">添加设备</button>
         </div>
 
         <div class="device-list">
@@ -183,8 +212,8 @@ async function openAllLogs() {
 
           <div v-if="!devices.length" class="inline-empty">
             <span class="inline-empty-icon"><AppIcon name="device" /></span>
-            <h3>还没有可信终端</h3>
-            <p>添加一台终端，让星际通行证在你的设备间安全流转。</p>
+            <h3>还没有可信设备</h3>
+            <p>添加一台设备，让常用设备更容易被识别。</p>
           </div>
         </div>
       </section>
@@ -213,7 +242,7 @@ async function openAllLogs() {
             {{ sessions.length }} 个在线
           </span>
         </div>
-        <p class="card-desc">这里展示当前通行证在所有浏览器和终端上的登录会话，可按会话单独退出。</p>
+        <p class="card-desc">这里展示当前账号在所有浏览器和设备上的登录会话，可按会话单独退出。</p>
         <div class="device-list">
           <div v-for="item in sessions" :key="item.id" class="device-row">
             <span class="device-icon"><AppIcon :name="iconFor(item.kind)" /></span>
@@ -228,6 +257,7 @@ async function openAllLogs() {
               <p class="device-meta">{{ item.ip }} · 登录于 {{ timeLabel(item.createdAt) }}</p>
             </div>
             <div class="device-actions">
+              <button class="btn btn-text btn-sm" type="button" @click="openRename(item)">重命名</button>
               <button
                 v-if="!item.current"
                 class="btn btn-danger btn-sm"
@@ -242,7 +272,7 @@ async function openAllLogs() {
           <div v-if="!sessions.length" class="inline-empty">
             <span class="inline-empty-icon"><AppIcon name="device" /></span>
             <h3>暂无活跃会话</h3>
-            <p>新的浏览器或终端登录后，会在这里显示解析后的系统、浏览器与登录位置。</p>
+            <p>新的浏览器或设备登录后，会在这里显示解析后的系统、浏览器与登录位置。</p>
           </div>
         </div>
       </section>
@@ -257,8 +287,8 @@ async function openAllLogs() {
         <div class="modal-device">
           <span class="device-icon lg"><AppIcon :name="iconFor(currentMeta.kind)" /></span>
           <div>
-            <p class="modal-device-name">{{ currentMeta.name || '星际终端' }}</p>
-            <p class="modal-device-sub">已通过星际安全协议验证</p>
+            <p class="modal-device-name">{{ currentMeta.name || '登录设备' }}</p>
+            <p class="modal-device-sub">已通过安全验证</p>
           </div>
         </div>
         <dl class="detail-list">
@@ -269,32 +299,32 @@ async function openAllLogs() {
           <div class="detail-row"><dt>登录方式</dt><dd>{{ currentMeta.method || '密码登录' }}</dd></div>
         </dl>
         <div class="cta-stack">
-          <button class="btn btn-danger" type="button" @click="askLogoutOthers">退出其余终端</button>
+          <button class="btn btn-danger" type="button" @click="askLogoutOthers">退出其他设备</button>
         </div>
       </section>
 
       <section id="device-tips" class="card">
         <div class="card-head">
-          <h2>终端安全提示</h2>
+          <h2>设备安全提示</h2>
         </div>
-        <div class="tip-item"><AppIcon name="shield" /><span>只在你信任的终端上保持登录状态。</span></div>
-        <div class="tip-item"><AppIcon name="device" /><span>发现陌生终端时，立即解绑并修改密码。</span></div>
-        <div class="tip-item"><AppIcon name="bell" /><span>开启新终端验证，登录时会收到提醒。</span></div>
+        <div class="tip-item"><AppIcon name="shield" /><span>只在你信任的设备上保持登录状态。</span></div>
+        <div class="tip-item"><AppIcon name="device" /><span>发现陌生设备时，立即解绑并修改密码。</span></div>
+        <div class="tip-item"><AppIcon name="bell" /><span>开启新设备验证，登录时会收到提醒。</span></div>
         <p class="card-note">
-          <AppIcon name="spark" />
-          <span>30 天未活跃的终端会被自动标记，建议定期清理。</span>
+          <AppIcon name="info" />
+          <span>30 天未活跃的设备会被自动标记，建议定期清理。</span>
         </p>
       </section>
     </aside>
   </div>
 
-  <BaseModal v-model="detailOpen" title="星际终端详情">
+  <BaseModal v-model="detailOpen" title="登录设备详情">
     <template v-if="selected">
       <div class="modal-device">
         <span class="device-icon lg"><AppIcon :name="iconFor(selected.kind)" /></span>
         <div>
           <p class="modal-device-name">{{ selected.name }}</p>
-          <p class="modal-device-sub">已通过星际安全协议验证</p>
+          <p class="modal-device-sub">已通过安全验证</p>
         </div>
         <span class="badge" :class="selected.trusted ? 'badge-green' : 'badge-gray'">
           {{ selected.trusted ? '可信设备' : '待验证' }}
@@ -328,12 +358,12 @@ async function openAllLogs() {
       </span>
       <div>
         <p class="modal-device-name">
-          {{ confirmType === 'logout' ? '保留当前终端会话' : confirmTarget?.name }}
+          {{ confirmType === 'logout' ? '保留当前设备会话' : confirmTarget?.name }}
         </p>
         <p class="modal-device-sub">
           {{
             confirmType === 'logout'
-              ? '其余在线终端将立即退出'
+              ? '其余在线设备将立即退出'
               : confirmType === 'session'
                 ? `${confirmTarget?.browser || ''} · ${confirmTarget?.os || ''}`.replace(/ · $/, '')
                 : confirmTarget?.location
@@ -344,10 +374,10 @@ async function openAllLogs() {
     <p class="quiet-text">
       {{
         confirmType === 'logout'
-          ? '退出后，其它终端需要重新登录。当前设备不会受到影响。'
+          ? '退出后，其它设备需要重新登录。当前设备不会受到影响。'
           : confirmType === 'session'
             ? '该会话会立即失效，需要重新登录才能继续使用；其它会话不受影响。'
-            : '解绑后，该终端将退出星际网络，再次使用需要重新完成安全验证。'
+            : '解绑后，该设备将退出服务，再次使用需要重新完成安全验证。'
       }}
     </p>
     <template #footer>
@@ -359,22 +389,22 @@ async function openAllLogs() {
     </template>
   </BaseModal>
 
-  <BaseModal v-model="addOpen" title="添加星际终端" width="460px">
+  <BaseModal v-model="addOpen" title="添加登录设备" width="460px">
     <div class="modal-device">
       <span class="device-icon lg"><AppIcon :name="iconFor(addForm.kind)" /></span>
       <div>
-        <p class="modal-device-name">新终端安全验证</p>
-        <p class="modal-device-sub">绑定后将加入可信终端列表</p>
+        <p class="modal-device-name">新设备安全验证</p>
+        <p class="modal-device-sub">绑定后将加入可信设备列表</p>
       </div>
       <span class="badge badge-green">安全</span>
     </div>
 
     <div class="field">
-      <label for="device-name">终端名称</label>
-      <input id="device-name" v-model="addForm.name" class="input" maxlength="24" placeholder="例如：星际工作站" />
+      <label for="device-name">设备名称</label>
+      <input id="device-name" v-model="addForm.name" class="input" maxlength="24" placeholder="例如：工作站" />
     </div>
     <div class="field">
-      <label for="device-kind">终端类型</label>
+      <label for="device-kind">设备类型</label>
       <select id="device-kind" v-model="addForm.kind" class="input">
         <option value="laptop">笔记本 · Laptop</option>
         <option value="phone">手机 · Phone</option>
@@ -383,7 +413,7 @@ async function openAllLogs() {
     </div>
     <div class="field">
       <label for="device-os">系统版本（可选）</label>
-      <input id="device-os" v-model="addForm.os" class="input" maxlength="40" placeholder="例如：INU OS 3.2 / macOS 15" />
+      <input id="device-os" v-model="addForm.os" class="input" maxlength="40" placeholder="例如：macOS 15 / Windows 11" />
     </div>
 
     <p v-if="addError" class="form-error"><AppIcon name="shield" /><span>{{ addError }}</span></p>
@@ -392,7 +422,36 @@ async function openAllLogs() {
       <button class="btn btn-ghost btn-sm" type="button" @click="addOpen = false">取消</button>
       <button class="btn btn-primary btn-sm" type="button" :disabled="addSaving" @click="submitAdd">
         <span v-if="addSaving" class="spinner" />
-        {{ addSaving ? '正在绑定…' : '绑定终端' }}
+        {{ addSaving ? '正在绑定…' : '绑定设备' }}
+      </button>
+    </template>
+  </BaseModal>
+
+  <BaseModal v-model="renameOpen" title="重命名会话" width="440px">
+    <div class="modal-device">
+      <span class="device-icon lg"><AppIcon name="device" /></span>
+      <div>
+        <p class="modal-device-name">{{ renameTarget?.defaultName || '登录会话' }}</p>
+        <p class="modal-device-sub">{{ renameTarget?.browser }} · {{ renameTarget?.os }}</p>
+      </div>
+    </div>
+    <div class="field">
+      <label for="session-name">会话名称</label>
+      <input
+        id="session-name"
+        v-model="renameValue"
+        class="input"
+        maxlength="24"
+        placeholder="例如：家里的笔记本"
+      />
+      <p class="hint">留空则恢复为系统识别的设备名称，最多 24 个字符。</p>
+    </div>
+    <p v-if="renameError" class="form-error"><AppIcon name="shield" /><span>{{ renameError }}</span></p>
+    <template #footer>
+      <button class="btn btn-ghost btn-sm" type="button" @click="renameOpen = false">取消</button>
+      <button class="btn btn-primary btn-sm" type="button" :disabled="renameSaving" @click="submitRename">
+        <span v-if="renameSaving" class="spinner" />
+        {{ renameSaving ? '正在保存…' : '保存名称' }}
       </button>
     </template>
   </BaseModal>
@@ -413,7 +472,7 @@ async function openAllLogs() {
       <div v-if="!allLogs.length" class="inline-empty">
         <span class="inline-empty-icon"><AppIcon name="clock" /></span>
         <h3>暂无登录记录</h3>
-        <p>终端登录、解绑与安全操作都会记录在这里。</p>
+        <p>设备登录、解绑与安全操作都会记录在这里。</p>
       </div>
     </div>
   </BaseModal>

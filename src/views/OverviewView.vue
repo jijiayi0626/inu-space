@@ -34,7 +34,7 @@ const paymentMode = computed(() => session.site?.payment?.mode || 'mock');
 
 function openRecharge() {
   if (!rechargeEnabled.value) {
-    toast('星能充值暂未开放，请联系管理员', 'error');
+    toast('余额充值暂未开放，请联系管理员', 'error');
     return;
   }
   rechargeAmount.value = presets.value[1] || presets.value[0] || 100;
@@ -46,7 +46,7 @@ function openRecharge() {
 async function submitRecharge() {
   const amount = Number(rechargeAmount.value);
   if (!Number.isFinite(amount) || amount < 10) {
-    rechargeError.value = '单次充值至少 10 星能';
+    rechargeError.value = '单次充值至少 10';
     return;
   }
   rechargeError.value = '';
@@ -60,7 +60,7 @@ async function submitRecharge() {
       setUser({ ...session.user, starEnergyCents: result.balanceCents });
     }
     rechargeOpen.value = false;
-    toast(result.paid ? `${amount} 星能已到账` : result.message || '充值订单已创建');
+    toast(result.paid ? `${amount} 已到账` : result.message || '充值订单已创建');
     await reload({ silent: true });
   } catch (error) {
     rechargeError.value = error.message;
@@ -90,7 +90,7 @@ const quicks = computed(() => [
   {
     to: '/profile#verify',
     icon: 'idcard',
-    title: '星际公民认证',
+    title: '实名认证',
     sub: user.value.verified
       ? '已认证 · 权限已解锁'
       : verificationAvailable.value
@@ -101,47 +101,39 @@ const quicks = computed(() => [
     to: '/profile#basic',
     icon: 'pen',
     title: '修改昵称',
-    sub: '昵称每 30 天可修改一次',
+    sub: `昵称每 ${session.site?.nameChangeDays ?? 30} 天可修改一次`,
   },
   {
     to: '/devices',
     icon: 'device',
-    title: '星际终端',
-    sub: `${data.value?.counts?.devices ?? 3} 台设备已绑定`,
+    title: '登录设备',
+    sub: `${data.value?.counts?.devices ?? 0} 台设备已绑定`,
   },
   {
     to: '/agreements',
     icon: 'file',
     title: '协议记录',
-    sub: `${data.value?.counts?.agreementsSigned ?? 12} 份协议已签署`,
+    sub: `${data.value?.counts?.agreementsSigned ?? 0} 份协议已签署`,
   },
 ]);
 </script>
 
 <template>
   <PageHeader
-    :title="`欢迎回来，${user.name || '星际旅人'}`"
-    sub="你的星际档案状态良好，今天也一起探索无限宇宙。"
+    :title="`欢迎回来，${user.name || '用户'}`"
+    sub="这里是你的账号概览，最近的安全与订单动态都在这里。"
   >
     <template #meta>
-      <span class="badge badge-blue">{{ user.tierLabel || '星尘' }}会员</span>
-      <span class="head-date">{{ data?.dateLabel || '正在校准星际时间…' }}</span>
+      <span class="badge badge-blue">{{ user.tierLabel || '普通' }}会员</span>
+      <span class="head-date">{{ data?.dateLabel || '今天' }}</span>
     </template>
   </PageHeader>
 
   <div class="overview-grid">
     <article class="wallet-card">
-      <svg class="wallet-deco" viewBox="0 0 240 240" fill="none" aria-hidden="true">
-        <circle cx="190" cy="30" r="88" stroke="rgba(255,255,255,.14)" />
-        <circle cx="190" cy="30" r="60" stroke="rgba(255,255,255,.18)" />
-        <circle cx="190" cy="30" r="32" stroke="rgba(255,255,255,.1)" />
-        <circle cx="128" cy="92" r="2.4" fill="rgba(255,255,255,.7)" />
-        <circle cx="214" cy="118" r="1.8" fill="rgba(255,255,255,.5)" />
-        <circle cx="152" cy="150" r="1.5" fill="rgba(255,255,255,.4)" />
-      </svg>
       <div class="wallet-top">
-        <span class="wallet-label">星际钱包 · 星能余额</span>
-        <span class="wallet-chip"><AppIcon name="orbit" />INU PAY</span>
+        <span class="wallet-label">账户余额</span>
+        <span class="wallet-chip"><AppIcon name="wallet" />INU</span>
       </div>
       <div class="wallet-amount">{{ balance.integer }}<span>.{{ balance.decimal }}</span></div>
       <div class="wallet-foot">
@@ -155,28 +147,27 @@ const quicks = computed(() => [
 
     <article class="stat-card">
       <div class="stat-top">
-        <span class="stat-icon"><AppIcon name="spark" /></span>
-        <span class="badge badge-green">+120 本周</span>
+        <span class="stat-icon"><AppIcon name="star" /></span>
       </div>
       <div>
-        <p class="stat-name">INU 粒子</p>
+        <p class="stat-name">积分</p>
         <p class="stat-value">{{ number(particles) }}</p>
       </div>
-      <p class="stat-foot">用于升级会员等级与兑换星际补给</p>
+      <p class="stat-foot">用于升级会员等级与兑换商品</p>
     </article>
 
     <article class="stat-card">
       <div class="stat-top">
-        <span class="stat-icon"><AppIcon name="star" /></span>
-        <span class="badge badge-blue">{{ user.tierEn || 'STARDUST' }}</span>
+        <span class="stat-icon"><AppIcon name="idcard" /></span>
+        <span class="badge badge-blue">{{ user.tierEn || 'BASIC' }}</span>
       </div>
       <div>
         <p class="stat-name">会员等级</p>
-        <p class="stat-value">{{ user.tierLabel || '星尘' }}</p>
+        <p class="stat-value">{{ user.tierLabel || '普通' }}</p>
       </div>
       <div>
         <div class="progress"><span :style="{ width: `${progress}%` }" /></div>
-        <p class="stat-foot">距离行星等级还需 {{ number(remaining) }} 粒子</p>
+        <p class="stat-foot">距离白银等级还需 {{ number(remaining) }} 积分</p>
       </div>
     </article>
   </div>
@@ -185,7 +176,7 @@ const quicks = computed(() => [
     <section class="card quick-card">
       <div class="card-head">
         <h2>快捷操作</h2>
-        <span class="head-note">COMMAND DECK</span>
+        <span class="head-note">{{ quicks.length }} 项</span>
       </div>
       <div class="quick-grid">
         <RouterLink v-for="item in quicks" :key="item.title" class="quick-tile" :to="item.to">
@@ -217,26 +208,26 @@ const quicks = computed(() => [
           <span class="feed-time">{{ timeLabel(item.occurredAt) }}</span>
         </div>
         <div v-if="!data?.activities?.length" class="inline-empty">
-          <span class="inline-empty-icon"><AppIcon name="orbit" /></span>
-          <h3>星际日志还很安静</h3>
-          <p>完成一次认证或补给，新的坐标就会出现在这里。</p>
+          <span class="inline-empty-icon"><AppIcon name="clock" /></span>
+          <h3>动态还很安静</h3>
+          <p>完成一次认证或下单，新的记录就会出现在这里。</p>
         </div>
       </div>
     </section>
   </div>
 
-  <BaseModal v-model="rechargeOpen" title="星能充值" width="460px">
+  <BaseModal v-model="rechargeOpen" title="余额充值" width="460px">
     <div class="modal-device">
-      <span class="device-icon lg"><AppIcon name="spark" /></span>
+      <span class="device-icon lg"><AppIcon name="wallet" /></span>
       <div>
-        <p class="modal-device-name">星际钱包 · INU PAY</p>
-        <p class="modal-device-sub">当前余额 {{ balance.integer }}.{{ balance.decimal }} 星能</p>
+        <p class="modal-device-name">账户余额</p>
+        <p class="modal-device-sub">当前余额 {{ balance.integer }}.{{ balance.decimal }}</p>
       </div>
       <span class="badge badge-green">{{ paymentMode === 'mock' ? '演示支付' : '在线支付' }}</span>
     </div>
 
     <div class="field">
-      <label>充值金额（星能）</label>
+      <label>充值金额</label>
       <div class="preset-grid">
         <button
           v-for="preset in presets"
@@ -250,7 +241,7 @@ const quicks = computed(() => [
         </button>
       </div>
       <input v-model.number="rechargeAmount" class="input mono" type="number" min="10" max="50000" step="1" />
-      <p class="hint">单次充值 10–50000 星能{{ paymentMode === 'mock' ? ' · 演示支付会即时到账' : '' }}</p>
+      <p class="hint">单次充值 10–50000{{ paymentMode === 'mock' ? ' · 演示支付会即时到账' : '' }}</p>
     </div>
 
     <div class="field">
@@ -258,7 +249,7 @@ const quicks = computed(() => [
       <div class="method-row">
         <button
           v-for="item in [
-            { key: 'inu_pay', label: 'INU PAY' },
+            { key: 'inu_pay', label: 'INU 支付' },
             { key: 'alipay', label: '支付宝' },
             { key: 'wechat', label: '微信支付' },
           ]"
@@ -279,12 +270,12 @@ const quicks = computed(() => [
       <button class="btn btn-ghost btn-sm" type="button" @click="rechargeOpen = false">取消</button>
       <button class="btn btn-primary btn-sm" type="button" :disabled="recharging" @click="submitRecharge">
         <span v-if="recharging" class="spinner" />
-        {{ recharging ? '正在支付…' : `确认充值 ${rechargeAmount || 0} 星能` }}
+        {{ recharging ? '正在支付…' : `确认充值 ${rechargeAmount || 0}` }}
       </button>
     </template>
   </BaseModal>
 
-  <BaseModal v-model="activitiesOpen" title="全部星际动态" width="520px">
+  <BaseModal v-model="activitiesOpen" title="全部动态" width="520px">
     <div v-if="activitiesLoading" class="feed">
       <SkeletonBlock :rows="6" />
     </div>
@@ -298,28 +289,30 @@ const quicks = computed(() => [
         <span class="feed-time">{{ timeLabel(item.occurredAt) }}</span>
       </div>
       <div v-if="!activities.length" class="inline-empty">
-        <span class="inline-empty-icon"><AppIcon name="orbit" /></span>
+        <span class="inline-empty-icon"><AppIcon name="clock" /></span>
         <h3>暂无更多动态</h3>
-        <p>完成认证、签署协议或兑换补给后，记录会出现在这里。</p>
+        <p>完成认证、签署协议或兑换商品后，记录会出现在这里。</p>
       </div>
     </div>
   </BaseModal>
 </template>
 
 <style scoped>
-.preset-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:10px}
+.preset-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--s-2);margin-bottom:var(--s-2)}
 .preset-btn{
-  height:36px;border-radius:9px;border:1px solid var(--border-soft);background:var(--soft);
-  color:var(--text-sub);font-size:12.5px;font-weight:600;cursor:pointer;transition:all .16s;
+  height:36px;border-radius:var(--r-sm);border:none;background:var(--fx-muted);
+  color:var(--fx-muted-foreground);font-size:var(--fx-text-xs);font-weight:var(--fx-weight-medium);cursor:pointer;
+  transition:background-color var(--dur-fast) var(--ease-standard),color var(--dur-fast) var(--ease-standard);
 }
-.preset-btn:hover{border-color:#C9D2E3;color:var(--text)}
-.preset-btn.active{border-color:var(--primary);background:var(--primary-light);color:var(--primary)}
-.method-row{display:flex;gap:8px;flex-wrap:wrap}
+.preset-btn:hover{background:var(--fx-accent);color:var(--fx-foreground)}
+.preset-btn.active{background:var(--fx-primary);color:var(--fx-primary-foreground)}
+.method-row{display:flex;gap:var(--s-2);flex-wrap:wrap}
 .method-btn{
-  flex:1;min-width:96px;height:38px;border-radius:9px;border:1px solid var(--border-soft);
-  background:var(--soft);color:var(--text-sub);font-size:12.5px;font-weight:500;cursor:pointer;transition:all .16s;
+  flex:1;min-width:96px;height:38px;border-radius:var(--r-sm);border:none;
+  background:var(--fx-muted);color:var(--fx-muted-foreground);font-size:var(--fx-text-xs);font-weight:var(--fx-weight-medium);cursor:pointer;
+  transition:background-color var(--dur-fast) var(--ease-standard),color var(--dur-fast) var(--ease-standard);
 }
-.method-btn.active{border-color:var(--primary);background:var(--primary-light);color:var(--primary);font-weight:600}
+.method-btn.active{background:var(--fx-primary);color:var(--fx-primary-foreground)}
 .feed-scroll{max-height:56vh;overflow-y:auto}
 @media (max-width:520px){.preset-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 </style>

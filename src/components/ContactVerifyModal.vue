@@ -153,8 +153,8 @@ async function verify() {
 
 <style scoped>
 .dev-code{
-  margin-top:8px;padding:8px 11px;border-radius:8px;font-size:12px;line-height:1.6;
-  color:var(--primary);background:var(--primary-light);border:1px solid rgba(22,93,255,.16);
+  margin-top:var(--s-2);padding:var(--s-2) var(--s-3);border-radius:var(--r-sm);font-size:var(--fx-text-xs);line-height:1.6;
+  color:var(--fx-foreground);background:var(--fx-muted);
 }
-.dev-code strong{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.12em}
+.dev-code strong{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.1em}
 </style>

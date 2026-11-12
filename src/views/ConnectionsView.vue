@@ -17,7 +17,7 @@ const revokeTarget = ref(null);
 const revokeLoading = ref(false);
 
 function scopeLabel(item) {
-  return item.scopes.map((scope) => scope.label).join(' · ') || '基础档案';
+  return item.scopes.map((scope) => scope.label).join(' · ') || '基础资料';
 }
 
 function safeHomepage(value) {
@@ -52,7 +52,7 @@ async function revokeConnection() {
 </script>
 
 <template>
-  <PageHeader title="授权应用" sub="管理通过「使用 INU 账号登录」访问你星际档案的第三方应用。">
+  <PageHeader title="授权应用" sub="管理通过「使用 INU 账号登录」访问你个人资料的第三方应用。">
     <template #meta>
       <span class="badge" :class="connections.length ? 'badge-blue' : 'badge-gray'">
         {{ connections.length }} 个应用
@@ -75,7 +75,7 @@ async function revokeConnection() {
           </span>
         </div>
         <p class="card-desc">
-          这些应用获得了你的档案访问权限。撤销后，应用持有的令牌会立即失效，需要重新发起授权。
+          这些应用获得了你的资料访问权限。撤销后，应用持有的令牌会立即失效，需要重新发起授权。
         </p>
 
         <div v-for="item in connections" :key="item.clientId" class="connection-row">
@@ -120,7 +120,7 @@ async function revokeConnection() {
       <section class="card">
         <div class="card-head">
           <h2>授权说明</h2>
-          <span class="head-note">HOW IT WORKS</span>
+          <span class="head-note">接入说明</span>
         </div>
         <div class="tip-item">
           <AppIcon name="shield" />
@@ -150,7 +150,7 @@ async function revokeConnection() {
         </div>
         <div class="tip-item">
           <AppIcon name="device" />
-          <span><RouterLink class="inline-link" to="/devices">星际终端</RouterLink>：管理浏览器与设备会话。</span>
+          <span><RouterLink class="inline-link" to="/devices">登录设备</RouterLink>：管理浏览器与设备会话。</span>
         </div>
       </section>
     </aside>
@@ -173,22 +173,22 @@ async function revokeConnection() {
 
 <style scoped>
 .connection-row{
-  display:flex;align-items:flex-start;gap:12px;padding:16px 0;
-  border-bottom:1px solid var(--border-soft);
+  display:flex;align-items:flex-start;gap:var(--s-3);padding:var(--s-4) 0;
+  border-bottom:1px solid var(--fx-border);
 }
 .connection-row:first-of-type{padding-top:0}
 .connection-row:last-child{border-bottom:none;padding-bottom:0}
 .connection-info{min-width:0;flex:1}
-.connection-desc{margin-top:3px;font-size:12.5px;line-height:1.6;color:var(--text-sub)}
-.connection-meta{margin-top:5px;font-size:12px;line-height:1.6;color:var(--text-mute)}
+.connection-desc{margin-top:var(--s-1);font-size:var(--fx-text-xs);line-height:1.6;color:var(--text-sub)}
+.connection-meta{margin-top:var(--s-1);font-size:var(--fx-text-xs);line-height:1.6;color:var(--text-mute)}
 .connection-link{
-  display:inline-flex;align-items:center;gap:4px;margin-top:6px;
-  font-size:12px;font-weight:600;color:var(--primary);
+  display:inline-flex;align-items:center;gap:var(--s-1);margin-top:var(--s-2);
+  font-size:var(--fx-text-xs);font-weight:var(--fx-weight-semibold);color:var(--primary);
 }
 .connection-link .icon{width:13px;height:13px}
 .connection-actions{flex:none;padding-top:2px}
-.revoke-copy p{margin:0 0 8px;color:var(--text-2);line-height:1.7}
-.revoke-copy .hint{margin:0;color:var(--text-3)}
+.revoke-copy p{margin:0 0 var(--s-2);color:var(--text-sub);line-height:1.7}
+.revoke-copy .hint{margin:0;color:var(--text-mute)}
 .inline-link{color:var(--primary);font-weight:600}
 @media (max-width:720px){
   .connection-row{flex-wrap:wrap}

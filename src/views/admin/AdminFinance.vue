@@ -50,7 +50,7 @@ async function submitOrder() {
       carrier: orderForm.carrier.trim(),
       trackingNo: orderForm.trackingNo.trim(),
     });
-    toast(result.refunded ? `订单已更新，已退回 ${money(result.refunded)} 星能` : '订单已更新');
+    toast(result.refunded ? `订单已更新，已退回 ${money(result.refunded)} 余额` : '订单已更新');
     orderModal.value = false;
     await props.reload({ silent: true });
   } catch (error) {
@@ -81,7 +81,7 @@ async function processWithdraw(action) {
       action,
       note: withdrawNote.value.trim(),
     });
-    toast(action === 'approve' ? '提现已通过，已标记为打款完成' : '提现已驳回，星能已退回用户钱包');
+    toast(action === 'approve' ? '提现已通过，已标记为打款完成' : '提现已驳回，余额已退回用户钱包');
     withdrawModal.value = false;
     await props.reload({ silent: true });
   } catch (error) {
@@ -97,14 +97,14 @@ async function processWithdraw(action) {
     <div class="admin-section-head">
       <div>
         <h2>财务与订单</h2>
-        <p>用户星能、充值、补给订单与提现复核，所有金额以星能计。</p>
+        <p>用户余额、充值、订单与提现复核，所有金额以余额计。</p>
       </div>
     </div>
 
     <div class="finance-grid">
       <div class="admin-stat">
         <span class="admin-stat-icon is-blue"><AppIcon name="idcard" /></span>
-        <div><strong>{{ money(finance.walletCents) }}</strong><span>用户星能总额</span></div>
+        <div><strong>{{ money(finance.walletCents) }}</strong><span>用户余额总额</span></div>
       </div>
       <div class="admin-stat">
         <span class="admin-stat-icon is-green"><AppIcon name="star" /></span>
@@ -112,7 +112,7 @@ async function processWithdraw(action) {
       </div>
       <div class="admin-stat">
         <span class="admin-stat-icon is-purple"><AppIcon name="box" /></span>
-        <div><strong>{{ money(finance.supplyCents) }}</strong><span>补给消费（{{ finance.orderCount || 0 }} 单）</span></div>
+        <div><strong>{{ money(finance.supplyCents) }}</strong><span>商品消费（{{ finance.orderCount || 0 }} 单）</span></div>
       </div>
       <div class="admin-stat">
         <span class="admin-stat-icon is-orange"><AppIcon name="clock" /></span>
@@ -145,7 +145,7 @@ async function processWithdraw(action) {
           <span class="manage-mark is-orange"><AppIcon name="idcard" /></span>
           <div class="manage-copy">
             <strong>
-              {{ money(row.amountCents) }} 星能
+              {{ money(row.amountCents) }} 余额
               <span class="badge" :class="WITHDRAW_STATUS[row.status]?.tone || 'badge-gray'">{{ WITHDRAW_STATUS[row.status]?.label || row.status }}</span>
             </strong>
             <span>{{ row.userName }} · {{ row.userEmail }}</span>
@@ -160,14 +160,14 @@ async function processWithdraw(action) {
 
     <div class="card">
       <div class="card-head">
-        <h2>补给订单</h2>
+        <h2>订单</h2>
         <span class="head-note">最近 20 笔</span>
       </div>
 
       <div v-if="!orderList.length" class="admin-empty compact">
         <span class="admin-empty-icon"><AppIcon name="box" /></span>
-        <h3>还没有补给订单</h3>
-        <p>用户在补给站兑换商品后，订单会出现在这里。</p>
+        <h3>还没有订单</h3>
+        <p>用户在积分商城兑换商品后，订单会出现在这里。</p>
       </div>
 
       <div v-else class="manage-list">
@@ -179,7 +179,7 @@ async function processWithdraw(action) {
               <span class="badge" :class="ORDER_STATUS_TONES[order.status] || 'badge-gray'">{{ orderStatusLabel(order.status) }}</span>
             </strong>
             <span>{{ order.userName }} · {{ order.code }}</span>
-            <em>{{ money(order.energyCents) }} 星能 · {{ dateTimeLabel(order.createdAt) }}{{ order.trackingNo ? ` · ${order.carrier || '星际快递'} ${order.trackingNo}` : '' }}</em>
+            <em>{{ money(order.energyCents) }} 余额 · {{ dateTimeLabel(order.createdAt) }}{{ order.trackingNo ? ` · ${order.carrier || '快递'} ${order.trackingNo}` : '' }}</em>
           </div>
           <div class="manage-actions">
             <button class="btn btn-ghost btn-sm" type="button" @click="openOrderAdmin(order)">处理</button>
@@ -205,7 +205,7 @@ async function processWithdraw(action) {
           <span class="manage-mark is-green"><AppIcon name="star" /></span>
           <div class="manage-copy">
             <strong>
-              {{ money(row.amountCents) }} 星能
+              {{ money(row.amountCents) }} 余额
               <span class="badge" :class="row.status === 'paid' ? 'badge-green' : 'badge-orange'">{{ row.status === 'paid' ? '已到账' : row.status === 'pending' ? '待支付' : row.status }}</span>
             </strong>
             <span>{{ row.userName }} · {{ row.userEmail }}</span>
@@ -217,23 +217,23 @@ async function processWithdraw(action) {
   </section>
 
   <!-- 订单处理 -->
-  <BaseModal v-model="orderModal" title="处理补给订单" width="520px">
+  <BaseModal v-model="orderModal" title="处理订单" width="520px">
     <div v-if="orderTarget" class="modal-form">
       <div class="modal-summary">
         <strong>{{ orderTarget.item }}</strong>
-        <span>{{ orderTarget.code }} · {{ orderTarget.userName }} · {{ money(orderTarget.energyCents) }} 星能</span>
+        <span>{{ orderTarget.code }} · {{ orderTarget.userName }} · {{ money(orderTarget.energyCents) }} 余额</span>
       </div>
       <div class="field">
         <label for="order-status">订单状态</label>
         <select id="order-status" v-model="orderForm.status" class="input">
           <option v-for="item in ORDER_STATUS_OPTIONS" :key="item.key" :value="item.key">{{ item.label }}</option>
         </select>
-        <p class="hint">取消已支付订单会自动把星能退回用户钱包；标记签收会通知用户。</p>
+        <p class="hint">取消已支付订单会自动把余额退回用户钱包；标记签收会通知用户。</p>
       </div>
       <div class="settings-fields">
         <div class="field">
           <label for="order-carrier">承运方</label>
-          <input id="order-carrier" v-model="orderForm.carrier" class="input" maxlength="30" placeholder="例如：星际快递" />
+          <input id="order-carrier" v-model="orderForm.carrier" class="input" maxlength="30" placeholder="例如：快递" />
         </div>
         <div class="field">
           <label for="order-tracking">运单号</label>
@@ -255,7 +255,7 @@ async function processWithdraw(action) {
   <BaseModal v-model="withdrawModal" title="提现复核" width="500px">
     <div v-if="withdrawTarget" class="modal-form">
       <div class="modal-summary">
-        <strong>{{ money(withdrawTarget.amountCents) }} 星能</strong>
+        <strong>{{ money(withdrawTarget.amountCents) }} 余额</strong>
         <span>{{ withdrawTarget.code }} · {{ withdrawTarget.userName }}</span>
         <span>收款账号：{{ withdrawTarget.account }}</span>
       </div>
@@ -265,7 +265,7 @@ async function processWithdraw(action) {
       </div>
       <div class="modal-note warn">
         <AppIcon name="shield" />
-        <p>通过后会标记为已打款；驳回会立即把星能退回用户钱包，无法撤回。</p>
+        <p>通过后会标记为已打款；驳回会立即把余额退回用户钱包，无法撤回。</p>
       </div>
     </div>
     <template #footer>

@@ -78,7 +78,7 @@ async function runConfirm() {
 <template>
   <PageHeader title="超级管理台" sub="配置第三方登录、站点设置、OAuth 应用与审计记录。">
     <template #meta>
-      <span class="badge badge-blue">SUPER ADMIN</span>
+      <span class="badge badge-blue">超级管理员</span>
       <span class="head-date">仅超级管理员可见</span>
     </template>
   </PageHeader>
@@ -90,23 +90,16 @@ async function runConfirm() {
   <template v-else>
     <section class="admin-banner">
       <div class="admin-banner-copy">
-        <span class="admin-kicker"><span class="pulse-dot" />INU IDENTITY CONTROL</span>
-        <h2>一张通行证，连接整个星际生态。</h2>
+        <span class="admin-kicker">INU 管理中心</span>
+        <h2>账号、接入与运营配置。</h2>
         <p>让第三方应用通过 INU 账号登录，同时统一管理登录入口、站点呈现与访问权限。</p>
-      </div>
-      <div class="admin-orbit" aria-hidden="true">
-        <span class="admin-ring ring-one" />
-        <span class="admin-ring ring-two" />
-        <span class="admin-core">INU</span>
-        <span class="admin-dot dot-one" />
-        <span class="admin-dot dot-two" />
       </div>
     </section>
 
     <div class="admin-stats">
       <div class="admin-stat">
         <span class="admin-stat-icon is-blue"><AppIcon name="user" /></span>
-        <div><strong>{{ stats.users }}</strong><span>星际公民</span></div>
+        <div><strong>{{ stats.users }}</strong><span>注册用户</span></div>
         <em>{{ stats.verifiedUsers }} 已认证</em>
       </div>
       <div class="admin-stat">

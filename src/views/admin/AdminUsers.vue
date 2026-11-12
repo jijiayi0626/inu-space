@@ -108,7 +108,7 @@ function resolveResetRequest(row) {
     <div class="admin-section-head">
       <div>
         <h2>用户管理</h2>
-        <p>搜索用户、调整昵称、认证状态、INU 粒子与星能余额，所有调整都会写入流水与审计。</p>
+        <p>搜索用户、调整昵称、认证状态、积分与账户余额，所有调整都会写入流水与审计。</p>
       </div>
     </div>
 
@@ -153,7 +153,7 @@ function resolveResetRequest(row) {
       <div v-if="!adminUsers.length" class="admin-empty compact">
         <span class="admin-empty-icon"><AppIcon name="user" /></span>
         <h3>没有匹配的用户</h3>
-        <p>试试其他关键词，或清空搜索查看最近注册的星际公民。</p>
+        <p>试试其他关键词，或清空搜索查看最近注册的实名用户。</p>
       </div>
 
       <div v-else class="manage-list">
@@ -166,7 +166,7 @@ function resolveResetRequest(row) {
               <span v-if="user.isAdmin" class="badge badge-blue">管理员</span>
             </strong>
             <span>{{ user.email }} · {{ user.inuId }}</span>
-            <em>{{ money(user.balanceCents) }} 星能 · {{ user.particles }} 粒子 · {{ user.phone || '未绑定手机' }} · {{ dateTimeLabel(user.createdAt) }}</em>
+            <em>{{ money(user.balanceCents) }} 余额 · {{ user.particles }} 积分 · {{ user.phone || '未绑定手机' }} · {{ dateTimeLabel(user.createdAt) }}</em>
           </div>
           <div class="manage-actions">
             <button class="btn btn-ghost btn-sm" type="button" @click="openUserAdjust(user)">调整</button>
@@ -182,7 +182,7 @@ function resolveResetRequest(row) {
       <div class="modal-summary">
         <strong>{{ userTarget.name }}</strong>
         <span>{{ userTarget.email }} · {{ userTarget.inuId }}</span>
-        <span>当前 {{ money(userTarget.balanceCents) }} 星能 · {{ userTarget.particles }} 粒子</span>
+        <span>当前 {{ money(userTarget.balanceCents) }} 余额 · {{ userTarget.particles }} 积分</span>
       </div>
       <div class="field">
         <label for="user-name">昵称</label>
@@ -194,7 +194,7 @@ function resolveResetRequest(row) {
           <span class="track" />
           <span class="thumb" />
         </span>
-        <span><strong>星际公民认证</strong><em>开启后可下单、提现并使用全部功能</em></span>
+        <span><strong>实名认证</strong><em>开启后可下单、提现并使用全部功能</em></span>
       </label>
       <div class="field">
         <label for="user-password">重置登录密码</label>
@@ -210,15 +210,15 @@ function resolveResetRequest(row) {
       </div>
       <div class="settings-fields">
         <div class="field">
-          <label for="user-particles">粒子增减</label>
+          <label for="user-particles">积分增减</label>
           <input id="user-particles" v-model.number="userForm.particlesDelta" class="input" type="number" placeholder="正数增加，负数扣减" />
         </div>
         <div class="field">
-          <label for="user-balance">星能增减</label>
+          <label for="user-balance">余额增减</label>
           <input id="user-balance" v-model.number="userForm.balanceDeltaYuan" class="input" type="number" step="0.01" placeholder="正数增加，负数扣减" />
         </div>
       </div>
-      <p class="hint">粒子和星能的调整会写入用户流水与安全日志，并发送站内信。</p>
+      <p class="hint">积分和余额的调整会写入用户流水与安全日志，并发送站内信。</p>
       <p v-if="userError" class="modal-error">{{ userError }}</p>
     </div>
     <template #footer>

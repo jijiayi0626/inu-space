@@ -143,7 +143,7 @@ async function saveProvider(provider) {
     </div>
 
     <div class="card provider-note">
-      <AppIcon name="spark" />
+      <AppIcon name="info" />
       <p>
         保存后立即生效，无需重新部署。未填写 Client Secret 时会保留已保存的密钥；
         GitHub / Google 平台上的回调地址必须与上方完全一致。

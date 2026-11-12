@@ -25,8 +25,8 @@ const notice = computed(() => {
   const value = site.value?.notice;
   return value?.enabled && value?.text ? value : null;
 });
-const loginWelcome = computed(() => site.value?.loginWelcome || '使用你的 INU 星际档案继续旅程。');
-const footerText = computed(() => site.value?.footerText || '© 2026 INU 无限宇宙 · 星际通行证');
+const loginWelcome = computed(() => site.value?.loginWelcome || '登录后管理你的资料、安全与设备。');
+const footerText = computed(() => site.value?.footerText || '© 2026 INU 账号中心');
 
 const OAUTH_ERRORS = {
   cancelled: '已取消第三方登录',
@@ -147,42 +147,32 @@ async function submitReset() {
 <template>
   <div class="login-page">
     <section class="login-visual">
-      <div class="login-stars" aria-hidden="true" />
-      <div class="login-orbit" aria-hidden="true">
-        <span class="orbit-ring ring-a" />
-        <span class="orbit-ring ring-b" />
-        <span class="orbit-ring ring-c" />
-        <span class="orbit-core" />
-        <span class="orbit-dot dot-a" />
-        <span class="orbit-dot dot-b" />
-        <span class="orbit-dot dot-c" />
-      </div>
 
-      <RouterLink class="login-brand" to="/login" aria-label="INU 星际通行证">
-        <span class="brand-mark"><AppIcon name="orbit" /></span>
+      <RouterLink class="login-brand" to="/login" aria-label="INU 账号中心">
+        <span class="brand-mark"><AppIcon name="grid" /></span>
         <span class="brand-text">
           <span class="brand-name">INU</span>
-          <span class="brand-sys">星际通行证</span>
+          <span class="brand-sys">账号中心</span>
         </span>
       </RouterLink>
 
       <div class="login-copy">
-        <span class="login-kicker"><span class="pulse-dot" />INU DEEP SPACE NETWORK</span>
-        <h1>一张通行证，<br />抵达无限宇宙。</h1>
-        <p class="login-lead">在一个账号里，管理你的星际公民档案、可信终端与每一份星尘记忆。</p>
+        <span class="login-kicker"><span class="pulse-dot" />INU 账号中心</span>
+        <h1>一个账号，<br />连接你的全部服务。</h1>
+        <p class="login-lead">在一个账号里，管理你的资料、登录设备与账号安全。</p>
 
         <ul class="login-points">
           <li>
             <span class="login-point-icon"><AppIcon name="shield" /></span>
-            <span><strong>星尘级安全</strong><em>两步验证 · 终端守护 · 登录保护</em></span>
+            <span><strong>账户安全</strong><em>两步验证 · 设备管理 · 登录保护</em></span>
           </li>
           <li>
-            <span class="login-point-icon"><AppIcon name="orbit" /></span>
-            <span><strong>一处同步，全宇宙抵达</strong><em>通行证、补给站与协议记录实时同步</em></span>
+            <span class="login-point-icon"><AppIcon name="refresh" /></span>
+            <span><strong>一处更新，处处同步</strong><em>资料、订单与协议记录实时同步</em></span>
           </li>
           <li>
-            <span class="login-point-icon"><AppIcon name="spark" /></span>
-            <span><strong>为探索者而生</strong><em>粒子、星能与会员权益，清晰可见</em></span>
+            <span class="login-point-icon"><AppIcon name="chart" /></span>
+            <span><strong>权益清晰可见</strong><em>积分、余额与会员等级，随时可查</em></span>
           </li>
         </ul>
       </div>
@@ -193,14 +183,14 @@ async function submitReset() {
     <section class="login-panel">
       <div class="login-card">
         <div class="login-card-head">
-          <span class="login-card-mark"><AppIcon name="orbit" /></span>
-          <p class="login-eyebrow">WELCOME BACK</p>
-          <h2>进入星际通行证</h2>
+          <span class="login-card-mark"><AppIcon name="user" /></span>
+          <p class="login-eyebrow">账号登录</p>
+          <h2>登录 INU 账号</h2>
           <p class="login-sub">{{ loginWelcome }}</p>
         </div>
 
         <div v-if="notice" class="login-notice" :class="`is-${notice.level}`">
-          <AppIcon name="spark" />
+          <AppIcon name="info" />
           <span>{{ notice.text }}</span>
         </div>
 
@@ -246,12 +236,8 @@ async function submitReset() {
           </div>
 
           <div class="login-row">
-            <label class="login-check">
-              <input type="checkbox" class="check" checked />
-              <span>记住本次星际坐标</span>
-            </label>
             <button type="button" class="btn-text login-forgot" @click="openReset">
-              忘记密码？
+              忘记密码
             </button>
           </div>
 
@@ -262,13 +248,13 @@ async function submitReset() {
 
           <button class="btn btn-primary login-submit" type="submit" :disabled="loading">
             <span v-if="loading" class="spinner" />
-            <span>{{ loading ? '正在校准星际坐标…' : '进入通行证' }}</span>
+            <span>{{ loading ? '正在登录…' : '登录' }}</span>
             <AppIcon v-if="!loading" name="chevron" />
           </button>
         </form>
 
         <div v-if="enabledProviders.length" class="oauth-block">
-          <div class="login-divider"><span>或使用第三方通行证</span></div>
+          <div class="login-divider"><span>或使用第三方账号</span></div>
           <div class="oauth-buttons" :class="{ single: enabledProviders.length === 1 }">
             <button
               v-for="provider in enabledProviders"
@@ -291,31 +277,31 @@ async function submitReset() {
         <button v-if="demoVisible" type="button" class="demo-fill" @click="fillDemo">
           <span class="demo-fill-icon"><AppIcon name="idcard" /></span>
           <span class="demo-fill-copy">
-            <strong>使用演示星际档案</strong>
+            <strong>使用演示账号</strong>
             <em>{{ site.demo.email }} · {{ site.demo.password }}</em>
           </span>
           <AppIcon name="chevron" class="demo-fill-chev" />
         </button>
 
-        <div class="login-divider"><span>受星际安全协议保护</span></div>
+        <div class="login-divider"><span>受安全验证保护</span></div>
 
         <p class="login-legal">
           继续即表示你同意
-          <RouterLink to="/agreements">《星际航行服务协议》</RouterLink>
+          <RouterLink to="/agreements">《服务协议》</RouterLink>
           与
           <RouterLink to="/agreements">《隐私政策》</RouterLink>
         </p>
       </div>
 
       <div class="login-meta">
-        <span><AppIcon name="shield" />端到端加密</span>
-        <span><AppIcon name="globe" />边缘节点加速</span>
-        <span><AppIcon name="clock" />7×24 星际响应</span>
+        <span><AppIcon name="lock" />安全连接</span>
+        <span><AppIcon name="globe" />多端同步</span>
+        <span><AppIcon name="clock" />在线支持</span>
       </div>
     </section>
   </div>
 
-  <BaseModal v-model="resetOpen" title="找回星际通行证" width="440px">
+  <BaseModal v-model="resetOpen" title="找回密码" width="440px">
     <div class="reset-form">
       <p class="reset-lead">
         提交注册邮箱后，管理员会在用户管理台收到找回申请，并为你重置登录密码。
@@ -348,17 +334,17 @@ async function submitReset() {
 </template>
 
 <style scoped>
-.reset-form{display:flex;flex-direction:column;gap:14px}
-.reset-lead{font-size:12.5px;line-height:1.75;color:var(--text-sub)}
-.reset-lead a{color:var(--primary);text-decoration:none}
-.reset-message{padding:9px 11px;border-radius:8px;font-size:12px;line-height:1.6;color:var(--warning);background:rgba(255,125,0,.09)}
-.reset-message.done{color:var(--success);background:rgba(0,180,42,.08)}
+.reset-form{display:flex;flex-direction:column;gap:var(--s-4)}
+.reset-lead{font-size:var(--fx-text-sm);line-height:1.75;color:var(--fx-muted-foreground)}
+.reset-lead a{color:var(--fx-foreground);text-decoration:underline;text-underline-offset:3px}
+.reset-message{padding:var(--s-2) var(--s-3);border-radius:var(--r-sm);font-size:var(--fx-text-xs);line-height:1.6;color:var(--fx-warning);background:color-mix(in srgb, var(--fx-warning) 10%, transparent)}
+.reset-message.done{color:var(--fx-success);background:color-mix(in srgb, var(--fx-success) 10%, transparent)}
 .login-notice{
-  display:flex;align-items:flex-start;gap:9px;margin:16px 0 0;
-  padding:10px 12px;border-radius:10px;font-size:12px;line-height:1.65;
-  color:var(--primary);background:var(--primary-light);border:1px solid rgba(22,93,255,.16);
+  display:flex;align-items:flex-start;gap:var(--s-2);margin:var(--s-4) 0 0;
+  padding:var(--s-2) var(--s-3);border-radius:var(--r-sm);font-size:var(--fx-text-xs);line-height:1.65;
+  color:var(--fx-foreground);background:var(--fx-muted);
 }
-.login-notice .icon{width:15px;height:15px;margin-top:2px;flex:none}
-.login-notice.is-success{color:var(--success);background:rgba(0,180,42,.08);border-color:rgba(0,180,42,.18)}
-.login-notice.is-warn{color:var(--warning);background:rgba(255,125,0,.08);border-color:rgba(255,125,0,.2)}
+.login-notice .icon{width:15px;height:15px;margin-top:2px;flex:none;color:var(--fx-muted-foreground)}
+.login-notice.is-success{color:var(--fx-success);background:color-mix(in srgb, var(--fx-success) 10%, transparent)}
+.login-notice.is-warn{color:var(--fx-warning);background:color-mix(in srgb, var(--fx-warning) 10%, transparent)}
 </style>

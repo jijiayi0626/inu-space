@@ -1,4 +1,4 @@
--- INU 星际通行证 · D1 schema
+-- INU 账号中心 · D1 schema
 -- 所有时间统一使用 UTC ISO-8601 字符串，展示层再按本地时区格式化。
 
 CREATE TABLE IF NOT EXISTS users (
@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS users (
   bio TEXT NOT NULL DEFAULT '',
   avatar_text TEXT NOT NULL DEFAULT '逸',
   level INTEGER NOT NULL DEFAULT 1,
-  member_tier TEXT NOT NULL DEFAULT 'stardust',
+  member_tier TEXT NOT NULL DEFAULT 'basic',
   particles INTEGER NOT NULL DEFAULT 0,
   star_energy_cents INTEGER NOT NULL DEFAULT 0,
   miles INTEGER NOT NULL DEFAULT 0,

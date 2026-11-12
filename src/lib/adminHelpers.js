@@ -2,15 +2,15 @@ import { toast } from './toast';
 
 export const NOTIFICATION_CATEGORIES = [
   { key: 'type_security', label: '账户安全提醒' },
-  { key: 'type_supply', label: '星际补给动态' },
-  { key: 'type_energy', label: '星能变动' },
+  { key: 'type_supply', label: '商城动态' },
+  { key: 'type_energy', label: '余额变动' },
   { key: 'type_member', label: '会员权益与等级' },
-  { key: 'type_radio', label: '星际电台与活动' },
+  { key: 'type_radio', label: '活动与公告' },
 ];
 
 export const ORDER_STATUS_OPTIONS = [
   { key: 'pending_payment', label: '待支付' },
-  { key: 'transit', label: '跃迁中' },
+  { key: 'transit', label: '配送中' },
   { key: 'delivered', label: '已签收' },
   { key: 'cancelled', label: '已取消' },
 ];
@@ -30,7 +30,7 @@ export const WITHDRAW_STATUS = {
 
 export const TONES = ['blue', 'purple', 'cyan', 'green', 'orange'];
 
-export const PRODUCT_ICONS = ['i-box', 'i-orbit', 'i-star', 'i-spark', 'i-moon', 'i-sun', 'i-map', 'i-file', 'i-device', 'i-lock'];
+export const PRODUCT_ICONS = ['i-box', 'i-chart', 'i-star', 'i-wallet', 'i-file', 'i-device', 'i-lock', 'i-idcard', 'i-clock', 'i-grid'];
 
 export function sourceLabel(source) {
   if (source === 'db') return '管理台配置';

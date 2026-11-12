@@ -18,7 +18,7 @@ const address = computed(() => data.value?.address || null);
 const verified = computed(() => data.value?.verified ?? session.user?.verified ?? false);
 
 const statusMap = {
-  transit: { label: '跃迁中', tone: 'orange' },
+  transit: { label: '配送中', tone: 'orange' },
   delivered: { label: '已送达', tone: 'green' },
   pending_payment: { label: '待支付', tone: 'red' },
   paid: { label: '已支付', tone: 'blue' },
@@ -49,7 +49,7 @@ async function confirmOrder() {
         particles: result.particles,
       });
     }
-    toast(`兑换成功，+${result.reward} INU 粒子`);
+    toast(`兑换成功，+${result.reward} 积分`);
     await reload({ silent: true });
   } catch (error) {
     toast(error.message, 'error');
@@ -83,7 +83,7 @@ async function saveAddress() {
     return;
   }
   if (!addressForm.region.trim() || addressForm.detail.trim().length < 5) {
-    addressError.value = '请填写星域与完整的收货坐标';
+    addressError.value = '请填写地区与完整的收货地址';
     return;
   }
 
@@ -92,7 +92,7 @@ async function saveAddress() {
     const result = await api.patch('/supply/address', { ...addressForm });
     if (data.value) data.value = { ...data.value, address: result.address };
     addressOpen.value = false;
-    toast('收货坐标已同步至星际快递');
+    toast('收货地址已保存');
   } catch (error) {
     addressError.value = error.message;
   } finally {
@@ -159,7 +159,7 @@ async function payOrder(order) {
     const result = await api.post(`/supply/orders/${order.id}/pay`);
     syncWallet(result);
     if (detailOrder.value?.id === order.id) detailOrder.value = { ...result.order, timeline: detailOrder.value.timeline };
-    toast('支付成功，补给已进入跃迁队列');
+    toast('支付成功，商品已进入配送流程');
     await reload({ silent: true });
   } catch (error) {
     toast(error.message, 'error');
@@ -187,7 +187,7 @@ async function confirmDelivery(order) {
   try {
     const result = await api.post(`/supply/orders/${order.id}/confirm`);
     detailOrder.value = { ...result.order, timeline: detailOrder.value?.timeline || [] };
-    toast('已确认收货，补给已归档');
+    toast('已确认收货，商品已归档');
     await reload({ silent: true });
   } catch (error) {
     toast(error.message, 'error');
@@ -215,10 +215,10 @@ async function loadAllOrders() {
 </script>
 
 <template>
-  <PageHeader title="星际补给站" sub="用星能兑换星际物资，让每一次跃迁都有充足补给。">
+  <PageHeader title="积分商城" sub="用账户余额兑换商品，会员折扣自动生效。">
     <template #meta>
-      <span class="badge badge-blue">{{ data?.discountLabel || '95 折' }} → {{ data?.user?.tierLabel || '星尘' }}会员</span>
-      <span class="head-date">补给网络 · 在线</span>
+      <span class="badge badge-blue">{{ data?.user?.tierLabel || '普通' }}会员 · {{ data?.discountLabel || '95 折' }}</span>
+      <span class="head-date">商品每日更新</span>
     </template>
   </PageHeader>
 
@@ -230,14 +230,14 @@ async function loadAllOrders() {
     <div class="overview-grid">
       <article class="stat-card">
         <div class="stat-top">
-          <span class="stat-icon"><AppIcon name="orbit" /></span>
-          <span class="badge badge-blue">INU PAY</span>
+          <span class="stat-icon"><AppIcon name="wallet" /></span>
+          <span class="badge badge-blue">INU 支付</span>
         </div>
         <div>
-          <p class="stat-name">可用星能</p>
+          <p class="stat-name">可用余额</p>
           <p class="stat-value">{{ balanceParts.integer }}<small>.{{ balanceParts.decimal }}</small></p>
         </div>
-        <p class="stat-foot">星际钱包 · INU ···· {{ wallet.cardLast4 }}</p>
+        <p class="stat-foot">账户余额 · INU ···· {{ wallet.cardLast4 }}</p>
       </article>
       <article class="stat-card">
         <div class="stat-top">
@@ -248,25 +248,24 @@ async function loadAllOrders() {
           <p class="stat-name">运输中订单</p>
           <p class="stat-value">{{ data.counts.transit }}</p>
         </div>
-        <p class="stat-foot">最近一单预计明天送达</p>
+        <p class="stat-foot">配送进度可在订单详情查看</p>
       </article>
       <article class="stat-card">
         <div class="stat-top">
-          <span class="stat-icon"><AppIcon name="spark" /></span>
-          <span class="badge badge-green">+18%</span>
+          <span class="stat-icon"><AppIcon name="chart" /></span>
         </div>
         <div>
-          <p class="stat-name">本月补给</p>
+          <p class="stat-name">本月商品</p>
           <p class="stat-value">{{ data.counts.monthOrders }}<small>单</small></p>
         </div>
-        <p class="stat-foot">累计消耗 {{ money(data.counts.monthSpendCents) }} 星能</p>
+        <p class="stat-foot">累计消耗 {{ money(data.counts.monthSpendCents) }} 余额</p>
       </article>
     </div>
 
     <section class="card supply-shelf">
       <div class="card-head">
-        <h2>今日补给</h2>
-        <span class="head-note">MEMBER PRICE · 会员价已生效</span>
+        <h2>在售商品</h2>
+        <span class="head-note">会员价已生效</span>
       </div>
       <div class="product-grid">
         <article v-for="product in data.products" :key="product.id" class="product-card">
@@ -282,7 +281,7 @@ async function loadAllOrders() {
           </div>
           <div class="product-foot">
             <div class="product-price">
-              <strong>{{ money(product.memberPriceCents) }}</strong><span>星能</span>
+              <strong>{{ money(product.memberPriceCents) }}</strong><span>余额</span>
               <em v-if="product.memberPriceCents < product.priceCents">{{ money(product.priceCents) }}</em>
             </div>
             <RouterLink v-if="!verified" class="btn btn-ghost btn-sm" to="/profile#verify">需认证</RouterLink>
@@ -300,20 +299,20 @@ async function loadAllOrders() {
       </div>
       <p class="card-note">
         <AppIcon name="idcard" />
-        <span v-if="verified">星际公民认证已完成，补给兑换与星能提现能力均已解锁。</span>
-        <span v-else>完成星际公民认证后，补给站下单与星能提现能力将同步解锁。</span>
+        <span v-if="verified">实名认证已完成，商品兑换与余额提现能力均已解锁。</span>
+        <span v-else>完成实名认证后，积分商城下单与余额提现能力将一并解锁。</span>
       </p>
     </section>
 
     <section id="orders" class="card">
       <div class="card-head">
-        <h2>补给订单</h2>
+        <h2>订单</h2>
         <button class="btn btn-text" @click="loadAllOrders">查看全部</button>
       </div>
       <div class="table-wrap">
         <table class="data-table responsive orders">
           <thead>
-            <tr><th>订单</th><th>补给内容</th><th>星能</th><th>状态</th><th class="actions">操作</th></tr>
+            <tr><th>订单</th><th>商品</th><th>消耗</th><th>状态</th><th class="actions">操作</th></tr>
           </thead>
           <tbody>
             <tr v-for="order in data.orders" :key="order.id">
@@ -336,14 +335,14 @@ async function loadAllOrders() {
       </div>
       <p class="card-note">
         <AppIcon name="clock" />
-        <span>订单状态会通过站内信与安全邮箱同步，跃迁中的补给预计 1–3 个星际日送达。</span>
+        <span>订单状态会通过站内信与安全邮箱通知，配送中的商品预计 1–3 个工作日送达。</span>
       </p>
     </section>
 
     <div class="overview-row">
       <section id="address" class="card">
         <div class="card-head">
-          <h2>收货坐标</h2>
+          <h2>收货地址</h2>
           <span class="badge" :class="address ? 'badge-green' : 'badge-gray'">
             {{ address ? '已设置' : '未设置' }}
           </span>
@@ -362,15 +361,15 @@ async function loadAllOrders() {
         </template>
         <div v-else class="inline-empty">
           <span class="inline-empty-icon"><AppIcon name="map" /></span>
-          <h3>还没有默认坐标</h3>
-          <p>添加收货坐标后，补给物资会通过星际快递精准投递。</p>
-          <button class="btn btn-primary btn-sm" type="button" @click="openAddress">添加坐标</button>
+          <h3>还没有默认地址</h3>
+          <p>添加收货地址后，商品会通过快递寄送。</p>
+          <button class="btn btn-primary btn-sm" type="button" @click="openAddress">添加地址</button>
         </div>
       </section>
 
       <section id="supply-tips" class="card">
         <div class="card-head">
-          <h2>补给说明</h2>
+          <h2>商城说明</h2>
         </div>
         <div v-for="tip in data.tips" :key="tip.text" class="tip-item">
           <AppIcon :name="tip.icon" /><span>{{ tip.text }}</span>
@@ -379,24 +378,24 @@ async function loadAllOrders() {
     </div>
   </template>
 
-  <BaseModal v-model="orderOpen" title="兑换星际补给" width="460px">
+  <BaseModal v-model="orderOpen" title="兑换商品" width="460px">
     <template v-if="selectedProduct">
       <div class="modal-device">
         <span class="product-icon" :class="`product-${selectedProduct.tone}`"><AppIcon :name="selectedProduct.icon" /></span>
         <div>
           <p class="modal-device-name">{{ selectedProduct.name }}</p>
-          <p class="modal-device-sub">{{ selectedProduct.tag }} · 会员 {{ data?.discountLabel }} 折扣</p>
+          <p class="modal-device-sub">{{ selectedProduct.tag }} · 会员折扣 {{ data?.discountLabel }}</p>
         </div>
       </div>
       <dl class="detail-list">
-        <div class="detail-row"><dt>补给内容</dt><dd>{{ selectedProduct.desc }}</dd></div>
-        <div class="detail-row"><dt>会员价</dt><dd>{{ money(selectedProduct.memberPriceCents) }} 星能</dd></div>
-        <div class="detail-row"><dt>可用余额</dt><dd>{{ money(wallet.balanceCents) }} 星能</dd></div>
-        <div class="detail-row"><dt>预计送达</dt><dd>1–3 个星际日</dd></div>
+        <div class="detail-row"><dt>商品</dt><dd>{{ selectedProduct.desc }}</dd></div>
+        <div class="detail-row"><dt>会员价</dt><dd>{{ money(selectedProduct.memberPriceCents) }} 余额</dd></div>
+        <div class="detail-row"><dt>可用余额</dt><dd>{{ money(wallet.balanceCents) }} 余额</dd></div>
+        <div class="detail-row"><dt>预计送达</dt><dd>1–3 个工作日</dd></div>
       </dl>
       <p class="card-note">
-        <AppIcon name="spark" />
-        <span>兑换后星能将立即扣除，物资进入跃迁队列；消费可累计 INU 粒子。</span>
+        <AppIcon name="info" />
+        <span>兑换后余额将立即扣除，商品进入配送流程，消费可累计积分。</span>
       </p>
     </template>
     <template #footer>
@@ -408,24 +407,24 @@ async function loadAllOrders() {
     </template>
   </BaseModal>
 
-  <BaseModal v-model="addressOpen" :title="address ? '编辑收货坐标' : '添加收货坐标'" width="480px">
+  <BaseModal v-model="addressOpen" :title="address ? '编辑收货地址' : '添加收货地址'" width="480px">
     <form id="addressForm" @submit.prevent="saveAddress">
       <div class="form-grid">
         <div class="field">
           <label for="receiver">收货人</label>
-          <input id="receiver" v-model="addressForm.receiver" class="input" type="text" maxlength="20" placeholder="星际旅人" />
+          <input id="receiver" v-model="addressForm.receiver" class="input" type="text" maxlength="20" placeholder="收货人姓名" />
         </div>
         <div class="field">
           <label for="addrPhone">手机号</label>
           <input id="addrPhone" v-model="addressForm.phone" class="input" type="tel" maxlength="11" placeholder="11 位手机号" />
         </div>
         <div class="field span-2">
-          <label for="region">所在星域</label>
+          <label for="region">所在地区</label>
           <input id="region" v-model="addressForm.region" class="input" type="text" maxlength="30" placeholder="上海 · 中国" />
         </div>
         <div class="field span-2">
-          <label for="detail">详细坐标</label>
-          <input id="detail" v-model="addressForm.detail" class="input" type="text" maxlength="80" placeholder="浦东新区 · 星际港 7 号泊位" />
+          <label for="detail">详细地址</label>
+          <input id="detail" v-model="addressForm.detail" class="input" type="text" maxlength="80" placeholder="街道、门牌号与房间号" />
         </div>
       </div>
       <p v-if="addressError" class="form-error"><AppIcon name="shield" /><span>{{ addressError }}</span></p>
@@ -434,12 +433,12 @@ async function loadAllOrders() {
       <button class="btn btn-ghost btn-sm" type="button" @click="addressOpen = false">取消</button>
       <button class="btn btn-primary btn-sm" type="submit" form="addressForm" :disabled="addressSaving">
         <span v-if="addressSaving" class="spinner" />
-        {{ addressSaving ? '正在同步…' : '保存坐标' }}
+        {{ addressSaving ? '保存中…' : '保存地址' }}
       </button>
     </template>
   </BaseModal>
 
-  <BaseModal v-model="detailOpen" title="补给订单详情" width="540px">
+  <BaseModal v-model="detailOpen" title="订单详情" width="540px">
     <div v-if="detailLoading" class="feed">
       <SkeletonBlock :rows="6" />
     </div>
@@ -463,15 +462,15 @@ async function loadAllOrders() {
             <p class="timeline-sub">{{ step.detail }} · {{ timeLabel(step.at) }}</p>
           </div>
         </div>
-        <div v-if="!(detailOrder.timeline || []).length" class="quiet-text">物流轨迹正在同步。</div>
+        <div v-if="!(detailOrder.timeline || []).length" class="quiet-text">物流信息更新中。</div>
       </div>
 
       <dl class="detail-list">
-        <div class="detail-row"><dt>星能消耗</dt><dd>{{ money(detailOrder.energyCents) }} 星能</dd></div>
+        <div class="detail-row"><dt>余额消耗</dt><dd>{{ money(detailOrder.energyCents) }} 余额</dd></div>
         <div class="detail-row"><dt>运单号</dt><dd>{{ detailOrder.trackingNo || '待分配' }}</dd></div>
-        <div class="detail-row"><dt>承运方</dt><dd>{{ detailOrder.carrier || '星际快递' }}</dd></div>
+        <div class="detail-row"><dt>承运方</dt><dd>{{ detailOrder.carrier || '快递' }}</dd></div>
         <div v-if="detailOrder.address" class="detail-row">
-          <dt>收货坐标</dt>
+          <dt>收货地址</dt>
           <dd>{{ detailOrder.address.receiver }} · {{ maskPhone(detailOrder.address.phone) }} · {{ detailOrder.address.region }} {{ detailOrder.address.detail }}</dd>
         </div>
       </dl>
@@ -518,14 +517,14 @@ async function loadAllOrders() {
     </template>
   </BaseModal>
 
-  <BaseModal v-model="allOrdersOpen" title="全部补给订单" width="720px">
+  <BaseModal v-model="allOrdersOpen" title="全部订单" width="720px">
     <div v-if="allOrdersLoading" class="feed">
       <SkeletonBlock :rows="6" />
     </div>
     <div v-else class="table-wrap modal-orders">
       <table class="data-table responsive orders">
         <thead>
-          <tr><th>订单</th><th>补给内容</th><th>星能</th><th>状态</th><th class="actions">操作</th></tr>
+          <tr><th>订单</th><th>商品</th><th>消耗</th><th>状态</th><th class="actions">操作</th></tr>
         </thead>
         <tbody>
           <tr v-for="order in allOrders" :key="order.id">
@@ -547,8 +546,8 @@ async function loadAllOrders() {
       </table>
       <div v-if="!allOrders.length" class="inline-empty">
         <span class="inline-empty-icon"><AppIcon name="box" /></span>
-        <h3>还没有补给订单</h3>
-        <p>兑换星际物资后，订单会出现在这里。</p>
+        <h3>还没有订单</h3>
+        <p>兑换物资后，订单会出现在这里。</p>
       </div>
     </div>
   </BaseModal>

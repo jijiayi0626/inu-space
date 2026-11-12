@@ -15,7 +15,7 @@ const client = computed(() => context.value?.client || {});
 const user = computed(() => context.value?.user || {});
 const scopes = computed(() => context.value?.scopes || []);
 const initial = computed(() => client.value.name?.slice(0, 1) || '应');
-const userInitial = computed(() => user.value.avatarText || user.value.name?.slice(0, 1) || '星');
+const userInitial = computed(() => user.value.avatarText || user.value.name?.slice(0, 1) || 'U');
 
 const PARAM_KEYS = [
   'client_id',
@@ -94,15 +94,12 @@ onMounted(async () => {
 
 <template>
   <div class="consent-page">
-    <div class="consent-stars" aria-hidden="true" />
-    <div class="consent-aurora" aria-hidden="true" />
-
     <main class="consent-card">
-      <RouterLink class="consent-brand" to="/" aria-label="INU 星际通行证">
-        <span class="brand-mark"><AppIcon name="orbit" /></span>
+      <RouterLink class="consent-brand" to="/" aria-label="INU 账号中心">
+        <span class="brand-mark"><AppIcon name="grid" /></span>
         <span class="brand-text">
           <span class="brand-name">INU</span>
-          <span class="brand-sys">星际通行证</span>
+          <span class="brand-sys">账号中心</span>
         </span>
       </RouterLink>
 
@@ -115,14 +112,14 @@ onMounted(async () => {
         <span class="consent-error-icon"><AppIcon name="x" /></span>
         <h1>授权未能继续</h1>
         <p>{{ error }}</p>
-        <RouterLink class="btn btn-primary btn-sm" to="/">返回星际通行证</RouterLink>
+        <RouterLink class="btn btn-primary btn-sm" to="/">返回账号中心</RouterLink>
       </div>
 
       <template v-else-if="context">
         <div class="consent-head">
           <span class="consent-mark">{{ initial }}</span>
           <div class="consent-head-copy">
-            <span class="consent-kicker">AUTHORIZATION REQUEST</span>
+            <span class="consent-kicker">授权请求</span>
             <h1>{{ client.name }}</h1>
             <p>希望使用你的 INU 账号登录</p>
           </div>
@@ -157,7 +154,7 @@ onMounted(async () => {
         </div>
 
         <p class="consent-note">
-          授权后，{{ client.name }} 无法访问你的密码、星能余额、设备列表或其他应用的数据。
+          授权后，{{ client.name }} 无法访问你的密码、余额、设备列表或其他应用的数据。
           你可以随时在应用中撤销授权。
         </p>
 
@@ -181,138 +178,116 @@ onMounted(async () => {
       </div>
     </main>
 
-    <p class="consent-foot">© 2026 INU 无限宇宙 · 星际通行证</p>
+    <p class="consent-foot">© 2026 INU 账号中心</p>
   </div>
 </template>
 
 <style scoped>
 .consent-page{
   position:relative;min-height:100vh;min-height:100svh;display:flex;flex-direction:column;
-  align-items:center;justify-content:center;gap:18px;padding:32px 20px;overflow:hidden;
-  color:#e8edf7;background:#070d1a;
+  align-items:center;justify-content:center;gap:var(--s-4);padding:var(--s-8) var(--s-5);
+  color:var(--fx-foreground);background:var(--fx-muted);
   font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
 }
-.consent-stars{
-  position:absolute;inset:0;pointer-events:none;opacity:.8;
-  background-image:
-    radial-gradient(circle at 16% 24%,rgba(255,255,255,.4) 0 1px,transparent 1.6px),
-    radial-gradient(circle at 78% 12%,rgba(255,255,255,.28) 0 1px,transparent 1.6px),
-    radial-gradient(circle at 88% 74%,rgba(255,255,255,.32) 0 1px,transparent 1.6px),
-    radial-gradient(circle at 30% 86%,rgba(255,255,255,.2) 0 1px,transparent 1.6px);
-  background-size:220px 220px,300px 300px,260px 260px,340px 340px;
-}
-.consent-aurora{
-  position:absolute;inset:0;pointer-events:none;
-  background:
-    radial-gradient(560px 340px at 86% -8%,rgba(139,92,246,.34),transparent 62%),
-    radial-gradient(520px 320px at 4% 14%,rgba(6,182,212,.24),transparent 62%),
-    radial-gradient(640px 420px at 50% 118%,rgba(22,93,255,.24),transparent 64%);
-}
 .consent-card{
-  position:relative;z-index:1;width:min(470px,100%);padding:26px 28px 24px;border-radius:24px;
-  border:1px solid rgba(255,255,255,.1);
-  background:linear-gradient(165deg,rgba(22,33,57,.96),rgba(10,17,31,.98));
-  box-shadow:0 32px 80px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.05);
-  backdrop-filter:blur(16px);
+  position:relative;z-index:1;width:min(470px,100%);padding:var(--s-6);
+  border-radius:var(--r-md);background:var(--fx-surface);
+  box-shadow:var(--fx-shadow-2);
 }
+[data-theme="dark"] .consent-card{box-shadow:inset 0 0 0 1px var(--fx-border),var(--fx-shadow-2)}
 .consent-card .brand-mark{
-  width:34px;height:34px;border-radius:10px;display:grid;place-items:center;color:#fff;
-  background:linear-gradient(135deg,#165DFF,#8B5CF6);box-shadow:0 5px 14px rgba(22,93,255,.32);
+  width:34px;height:34px;border-radius:var(--r-sm);display:grid;place-items:center;
+  color:var(--fx-primary-foreground);background:var(--fx-primary);
 }
 .consent-card .brand-mark .icon{width:19px;height:19px}
-.consent-card .brand-text{display:flex;flex-direction:column;line-height:1.16}
-.consent-card .brand-name{
-  font-size:14.5px;font-weight:800;letter-spacing:.14em;
-  background:linear-gradient(90deg,#7db0ff,#c4b5fd);-webkit-background-clip:text;background-clip:text;color:transparent;
+.consent-card .brand-text{display:flex;flex-direction:column;line-height:1.2}
+.consent-card .brand-name{font-size:var(--fx-text-sm);font-weight:var(--fx-weight-bold);letter-spacing:-.01em}
+.consent-card .brand-sys{font-size:var(--fx-text-2xs);color:var(--fx-muted-foreground);margin-top:1px}
+.consent-brand{display:inline-flex;align-items:center;gap:var(--s-2);margin-bottom:var(--s-5);border-radius:var(--r-sm)}
+.consent-loading{display:flex;flex-direction:column;align-items:center;gap:var(--s-3);padding:var(--s-10) 0}
+.consent-loading p{font-size:var(--fx-text-sm);color:var(--fx-muted-foreground)}
+.consent-loading .spinner,.consent-overlay .spinner{
+  width:24px;height:24px;border-color:var(--fx-border);border-top-color:var(--fx-foreground);
 }
-.consent-card .brand-sys{font-size:9.5px;letter-spacing:.2em;color:#7384a0;margin-top:1px}
-.consent-brand{display:inline-flex;align-items:center;gap:9px;margin-bottom:22px;border-radius:10px}
-.consent-loading{display:flex;flex-direction:column;align-items:center;gap:14px;padding:52px 0 44px}
-.consent-loading p{font-size:13px;color:#8fa0bd}
-.consent-loading .spinner,.consent-overlay .spinner{width:24px;height:24px;border-color:rgba(122,167,255,.22);border-top-color:#7aa7ff}
 
-.consent-head{display:flex;align-items:center;gap:14px}
+.consent-head{display:flex;align-items:center;gap:var(--s-3)}
 .consent-mark{
-  width:54px;height:54px;border-radius:16px;flex:none;display:grid;place-items:center;
-  font-size:22px;font-weight:700;color:#fff;
-  background:linear-gradient(135deg,#165DFF,#8B5CF6);
-  box-shadow:0 10px 26px rgba(22,93,255,.36);
+  width:52px;height:52px;border-radius:var(--r-md);flex:none;display:grid;place-items:center;
+  font-size:var(--fx-text-xl);font-weight:var(--fx-weight-medium);
+  color:var(--fx-primary-foreground);background:var(--fx-primary);
 }
 .consent-head-copy{min-width:0}
-.consent-kicker{font-size:9.5px;letter-spacing:.2em;color:#6f82a3}
-.consent-head h1{font-size:21px;line-height:1.35;margin:4px 0 3px;letter-spacing:.01em;word-break:break-word}
-.consent-head p{font-size:12.5px;color:#93a3c0}
+.consent-kicker{font-size:var(--fx-text-2xs);letter-spacing:.1em;color:var(--fx-muted-foreground)}
+.consent-head h1{font-size:var(--fx-text-xl);line-height:1.35;margin:var(--s-1) 0 2px;font-weight:var(--fx-weight-bold);word-break:break-word}
+.consent-head p{font-size:var(--fx-text-sm);color:var(--fx-muted-foreground)}
 
 .consent-return{
-  display:flex;align-items:center;gap:8px;margin:18px 0 16px;padding:10px 12px;border-radius:10px;
-  background:rgba(77,141,255,.1);border:1px solid rgba(77,141,255,.16);font-size:11.5px;color:#a7b4cb;
+  display:flex;align-items:center;gap:var(--s-2);margin:var(--s-4) 0 var(--s-3);padding:var(--s-2) var(--s-3);
+  border-radius:var(--r-sm);background:var(--fx-muted);font-size:var(--fx-text-xs);color:var(--fx-muted-foreground);
 }
-.consent-return .icon{width:15px;height:15px;color:#7aa7ff;flex:none}
-.consent-return code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#c9d6ee;font-size:11px}
+.consent-return .icon{width:15px;height:15px;color:var(--fx-muted-foreground);flex:none}
+.consent-return code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--fx-foreground);font-size:var(--fx-text-xs)}
 
 .consent-user{
-  display:flex;align-items:center;gap:11px;padding:12px 14px;border-radius:12px;
-  background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.07);
+  display:flex;align-items:center;gap:var(--s-3);padding:var(--s-3);
+  border-radius:var(--r-sm);background:var(--fx-muted);
 }
 .consent-avatar{
-  width:38px;height:38px;border-radius:11px;flex:none;display:grid;place-items:center;
-  font-size:14px;font-weight:700;color:#fff;background:linear-gradient(135deg,#06B6D4,#165DFF);
+  width:36px;height:36px;border-radius:var(--r-full);flex:none;display:grid;place-items:center;
+  font-size:var(--fx-text-sm);font-weight:var(--fx-weight-medium);
+  color:var(--fx-primary-foreground);background:var(--fx-primary);
 }
 .consent-user div{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
-.consent-user strong{font-size:13px;font-weight:600}
-.consent-user em{font-style:normal;font-size:10.5px;color:#7f90ae;word-break:break-all}
-.consent-user .badge{font-size:10px;padding:2px 7px;background:rgba(43,212,106,.12);color:#4be089}
+.consent-user strong{font-size:var(--fx-text-sm);font-weight:var(--fx-weight-medium)}
+.consent-user em{font-style:normal;font-size:var(--fx-text-2xs);color:var(--fx-muted-foreground);word-break:break-all}
 
-.consent-scopes{margin-top:20px}
-.consent-scopes h2{font-size:12px;font-weight:600;letter-spacing:.04em;color:#93a3c0;margin-bottom:10px}
+.consent-scopes{margin-top:var(--s-5)}
+.consent-scopes h2{font-size:var(--fx-text-xs);font-weight:var(--fx-weight-medium);color:var(--fx-muted-foreground);margin-bottom:var(--s-2)}
 .consent-scope{
-  display:flex;align-items:flex-start;gap:11px;padding:11px 0;
-  border-bottom:1px solid rgba(255,255,255,.06);
+  display:flex;align-items:flex-start;gap:var(--s-3);padding:var(--s-3) 0;
+  border-bottom:1px solid var(--fx-border);
 }
 .consent-scope:last-child{border-bottom:none}
 .consent-scope-icon{
-  width:30px;height:30px;border-radius:9px;flex:none;display:grid;place-items:center;
-  background:rgba(77,141,255,.13);color:#8fb6ff;
+  width:30px;height:30px;border-radius:var(--r-xs);flex:none;display:grid;place-items:center;
+  background:var(--fx-muted);color:var(--fx-muted-foreground);
 }
 .consent-scope-icon .icon{width:15px;height:15px}
 .consent-scope div{flex:1;min-width:0}
-.consent-scope strong{display:block;font-size:12.5px;font-weight:600}
-.consent-scope p{font-size:11px;color:#7f90ae;line-height:1.6;margin-top:1px}
-.consent-check{width:15px;height:15px;color:#4be089;margin-top:7px;flex:none}
+.consent-scope strong{display:block;font-size:var(--fx-text-sm);font-weight:var(--fx-weight-medium)}
+.consent-scope p{font-size:var(--fx-text-xs);color:var(--fx-muted-foreground);line-height:1.6;margin-top:1px}
+.consent-check{width:15px;height:15px;color:var(--fx-success);margin-top:6px;flex:none}
 
-.consent-note{font-size:11px;line-height:1.7;color:#7384a0;margin-top:16px}
-.consent-actions{display:grid;grid-template-columns:.8fr 1.2fr;gap:10px;margin-top:18px}
-.consent-actions .btn{height:44px;border-radius:11px;font-size:13.5px}
-.consent-actions .btn-primary{gap:6px}
+.consent-note{font-size:var(--fx-text-xs);line-height:1.7;color:var(--fx-muted-foreground);margin-top:var(--s-4)}
+.consent-actions{display:grid;grid-template-columns:.8fr 1.2fr;gap:var(--s-2);margin-top:var(--s-4)}
+.consent-actions .btn{height:44px}
 .consent-actions .btn-primary .icon{width:15px;height:15px}
-.consent-actions .btn-glass{border-color:rgba(255,255,255,.16);color:#d6def0;background:rgba(255,255,255,.06)}
-.consent-actions .btn-glass:hover{background:rgba(255,255,255,.1)}
-.consent-actions .spinner{border-color:rgba(255,255,255,.28);border-top-color:#fff}
-.consent-legal{font-size:10.5px;line-height:1.65;color:#5f6f8b;text-align:center;margin-top:14px}
+.consent-actions .spinner{border-color:color-mix(in srgb, var(--fx-primary-foreground) 30%, transparent);border-top-color:var(--fx-primary-foreground)}
+.consent-legal{font-size:var(--fx-text-2xs);line-height:1.65;color:var(--fx-muted-foreground);text-align:center;margin-top:var(--s-3)}
 
-.consent-error{display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;padding:18px 0 8px}
+.consent-error{display:flex;flex-direction:column;align-items:center;text-align:center;gap:var(--s-2);padding:var(--s-4) 0 var(--s-2)}
 .consent-error-icon{
-  width:50px;height:50px;border-radius:15px;display:grid;place-items:center;
-  background:rgba(255,107,107,.12);color:#ff8a8a;margin-bottom:4px;
+  width:48px;height:48px;border-radius:var(--r-md);display:grid;place-items:center;
+  background:var(--fx-destructive-soft);color:var(--fx-destructive);margin-bottom:var(--s-1);
 }
-.consent-error-icon .icon{width:23px;height:23px}
-.consent-error h1{font-size:18px;font-weight:700}
-.consent-error p{font-size:12.5px;color:#93a3c0;line-height:1.7;max-width:340px}
-.consent-error .btn{margin-top:10px}
+.consent-error-icon .icon{width:22px;height:22px}
+.consent-error h1{font-size:var(--fx-text-lg);font-weight:var(--fx-weight-medium)}
+.consent-error p{font-size:var(--fx-text-sm);color:var(--fx-muted-foreground);line-height:1.7;max-width:340px}
+.consent-error .btn{margin-top:var(--s-2)}
 
 .consent-overlay{
-  position:absolute;inset:0;z-index:2;border-radius:24px;display:flex;flex-direction:column;
-  align-items:center;justify-content:center;gap:13px;
-  background:rgba(7,13,26,.82);backdrop-filter:blur(6px);
+  position:absolute;inset:0;z-index:2;border-radius:var(--r-md);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:var(--s-3);
+  background:color-mix(in srgb, var(--fx-surface) 86%, transparent);backdrop-filter:blur(6px);
 }
-.consent-overlay p{font-size:12px;color:#a7b4cb}
+.consent-overlay p{font-size:var(--fx-text-xs);color:var(--fx-muted-foreground)}
 
-.consent-foot{position:relative;z-index:1;font-size:10.5px;color:#4f5f7a;letter-spacing:.03em}
+.consent-foot{position:relative;z-index:1;font-size:var(--fx-text-2xs);color:var(--fx-muted-foreground)}
 
 @media(max-width:520px){
-  .consent-page{padding:18px 14px}
-  .consent-card{padding:22px 18px 20px;border-radius:20px}
-  .consent-head h1{font-size:19px}
+  .consent-page{padding:var(--s-4) var(--s-3)}
+  .consent-card{padding:var(--s-5) var(--s-4)}
+  .consent-head h1{font-size:var(--fx-text-lg)}
   .consent-actions{grid-template-columns:1fr 1.35fr}
 }
 </style>

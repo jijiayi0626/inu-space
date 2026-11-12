@@ -15,7 +15,6 @@ const { data } = useAsyncData(({ force }) => api.get('/profile', { force }));
 
 const user = computed(() => data.value?.user || session.user || {});
 const counts = computed(() => data.value?.counts || { devices: 0, agreementsSigned: 0, agreementsPending: 0 });
-const progress = computed(() => Math.min(99, Math.floor(((user.value.particles || 0) / 10000) * 100)));
 
 const features = computed(() => session.site?.features || {});
 const verificationAvailable = computed(
@@ -55,7 +54,7 @@ async function save() {
   try {
     const result = await api.patch('/profile', { name: form.name, bio: form.bio });
     syncUser(result.user);
-    toast('已保存修改，星际档案已同步');
+    toast('已保存修改');
   } catch (error) {
     toast(error.message, 'error');
   } finally {
@@ -67,7 +66,7 @@ async function copyInuId() {
   const value = user.value.inuId || '';
   try {
     await navigator.clipboard.writeText(value);
-    toast('星际 ID 已复制到剪贴板');
+    toast('INU ID 已复制到剪贴板');
   } catch {
     const textarea = document.createElement('textarea');
     textarea.value = value;
@@ -77,7 +76,7 @@ async function copyInuId() {
     textarea.select();
     document.execCommand('copy');
     textarea.remove();
-    toast('星际 ID 已复制到剪贴板');
+    toast('INU ID 已复制到剪贴板');
   }
 }
 
@@ -96,7 +95,7 @@ function openVerify() {
 
 async function confirmVerify() {
   if (!verifyAgreed.value) {
-    toast('请先确认星际公民认证协议', 'error');
+    toast('请先确认实名认证协议', 'error');
     return;
   }
   verifying.value = true;
@@ -104,7 +103,7 @@ async function confirmVerify() {
     const result = await api.post('/profile/verify');
     syncUser(result.user);
     verifyOpen.value = false;
-    toast('星际公民认证完成，补给站权限已解锁');
+    toast('实名认证完成，积分商城权限已解锁');
   } catch (error) {
     toast(error.message, 'error');
   } finally {
@@ -141,7 +140,7 @@ async function saveAvatar() {
     const result = await api.post('/profile/avatar', { text, tone: avatarForm.tone });
     syncUser(result.user);
     avatarOpen.value = false;
-    toast('星际头像已更新');
+    toast('头像已更新');
   } catch (error) {
     avatarError.value = error.message;
   } finally {
@@ -183,7 +182,7 @@ const linkItems = computed(() => [
   {
     to: '/devices',
     icon: 'device',
-    title: '星际终端',
+    title: '登录设备',
     sub: `${counts.value.devices} 台设备已绑定 · 管理登录记录`,
   },
   {
@@ -208,15 +207,15 @@ const linkItems = computed(() => [
     to: '/member',
     icon: 'star',
     title: '会员中心',
-    sub: `${user.value.tierLabel}等级 · ${number(user.value.particles)} INU 粒子`,
+    sub: `${user.value.tierLabel}等级 · ${number(user.value.particles)} 积分`,
   },
 ]);
 </script>
 
 <template>
-  <PageHeader title="个人资料" sub="管理你的星际公民档案与账号关联信息。">
+  <PageHeader title="个人资料" sub="管理你的个人资料与账号关联信息。">
     <template #meta>
-      <span class="badge badge-blue">{{ user.inuId || 'INU·88210·0721' }}</span>
+      <span v-if="user.inuId" class="badge badge-blue">{{ user.inuId }}</span>
       <span v-if="user.verified" class="badge badge-green">已认证</span>
     </template>
   </PageHeader>
@@ -236,12 +235,9 @@ const linkItems = computed(() => [
         <div class="identity">
           <div class="avatar-xl" :class="`tone-${user.avatarTone || 'blue'}`">{{ user.avatarText }}<span class="avatar-dot" /></div>
           <div class="identity-info">
-            <p class="identity-name">
-              {{ user.name }}
-              <span class="head-note">{{ user.orbit }}</span>
-            </p>
+            <p class="identity-name">{{ user.name }}</p>
             <p class="identity-sub">
-              加入 INU 宇宙 {{ data.joinedDays }} 天 · 上次登录 {{ timeLabel(user.lastLogin?.at) }} ·
+              加入 INU {{ data.joinedDays }} 天 · 上次登录 {{ timeLabel(user.lastLogin?.at) }} ·
               {{ user.lastLogin?.location || user.region }}
             </p>
           </div>
@@ -265,13 +261,13 @@ const linkItems = computed(() => [
               <button class="btn btn-text" type="button" @click="openEmail">更换</button>
             </div>
             <p class="hint">
-              用于接收星际补给与安全通知 · {{ user.emailVerified === false ? '待验证' : '已验证' }}
+              用于接收商品与安全通知 · {{ user.emailVerified === false ? '待验证' : '已验证' }}
             </p>
           </div>
           <div class="field span-2">
-            <label for="bio">星际签名</label>
-            <input id="bio" v-model="form.bio" class="input" type="text" maxlength="60" placeholder="写下一句属于你的宇宙注脚" />
-            <p class="hint">最多 60 个字符，会展示在星际公民档案卡上</p>
+            <label for="bio">个人签名</label>
+            <input id="bio" v-model="form.bio" class="input" type="text" maxlength="60" placeholder="一句话介绍自己" />
+            <p class="hint">最多 60 个字符，会展示在实名资料卡上</p>
           </div>
           <div class="field span-2">
             <label for="phone">手机号</label>
@@ -286,19 +282,19 @@ const linkItems = computed(() => [
             </div>
           </div>
           <div class="field span-2">
-            <label for="inuid">星际 ID</label>
+            <label for="inuid">INU ID</label>
             <div class="input-inline">
               <input id="inuid" class="input mono" type="text" :value="user.inuId" readonly />
               <button class="btn btn-ghost btn-sm" type="button" @click="copyInuId">复制</button>
             </div>
-            <p class="hint">星际 ID 是你在无限宇宙中的唯一坐标，不可修改</p>
+            <p class="hint">INU ID 是你的唯一账号标识，不可修改</p>
           </div>
         </form>
 
         <div class="card-actions">
           <button class="btn btn-primary" type="button" :disabled="saving" @click="save">
             <span v-if="saving" class="spinner" />
-            {{ saving ? '正在同步…' : '保存修改' }}
+            {{ saving ? '保存中…' : '保存修改' }}
           </button>
           <button class="btn btn-ghost" type="button" :disabled="saving" @click="resetForm">取消</button>
         </div>
@@ -306,23 +302,23 @@ const linkItems = computed(() => [
 
       <section id="verify" class="card">
         <div class="card-head">
-          <h2>星际公民身份认证</h2>
+          <h2>实名认证</h2>
           <span class="badge" :class="user.verified ? 'badge-green' : verificationAvailable ? 'badge-red' : 'badge-gray'">
             {{ user.verified ? '已实名' : verificationAvailable ? '未实名' : '暂未开放' }}
           </span>
         </div>
         <p class="card-desc">
-          完成认证后可解锁星际补给站下单、星能提现等权限，并显著提升账户安全等级。
+          完成认证后可解锁积分商城下单、余额提现等权限，并显著提升账户安全等级。
         </p>
 
         <div v-if="user.verified" class="verify-strip stacked">
           <div class="verify-item">
             <AppIcon name="idcard" />
-            <span class="verify-text"><strong>星际公民档案</strong><em>身份核验已通过 · 档案编号 {{ user.orbit }}</em></span>
+            <span class="verify-text"><strong>实名资料</strong><em>身份核验已通过，认证记录已归档</em></span>
           </div>
           <div class="verify-item">
             <AppIcon name="shield" />
-            <span class="verify-text"><strong>权限状态</strong><em>补给站下单、星能提现已解锁</em></span>
+            <span class="verify-text"><strong>权限状态</strong><em>积分商城下单、余额提现已解锁</em></span>
           </div>
           <div class="verify-item">
             <AppIcon name="check" />
@@ -358,7 +354,7 @@ const linkItems = computed(() => [
           >
             {{ verificationAvailable ? '立即认证' : '认证通道已关闭' }}
           </button>
-          <RouterLink v-else class="btn btn-ghost" to="/supply">前往补给站</RouterLink>
+          <RouterLink v-else class="btn btn-ghost" to="/supply">前往积分商城</RouterLink>
           <RouterLink class="btn btn-text" to="/agreements">查看认证协议</RouterLink>
         </div>
       </section>
@@ -366,7 +362,7 @@ const linkItems = computed(() => [
       <section id="account-links" class="card">
         <div class="card-head">
           <h2>账号相关</h2>
-          <span class="head-note">QUICK LINKS</span>
+          <span class="head-note">常用入口</span>
         </div>
         <div class="link-list">
           <RouterLink v-for="item in linkItems" :key="item.to" class="link-row" :to="item.to">
@@ -393,20 +389,20 @@ const linkItems = computed(() => [
             <p class="sec-title">会员等级</p>
             <p class="sec-sub">{{ user.tierLabel }} · {{ user.tierEn }}</p>
           </div>
-          <div class="sec-right"><span class="badge badge-blue">{{ progress }}%</span></div>
+          <div class="sec-right"><RouterLink class="btn btn-text" to="/member">详情</RouterLink></div>
         </div>
         <div class="sec-row">
-          <span class="sec-icon"><AppIcon name="spark" /></span>
+          <span class="sec-icon"><AppIcon name="chart" /></span>
           <div>
-            <p class="sec-title">INU 粒子</p>
-            <p class="sec-sub">本周新增 120</p>
+            <p class="sec-title">积分</p>
+            <p class="sec-sub">用于等级与兑换</p>
           </div>
           <div class="sec-right"><strong class="num-strong">{{ number(user.particles) }}</strong></div>
         </div>
         <div class="sec-row">
           <span class="sec-icon"><AppIcon name="clock" /></span>
           <div>
-            <p class="sec-title">加入宇宙</p>
+            <p class="sec-title">加入</p>
             <p class="sec-sub">{{ dateLabel(user.createdAt) }}</p>
           </div>
           <div class="sec-right"><span class="badge badge-gray">{{ data.joinedDays }} 天</span></div>
@@ -414,8 +410,8 @@ const linkItems = computed(() => [
         <div class="sec-row">
           <span class="sec-icon"><AppIcon name="device" /></span>
           <div>
-            <p class="sec-title">绑定终端</p>
-            <p class="sec-sub">1 台当前 · {{ Math.max(0, counts.devices - 1) }} 台可信</p>
+            <p class="sec-title">绑定设备</p>
+            <p class="sec-sub">{{ counts.devices }} 台已绑定</p>
           </div>
           <div class="sec-right"><RouterLink class="btn btn-text" to="/devices">管理</RouterLink></div>
         </div>
@@ -423,10 +419,10 @@ const linkItems = computed(() => [
 
       <section id="profile-tips" class="card">
         <div class="card-head">
-          <h2>档案完善建议</h2>
+          <h2>资料完善建议</h2>
         </div>
         <div v-if="!user.verified" class="tip-item">
-          <AppIcon name="idcard" /><span>完成实名认证，可解锁补给站下单与星能提现。</span>
+          <AppIcon name="idcard" /><span>完成实名认证，可解锁积分商城下单与余额提现。</span>
         </div>
         <div v-if="!user.phone" class="tip-item">
           <AppIcon name="phone" /><span>绑定手机号，让账号找回与安全验证更可靠。</span>
@@ -435,7 +431,7 @@ const linkItems = computed(() => [
           <AppIcon name="mail" /><span>确认邮箱可用，重要协议与账单将同步送达。</span>
         </div>
         <div class="tip-item">
-          <AppIcon name="spark" /><span>写一句星际签名，让你的坐标在宇宙中更独特。</span>
+          <AppIcon name="pen" /><span>写一句个人签名，让资料更完整。</span>
         </div>
         <div class="cta-stack">
           <RouterLink class="btn btn-primary" to="/security">前往账户安全</RouterLink>
@@ -445,27 +441,27 @@ const linkItems = computed(() => [
     </aside>
   </div>
 
-  <BaseModal v-model="verifyOpen" title="星际公民认证" width="480px">
+  <BaseModal v-model="verifyOpen" title="实名认证" width="480px">
     <div class="modal-device">
       <span class="device-icon lg"><AppIcon name="idcard" /></span>
       <div>
         <p class="modal-device-name">{{ user.name }} · {{ user.inuId }}</p>
-        <p class="modal-device-sub">星际公民身份核验 · 演示流程</p>
+        <p class="modal-device-sub">实名用户身份核验</p>
       </div>
       <span class="badge badge-green">安全</span>
     </div>
     <dl class="detail-list">
       <div class="detail-row"><dt>认证项目</dt><dd>身份证件 · 人脸识别</dd></div>
-      <div class="detail-row"><dt>所属星域</dt><dd>{{ user.region }}</dd></div>
-      <div class="detail-row"><dt>解锁权限</dt><dd>补给站下单 · 星能提现</dd></div>
+      <div class="detail-row"><dt>所属地区</dt><dd>{{ user.region }}</dd></div>
+      <div class="detail-row"><dt>解锁权限</dt><dd>积分商城下单 · 余额提现</dd></div>
     </dl>
     <p class="card-note">
-      <AppIcon name="spark" />
-      <span>演示环境：确认后将模拟完成星际公民核验，用于解锁补给站下单能力。</span>
+      <AppIcon name="info" />
+      <span>确认后将完成身份核验，并解锁积分商城下单能力。</span>
     </p>
     <label class="agree-row">
       <input v-model="verifyAgreed" type="checkbox" class="check" />
-      <span>我已阅读并同意《星际公民认证服务协议》，并确认以上档案信息真实有效。</span>
+      <span>我已阅读并同意《实名认证服务协议》，并确认以上认证信息真实有效。</span>
     </label>
     <template #footer>
       <button class="btn btn-ghost btn-sm" type="button" @click="verifyOpen = false">取消</button>
@@ -476,12 +472,12 @@ const linkItems = computed(() => [
     </template>
   </BaseModal>
 
-  <BaseModal v-model="avatarOpen" title="更换星际头像" width="440px">
+  <BaseModal v-model="avatarOpen" title="更换头像" width="440px">
     <div class="avatar-preview">
       <span class="avatar-xl" :class="`tone-${avatarForm.tone}`">{{ avatarForm.text || '逸' }}</span>
       <div>
         <p class="modal-device-name">{{ user.name }}</p>
-        <p class="modal-device-sub">头像会显示在星际公民档案与授权页面</p>
+        <p class="modal-device-sub">头像会显示在实名资料与授权页面</p>
       </div>
     </div>
 
@@ -512,7 +508,7 @@ const linkItems = computed(() => [
       <button class="btn btn-ghost btn-sm" type="button" @click="avatarOpen = false">取消</button>
       <button class="btn btn-primary btn-sm" type="button" :disabled="avatarSaving" @click="saveAvatar">
         <span v-if="avatarSaving" class="spinner" />
-        {{ avatarSaving ? '正在同步…' : '保存头像' }}
+        {{ avatarSaving ? '保存中…' : '保存头像' }}
       </button>
     </template>
   </BaseModal>
@@ -522,20 +518,20 @@ const linkItems = computed(() => [
 </template>
 
 <style scoped>
-.avatar-xl.tone-blue{background:linear-gradient(135deg,#165DFF,#3B82F6)}
-.avatar-xl.tone-purple{background:linear-gradient(135deg,#8B5CF6,#6D28D9)}
-.avatar-xl.tone-cyan{background:linear-gradient(135deg,#06B6D4,#0E7490)}
-.avatar-xl.tone-green{background:linear-gradient(135deg,#00B42A,#15803D)}
-.avatar-xl.tone-orange{background:linear-gradient(135deg,#FF7D00,#C2410C)}
-.avatar-preview{display:flex;align-items:center;gap:14px;margin-bottom:16px}
+.avatar-xl.tone-blue{background:var(--fx-primary);color:var(--fx-primary-foreground)}
+.avatar-xl.tone-purple{background:color-mix(in srgb, var(--fx-foreground) 82%, var(--fx-background));color:var(--fx-background)}
+.avatar-xl.tone-cyan{background:color-mix(in srgb, var(--fx-foreground) 66%, var(--fx-background));color:var(--fx-background)}
+.avatar-xl.tone-green{background:color-mix(in srgb, var(--fx-foreground) 50%, var(--fx-background));color:var(--fx-background)}
+.avatar-xl.tone-orange{background:color-mix(in srgb, var(--fx-foreground) 34%, var(--fx-background));color:var(--fx-background)}
+.avatar-preview{display:flex;align-items:center;gap:var(--s-3);margin-bottom:var(--s-4)}
 .avatar-preview>div{min-width:0}
-.tone-row{display:flex;gap:10px;flex-wrap:wrap}
-.tone-dot{width:32px;height:32px;border-radius:50%;border:2px solid transparent;cursor:pointer;box-shadow:0 0 0 1px var(--border-soft)}
-.tone-dot.tone-blue{background:linear-gradient(135deg,#165DFF,#3B82F6)}
-.tone-dot.tone-purple{background:linear-gradient(135deg,#8B5CF6,#6D28D9)}
-.tone-dot.tone-cyan{background:linear-gradient(135deg,#06B6D4,#0E7490)}
-.tone-dot.tone-green{background:linear-gradient(135deg,#00B42A,#15803D)}
-.tone-dot.tone-orange{background:linear-gradient(135deg,#FF7D00,#C2410C)}
-.tone-dot.active{border-color:#fff;box-shadow:0 0 0 2px var(--primary)}
-.verify-closed{margin:0 0 12px}
+.tone-row{display:flex;gap:var(--s-2);flex-wrap:wrap}
+.tone-dot{width:32px;height:32px;border-radius:var(--r-full);border:2px solid transparent;cursor:pointer}
+.tone-dot.tone-blue{background:var(--fx-primary)}
+.tone-dot.tone-purple{background:color-mix(in srgb, var(--fx-foreground) 82%, var(--fx-background))}
+.tone-dot.tone-cyan{background:color-mix(in srgb, var(--fx-foreground) 66%, var(--fx-background))}
+.tone-dot.tone-green{background:color-mix(in srgb, var(--fx-foreground) 50%, var(--fx-background))}
+.tone-dot.tone-orange{background:color-mix(in srgb, var(--fx-foreground) 34%, var(--fx-background))}
+.tone-dot.active{border-color:var(--fx-background);box-shadow:0 0 0 2px var(--fx-foreground)}
+.verify-closed{margin:0 0 var(--s-3)}
 </style>

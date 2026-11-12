@@ -8,7 +8,7 @@ const routes = [
     path: '/login',
     name: 'login',
     component: () => import('./views/LoginView.vue'),
-    meta: { public: true, title: '进入星际通行证' },
+    meta: { public: true, title: '登录' },
   },
   {
     path: '/consent',
@@ -60,7 +60,7 @@ const routes = [
     path: '/devices',
     name: 'devices',
     component: () => import('./views/DevicesView.vue'),
-    meta: { title: '星际终端', top: 'account', side: 'devices' },
+    meta: { title: '登录设备', top: 'account', side: 'devices' },
   },
   {
     path: '/notifications',
@@ -84,7 +84,7 @@ const routes = [
     path: '/supply',
     name: 'supply',
     component: () => import('./views/SupplyView.vue'),
-    meta: { title: '星际补给站', top: '', side: 'supply' },
+    meta: { title: '积分商城', top: '', side: 'supply' },
   },
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ];
@@ -107,7 +107,7 @@ router.beforeEach(async (to) => {
         return { name: 'login', query: { redirect: to.fullPath } };
       }
     } catch (error) {
-      toast(error.message || '无法连接星际网络', 'error');
+      toast(error.message || '无法连接服务', 'error');
       return { name: 'login', query: { redirect: to.fullPath } };
     }
     return true;
@@ -135,7 +135,7 @@ router.beforeEach(async (to) => {
       return { name: 'overview' };
     }
   } catch (error) {
-    toast(error.message || '无法连接星际网络', 'error');
+    toast(error.message || '无法连接服务', 'error');
     return { name: 'login', query: { redirect: to.fullPath } };
   }
   return true;
@@ -144,7 +144,7 @@ router.beforeEach(async (to) => {
 router.afterEach((to) => {
   const section = to.name === 'admin' ? adminSections.find((item) => item.key === to.params.section) : null;
   const title = section ? `${section.label} · 超级管理台` : to.meta.title;
-  document.title = title ? `${title} · INU 星际通行证` : 'INU 星际通行证';
+  document.title = title ? `${title} · INU 账号中心` : 'INU 账号中心';
 });
 
 export default router;

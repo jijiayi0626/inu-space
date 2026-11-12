@@ -97,12 +97,12 @@ async function saveSiteSettings() {
     .map((item) => Number(item.trim()))
     .filter((item) => Number.isFinite(item) && item >= 1 && item <= 100000);
   if (!presets.length || presets.length > 8) {
-    toast('请填写 1–8 个充值金额（元），用逗号分隔', 'error');
+    toast('请填写 1–8 个充值金额（余额），用逗号分隔', 'error');
     return;
   }
   const withdrawMinYuan = Number(siteForm.withdrawMinYuan);
   if (!Number.isFinite(withdrawMinYuan) || withdrawMinYuan < 10 || withdrawMinYuan > 50000) {
-    toast('提现门槛需在 10–50000 星能之间', 'error');
+    toast('提现门槛需在 10–50000 余额之间', 'error');
     return;
   }
   const nameChangeDays = Number(siteForm.nameChangeDays);
@@ -221,7 +221,7 @@ async function saveSiteSettings() {
             class="input modal-textarea"
             rows="3"
             maxlength="200"
-            placeholder="例如：今晚 23:00 进行星际网络维护，预计 30 分钟。"
+            placeholder="例如：今晚 23:00 进行服务维护，预计 30 分钟。"
           />
         </div>
 
@@ -244,11 +244,11 @@ async function saveSiteSettings() {
         <div class="settings-fields">
           <div class="field">
             <label for="login-welcome">登录页欢迎语</label>
-            <input id="login-welcome" v-model="siteForm.loginWelcome" class="input" maxlength="120" placeholder="使用你的 INU 星际档案继续旅程。" />
+            <input id="login-welcome" v-model="siteForm.loginWelcome" class="input" maxlength="120" placeholder="登录后继续管理你的资料与安全。" />
           </div>
           <div class="field">
             <label for="footer-text">页脚文案</label>
-            <input id="footer-text" v-model="siteForm.footerText" class="input" maxlength="120" placeholder="© 2026 INU 无限宇宙 · 星际通行证" />
+            <input id="footer-text" v-model="siteForm.footerText" class="input" maxlength="120" placeholder="© 2026 INU 账号中心" />
           </div>
         </div>
       </article>
@@ -262,15 +262,15 @@ async function saveSiteSettings() {
         <div class="feature-grid">
           <label
             v-for="item in [
-              { key: 'featureRecharge', title: '星能充值', desc: '钱包充值入口与支付订单' },
-              { key: 'featureWithdraw', title: '星能提现', desc: '提交提现申请并进入人工复核' },
-              { key: 'featureSupply', title: '星际补给站', desc: '商品兑换、订单与物流' },
-              { key: 'featureAgreements', title: '星际法条库', desc: '协议签署、查看与导出' },
-              { key: 'featureVerification', title: '实名认证', desc: '星际公民认证入口与核验通道' },
+              { key: 'featureRecharge', title: '余额充值', desc: '钱包充值入口与支付订单' },
+              { key: 'featureWithdraw', title: '余额提现', desc: '提交提现申请并进入人工复核' },
+              { key: 'featureSupply', title: '积分商城', desc: '商品兑换、订单与物流' },
+              { key: 'featureAgreements', title: '协议中心', desc: '协议签署、查看与导出' },
+              { key: 'featureVerification', title: '实名认证', desc: '实名认证入口与核验通道' },
               { key: 'featureAvatar', title: '头像自定义', desc: '修改头像文字与配色' },
               { key: 'featurePhoneBind', title: '手机绑定', desc: '绑定 / 更换安全手机' },
               { key: 'featureEmailChange', title: '邮箱更换', desc: '更换安全邮箱' },
-              { key: 'featureRegister', title: '开放注册', desc: '允许新用户自助注册通行证' },
+              { key: 'featureRegister', title: '开放注册', desc: '允许新用户自助注册账号' },
             ]"
             :key="item.key"
             class="setting-row feature-row"
@@ -308,18 +308,18 @@ async function saveSiteSettings() {
             <option value="console">控制台调试 · 返回 devCode 并开放模拟认证</option>
             <option value="off">关闭验证码与模拟认证</option>
           </select>
-          <p class="hint">关闭后手机 / 邮箱验证码与星际公民自助认证都不可用；「实名认证」功能开关关闭时，认证入口显示为暂未开放。</p>
+          <p class="hint">关闭后手机 / 邮箱验证码与实名用户自助认证都不可用；「实名认证」功能开关关闭时，认证入口显示为暂未开放。</p>
         </div>
 
         <div class="field">
-          <label for="recharge-presets">充值快捷金额（元）</label>
+          <label for="recharge-presets">充值快捷金额（余额）</label>
           <input id="recharge-presets" v-model="siteForm.rechargePresets" class="input" placeholder="50,100,200,500,1000" />
           <p class="hint">1–8 个金额，用英文逗号分隔，仅影响前端快捷选项。</p>
         </div>
 
         <div class="settings-fields">
           <div class="field">
-            <label for="withdraw-min">提现门槛（星能）</label>
+            <label for="withdraw-min">提现门槛（余额）</label>
             <input id="withdraw-min" v-model.number="siteForm.withdrawMinYuan" class="input" type="number" min="10" max="50000" />
           </div>
           <div class="field">
@@ -332,13 +332,13 @@ async function saveSiteSettings() {
       <article class="card settings-card">
         <div class="settings-head">
           <span class="settings-icon is-cyan"><AppIcon name="mail" /></span>
-          <div><strong>客服与钱包</strong><span>帮助终端邮箱与钱包卡面尾号</span></div>
+          <div><strong>客服与钱包</strong><span>客服邮箱与钱包卡面尾号</span></div>
         </div>
 
         <div class="field">
           <label for="support-email">客服邮箱</label>
           <input id="support-email" v-model="siteForm.supportEmail" class="input" type="email" placeholder="support@inu.space" />
-          <p class="hint">用于帮助终端、补给站与安全中心的客服入口。</p>
+          <p class="hint">用于帮助中心、积分商城与安全中心的客服入口。</p>
         </div>
 
         <div class="field">
@@ -373,7 +373,7 @@ async function saveSiteSettings() {
             class="input modal-textarea"
             rows="2"
             maxlength="200"
-            placeholder="例如：星际网络正在升级，预计 30 分钟后恢复。"
+            placeholder="例如：服务正在升级，预计 30 分钟后恢复。"
           />
         </div>
       </article>

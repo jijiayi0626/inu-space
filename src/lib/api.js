@@ -17,7 +17,7 @@ function readError(payload, status) {
   const error = payload?.error;
   if (error?.message) return error;
   if (status === 401) return { code: 'UNAUTHORIZED', message: '登录状态已失效，请重新登录' };
-  return { code: 'REQUEST_FAILED', message: '星际网络暂时波动，请稍后重试' };
+  return { code: 'REQUEST_FAILED', message: '服务暂时不可用，请稍后重试' };
 }
 
 async function rawRequest(path, { method = 'GET', body } = {}) {
@@ -34,7 +34,7 @@ async function rawRequest(path, { method = 'GET', body } = {}) {
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch {
-    throw new ApiError(0, 'NETWORK', '无法连接星际网络，请检查网络后重试');
+    throw new ApiError(0, 'NETWORK', '无法连接服务，请检查网络后重试');
   }
 
   let payload = null;

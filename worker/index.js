@@ -1,4 +1,4 @@
-// INU 星际通行证 · Cloudflare Workers API
+// INU 账号中心 · Cloudflare Workers API
 // Hono + D1 + Static Assets。所有页面数据通过单个聚合接口返回，
 // 配合前端 30 秒缓存，显著减少 Function 调用次数。
 
@@ -143,7 +143,7 @@ function parseUserAgent(value) {
     osName: '未知系统',
     osVersion: '',
     kind: 'laptop',
-    name: '星际终端',
+    name: '登录设备',
   };
   if (!ua) {
     result.label = result.name;
@@ -316,7 +316,7 @@ async function addSecurityLog(db, userId, event, detail, tone = 'green', icon = 
     .run();
 }
 
-async function addActivity(db, userId, title, detail, tone = 'blue', icon = 'i-spark') {
+async function addActivity(db, userId, title, detail, tone = 'blue', icon = 'i-check') {
   await db
     .prepare(
       'INSERT INTO activities (user_id, title, detail, tone, icon, occurred_at) VALUES (?, ?, ?, ?, ?, ?)',
@@ -545,8 +545,8 @@ const SITE_DEFAULTS = {
   noticeEnabled: false,
   noticeText: '',
   noticeLevel: 'info',
-  footerText: '© 2026 INU 无限宇宙 · 星际通行证',
-  loginWelcome: '使用你的 INU 星际档案继续旅程。',
+  footerText: '© 2026 INU 账号中心',
+  loginWelcome: '登录后继续管理你的资料与安全。',
   supportEmail: 'support@inu.space',
   walletCardLast4: '0721',
   featureRecharge: true,
@@ -909,11 +909,11 @@ async function fetchOAuthIdentity(provider, accessToken) {
 function cleanDisplayName(value, fallback) {
   const raw = String(value || '').replace(/[\u0000-\u001f\u007f]/g, '').trim();
   const name = Array.from(raw).slice(0, 24).join('');
-  return name || Array.from(String(fallback || '星际旅者')).slice(0, 24).join('');
+  return name || Array.from(String(fallback || '旅者')).slice(0, 24).join('');
 }
 
 function avatarTextOf(name) {
-  return Array.from(name)[0] || '星';
+  return Array.from(name)[0] || '用';
 }
 
 function randomDigits(size) {
@@ -960,7 +960,7 @@ async function findOrCreateOAuthUser(c, provider, identity) {
              email, password_hash, display_name, inu_id, orbit_code, region, bio, avatar_text,
              level, member_tier, particles, star_energy_cents, miles, verified, phone,
              two_fa, guard_geo, guard_device, guard_sensitive
-           ) VALUES (?, ?, ?, ?, ?, '', '', ?, 1, 'stardust', 0, 0, 0, 0, NULL, 0, 1, 1, 0)`,
+           ) VALUES (?, ?, ?, ?, ?, '', '', ?, 1, 'basic', 0, 0, 0, 0, NULL, 0, 1, 1, 0)`,
         )
         .bind(identity.email, `oauth$${randomBase64Url(24)}`, name, inuId, orbit, avatarTextOf(name))
         .run();
@@ -989,7 +989,7 @@ async function findOrCreateOAuthUser(c, provider, identity) {
 
   if (created) {
     try {
-      await addActivity(db, user.id, '加入 INU 星际网络', `通过 ${provider.label} 创建通行证`, 'blue', 'i-spark');
+      await addActivity(db, user.id, '加入 INU 服务', `通过 ${provider.label} 创建账号`, 'blue', 'i-user');
     } catch {
       /* 活动记录失败不影响登录 */
     }
@@ -1088,7 +1088,7 @@ async function requireSession(c, next) {
   const user = await getSessionUser(c);
   if (!user) {
     deleteCookie(c, SESSION_COOKIE, { path: '/' });
-    return jsonError(c, 401, 'UNAUTHORIZED', '登录状态已失效，请重新进入星际通行证');
+    return jsonError(c, 401, 'UNAUTHORIZED', '登录状态已失效，请重新登录');
   }
 
   c.set('userRow', user);
@@ -1158,7 +1158,7 @@ app.use('/api/*', async (c, next) => {
     c,
     503,
     'MAINTENANCE',
-    settings.maintenanceText || '星际网络正在维护，暂时无法保存操作，请稍后再试',
+    settings.maintenanceText || '服务正在维护，暂时无法保存操作，请稍后再试',
   );
 });
 
@@ -1249,7 +1249,7 @@ app.post('/api/auth/login', async (c) => {
 app.post('/api/auth/register', async (c) => {
   const settings = await siteSettings(c);
   if (!settings.featureRegister) {
-    return jsonError(c, 403, 'REGISTER_DISABLED', '星际通行证暂未开放注册，请联系管理员开通');
+    return jsonError(c, 403, 'REGISTER_DISABLED', 'INU 账号暂未开放注册，请联系管理员开通');
   }
 
   const db = c.env.DB;
@@ -1279,7 +1279,7 @@ app.post('/api/auth/register', async (c) => {
          email, password_hash, display_name, inu_id, orbit_code, region, bio, avatar_text,
          level, member_tier, particles, star_energy_cents, miles, verified, phone,
          two_fa, guard_geo, guard_device, guard_sensitive, phone_verified, email_verified, created_at
-       ) VALUES (?, ?, ?, ?, ?, '', '', ?, 1, 'stardust', 0, 0, 0, 0, NULL, 0, 1, 1, 0, 0, 1, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, '', '', ?, 1, 'basic', 0, 0, 0, 0, NULL, 0, 1, 1, 0, 0, 1, ?)`,
     )
     .bind(email, passwordHash, name, inuId, orbit, avatarTextOf(name), createdAt)
     .run();
@@ -1295,9 +1295,9 @@ app.post('/api/auth/register', async (c) => {
     )
     .bind(userId)
     .run();
-  await addActivity(db, userId, '加入 INU 星际网络', `通行证 ${inuId} 已激活`, 'blue', 'i-spark');
+  await addActivity(db, userId, '加入 INU 服务', `账号 ${inuId} 已激活`, 'blue', 'i-user');
   await addSecurityLog(db, userId, '账号注册成功', `${detectClient(c).label} · ${clientLocation(c)}`, 'green', 'i-check');
-  await pushNotification(db, userId, 'type_security', '欢迎加入 INU 星际网络', '你的星际通行证已激活，建议先完成实名认证并开启两步验证。', '/profile');
+  await pushNotification(db, userId, 'type_security', '欢迎加入 INU 服务', '你的INU 账号已激活，建议先完成实名认证并开启两步验证。', '/profile');
 
   let sessionUser = await createSessionForUser(c, user, '注册并登录');
   sessionUser = await ensureAdminAccess(c, sessionUser);
@@ -1480,8 +1480,8 @@ app.get('/api/me', async (c) => {
 /* ------------------------------------------------------------------ */
 
 const INU_OAUTH_SCOPES = [
-  { key: 'profile', label: '星际档案', description: '昵称、INU ID、轨道编号、会员等级与头像字符' },
-  { key: 'email', label: '邮箱地址', description: '星际通行证邮箱与认证状态' },
+  { key: 'profile', label: '个人资料', description: '昵称、INU ID、会员等级与头像字符' },
+  { key: 'email', label: '邮箱地址', description: 'INU 账号邮箱与认证状态' },
 ];
 const INU_OAUTH_SCOPE_KEYS = INU_OAUTH_SCOPES.map((item) => item.key);
 const INU_OAUTH_CODE_TTL_MS = 5 * 60 * 1000;
@@ -1581,7 +1581,7 @@ function oauthErrorPage(c, title, message) {
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>${escapeHtml(title)} · INU 星际通行证</title>
+<title>${escapeHtml(title)} · INU 账号中心</title>
 <style>
   :root{color-scheme:dark}
   *{box-sizing:border-box;margin:0;padding:0}
@@ -2462,7 +2462,7 @@ app.patch('/api/admin/settings', async (c) => {
       .map((item) => Number(item))
       .filter((item) => Number.isFinite(item) && item >= 1 && item <= 100000);
     if (!presets.length || presets.length > 8) {
-      return jsonError(c, 400, 'INVALID_PRESETS', '请填写 1–8 个充值金额（元）');
+      return jsonError(c, 400, 'INVALID_PRESETS', '请填写 1–8 个充值金额（余额）');
     }
     next.rechargePresets = Array.from(new Set(presets));
   }
@@ -2470,7 +2470,7 @@ app.patch('/api/admin/settings', async (c) => {
   if (body.withdrawMinCents !== undefined) {
     const value = Number(body.withdrawMinCents);
     if (!Number.isFinite(value) || value < 1000 || value > 5000000) {
-      return jsonError(c, 400, 'INVALID_WITHDRAW_MIN', '提现门槛需在 10–50000 元之间');
+      return jsonError(c, 400, 'INVALID_WITHDRAW_MIN', '提现门槛需在 10–50000 余额之间');
     }
     next.withdrawMinCents = Math.round(value);
   }
@@ -2798,7 +2798,7 @@ app.post('/api/admin/admins', async (c) => {
   if (!email) return jsonError(c, 400, 'INVALID_INPUT', '请输入要授权的账号邮箱');
 
   const user = await c.env.DB.prepare('SELECT * FROM users WHERE email = ?').bind(email).first();
-  if (!user) return jsonError(c, 404, 'USER_NOT_FOUND', '该邮箱尚未注册 INU 通行证');
+  if (!user) return jsonError(c, 404, 'USER_NOT_FOUND', '该邮箱尚未注册 INU 账号');
   const exists = await c.env.DB.prepare('SELECT 1 AS hit FROM admin_users WHERE user_id = ?')
     .bind(user.id)
     .first();
@@ -2862,7 +2862,7 @@ function readProductInput(body, base = null) {
   const priceCents =
     body.priceCents !== undefined ? Math.round(Number(body.priceCents)) : Number(base?.priceCents);
   if (!Number.isFinite(priceCents) || priceCents < 100 || priceCents > 10000000) {
-    return { error: '商品价格需在 1–100000 星能之间' };
+    return { error: '商品价格需在 1–100000 余额之间' };
   }
 
   const icon = body.icon !== undefined ? String(body.icon).trim() : base?.icon || 'i-box';
@@ -2923,7 +2923,7 @@ app.post('/api/admin/products', async (c) => {
     )
     .run();
 
-  await addAdminAudit(c, '新增补给商品', `${value.name} · ${(value.priceCents / 100).toFixed(2)} 星能`);
+  await addAdminAudit(c, '新增商品', `${value.name} · ${(value.priceCents / 100).toFixed(2)} 余额`);
   const row = await c.env.DB.prepare('SELECT * FROM products WHERE id = ?').bind(id).first();
   return ok(c, { product: serializeAdminProduct(row) });
 });
@@ -2959,7 +2959,7 @@ app.patch('/api/admin/products/:id', async (c) => {
     )
     .run();
 
-  await addAdminAudit(c, '更新补给商品', `${value.name} · ${value.active ? '上架' : '下架'}`);
+  await addAdminAudit(c, '更新商品', `${value.name} · ${value.active ? '上架' : '下架'}`);
   const row = await c.env.DB.prepare('SELECT * FROM products WHERE id = ?').bind(id).first();
   return ok(c, { product: serializeAdminProduct(row) });
 });
@@ -2970,7 +2970,7 @@ app.delete('/api/admin/products/:id', async (c) => {
   if (!existing) return jsonError(c, 404, 'NOT_FOUND', '未找到该商品');
 
   await c.env.DB.prepare('DELETE FROM products WHERE id = ?').bind(id).run();
-  await addAdminAudit(c, '删除补给商品', existing.name);
+  await addAdminAudit(c, '删除商品', existing.name);
   return ok(c, { ok: true });
 });
 
@@ -2989,7 +2989,7 @@ function readTemplateInput(body, base = null) {
 
   const rewardRaw = body.reward !== undefined ? Math.round(Number(body.reward)) : (base?.reward ?? 50);
   if (!Number.isFinite(rewardRaw) || rewardRaw < 0 || rewardRaw > 10000) {
-    return { error: '签署奖励需在 0–10000 粒子之间' };
+    return { error: '签署奖励需在 0–10000 积分之间' };
   }
 
   const sortRaw = body.sort !== undefined ? Math.round(Number(body.sort)) : (base?.sort ?? 0);
@@ -3155,7 +3155,7 @@ app.post('/api/admin/notifications', async (c) => {
   let targets;
   if (email) {
     const user = await c.env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first();
-    if (!user) return jsonError(c, 404, 'USER_NOT_FOUND', '该邮箱尚未注册 INU 通行证');
+    if (!user) return jsonError(c, 404, 'USER_NOT_FOUND', '该邮箱尚未注册 INU 账号');
     targets = [user.id];
   } else {
     const rows = await c.env.DB.prepare('SELECT id FROM users ORDER BY id ASC LIMIT 5000').all();
@@ -3180,7 +3180,7 @@ app.patch('/api/admin/orders/:id', async (c) => {
   if (!body) return jsonError(c, 400, 'INVALID_INPUT', '请求内容无法解析');
 
   const order = await db.prepare('SELECT * FROM orders WHERE id = ?').bind(id).first();
-  if (!order) return jsonError(c, 404, 'NOT_FOUND', '未找到该补给订单');
+  if (!order) return jsonError(c, 404, 'NOT_FOUND', '未找到该订单');
 
   const status = String(body.status || order.status);
   if (!['pending_payment', 'transit', 'delivered', 'cancelled'].includes(status)) {
@@ -3212,8 +3212,8 @@ app.patch('/api/admin/orders/:id', async (c) => {
       await db.prepare('UPDATE users SET star_energy_cents = ? WHERE id = ?').bind(balance, user.id).run();
       await addWalletTransaction(db, user.id, {
         kind: 'refund',
-        title: '补给订单退款',
-        detail: `订单 ${order.code} 已被取消，星能原路退回`,
+        title: '订单退款',
+        detail: `订单 ${order.code} 已被取消，余额原路退回`,
         amountCents: order.energy_cents,
         balanceAfter: balance,
         ref: order.code,
@@ -3223,8 +3223,8 @@ app.patch('/api/admin/orders/:id', async (c) => {
         db,
         user.id,
         'type_supply',
-        '补给订单已取消',
-        `订单 ${order.code} 已取消，${(order.energy_cents / 100).toFixed(2)} 星能已退回钱包。`,
+        '订单已取消',
+        `订单 ${order.code} 已取消，${(order.energy_cents / 100).toFixed(2)} 余额已退回钱包。`,
         '/wallet',
       );
       refunded = order.energy_cents;
@@ -3244,8 +3244,8 @@ app.patch('/api/admin/orders/:id', async (c) => {
       db,
       order.user_id,
       'type_supply',
-      '补给已送达',
-      `订单 ${order.code} 已完成签收，感谢你的星际旅行。`,
+      '商品已送达',
+      `订单 ${order.code} 已完成签收，感谢你的旅行。`,
       '/supply',
     );
   }
@@ -3255,12 +3255,12 @@ app.patch('/api/admin/orders/:id', async (c) => {
       order.user_id,
       'type_supply',
       '物流信息已更新',
-      `订单 ${order.code} 运单号 ${trackingNo} · ${carrier || '星际快递'}`,
+      `订单 ${order.code} 运单号 ${trackingNo} · ${carrier || '快递'}`,
       '/supply',
     );
   }
 
-  await addAdminAudit(c, '更新补给订单', `${order.code} → ${status}${refunded ? ' · 已退款' : ''}`);
+  await addAdminAudit(c, '更新订单', `${order.code} → ${status}${refunded ? ' · 已退款' : ''}`);
   const updated = await db.prepare('SELECT * FROM orders WHERE id = ?').bind(id).first();
   return ok(c, { order: serializeOrder(updated), refunded });
 });
@@ -3294,10 +3294,10 @@ app.patch('/api/admin/withdrawals/:id', async (c) => {
       row.user_id,
       'type_energy',
       '提现已完成',
-      `${(row.amount_cents / 100).toFixed(2)} 星能已转入收款账户。`,
+      `${(row.amount_cents / 100).toFixed(2)} 余额已转入收款账户。`,
       '/wallet',
     );
-    await addSecurityLog(db, row.user_id, '提现复核通过', `${row.code} · ${(row.amount_cents / 100).toFixed(2)} 星能`, 'green', 'i-check');
+    await addSecurityLog(db, row.user_id, '提现复核通过', `${row.code} · ${(row.amount_cents / 100).toFixed(2)} 余额`, 'green', 'i-check');
   } else {
     const user = await db.prepare('SELECT * FROM users WHERE id = ?').bind(row.user_id).first();
     const balance = (user?.star_energy_cents || 0) + row.amount_cents;
@@ -3322,13 +3322,13 @@ app.patch('/api/admin/withdrawals/:id', async (c) => {
       row.user_id,
       'type_energy',
       '提现申请未通过',
-      `${(row.amount_cents / 100).toFixed(2)} 星能已退回钱包。${note ? `原因：${note}` : ''}`,
+      `${(row.amount_cents / 100).toFixed(2)} 余额已退回钱包。${note ? `原因：${note}` : ''}`,
       '/wallet',
     );
-    await addSecurityLog(db, row.user_id, '提现复核驳回', `${row.code} · 已退回星能`, 'orange', 'i-shield');
+    await addSecurityLog(db, row.user_id, '提现复核驳回', `${row.code} · 已退回余额`, 'orange', 'i-shield');
   }
 
-  await addAdminAudit(c, action === 'approve' ? '通过提现申请' : '驳回提现申请', `${row.code} · ${(row.amount_cents / 100).toFixed(2)} 星能`);
+  await addAdminAudit(c, action === 'approve' ? '通过提现申请' : '驳回提现申请', `${row.code} · ${(row.amount_cents / 100).toFixed(2)} 余额`);
   return ok(c, { ok: true, status: action === 'approve' ? 'paid' : 'rejected' });
 });
 
@@ -3408,7 +3408,7 @@ app.patch('/api/admin/users/:id', async (c) => {
   if (body.verified !== undefined) {
     updates.push('verified = ?');
     binds.push(body.verified ? 1 : 0);
-    notes.push(body.verified ? '已标记为星际公民' : '已取消星际公民认证');
+    notes.push(body.verified ? '已标记为实名用户' : '已取消实名认证');
   }
 
   const passwordChanged = body.password !== undefined && String(body.password) !== '';
@@ -3426,24 +3426,24 @@ app.patch('/api/admin/users/:id', async (c) => {
 
   const particlesDelta = body.particlesDelta === undefined ? 0 : Math.round(Number(body.particlesDelta));
   if (!Number.isFinite(particlesDelta) || Math.abs(particlesDelta) > 1000000) {
-    return jsonError(c, 400, 'INVALID_PARTICLES', '粒子调整值无效');
+    return jsonError(c, 400, 'INVALID_PARTICLES', '积分调整值无效');
   }
   if (particlesDelta) {
     nextParticles = Math.max(0, user.particles + particlesDelta);
     updates.push('particles = ?');
     binds.push(nextParticles);
-    notes.push(`粒子 ${nextParticles - user.particles >= 0 ? '+' : ''}${nextParticles - user.particles}`);
+    notes.push(`积分 ${nextParticles - user.particles >= 0 ? '+' : ''}${nextParticles - user.particles}`);
   }
 
   const balanceDelta = body.balanceDelta === undefined ? 0 : Math.round(Number(body.balanceDelta));
   if (!Number.isFinite(balanceDelta) || Math.abs(balanceDelta) > 100000000) {
-    return jsonError(c, 400, 'INVALID_BALANCE', '星能调整值无效');
+    return jsonError(c, 400, 'INVALID_BALANCE', '余额调整值无效');
   }
   if (balanceDelta) {
     nextBalance = Math.max(0, user.star_energy_cents + balanceDelta);
     updates.push('star_energy_cents = ?');
     binds.push(nextBalance);
-    notes.push(`星能 ${nextBalance - user.star_energy_cents >= 0 ? '+' : ''}${(nextBalance - user.star_energy_cents) / 100}`);
+    notes.push(`余额 ${nextBalance - user.star_energy_cents >= 0 ? '+' : ''}${(nextBalance - user.star_energy_cents) / 100}`);
   }
 
   if (!updates.length) return jsonError(c, 400, 'EMPTY_UPDATE', '没有需要更新的内容');
@@ -3466,8 +3466,8 @@ app.patch('/api/admin/users/:id', async (c) => {
   if (nextBalance !== user.star_energy_cents) {
     await addWalletTransaction(db, id, {
       kind: 'admin',
-      title: '管理员调整星能',
-      detail: notes.filter((item) => item.startsWith('星能')).join(' · '),
+      title: '管理员调整余额',
+      detail: notes.filter((item) => item.startsWith('余额')).join(' · '),
       amountCents: nextBalance - user.star_energy_cents,
       balanceAfter: nextBalance,
     });
@@ -3475,7 +3475,7 @@ app.patch('/api/admin/users/:id', async (c) => {
   if (nextParticles !== user.particles) {
     await db
       .prepare('INSERT INTO particle_logs (user_id, label, delta, balance, occurred_at) VALUES (?, ?, ?, ?, ?)')
-      .bind(id, '管理员调整粒子', nextParticles - user.particles, nextParticles, nowIso())
+      .bind(id, '管理员调整积分', nextParticles - user.particles, nextParticles, nowIso())
       .run();
   }
 
@@ -3618,7 +3618,7 @@ app.patch('/api/profile', async (c) => {
     return jsonError(c, 400, 'INVALID_NAME', '昵称需为 2–16 个字符');
   }
   if ([...bio].length > 60) {
-    return jsonError(c, 400, 'INVALID_BIO', '星际签名最多 60 个字符');
+    return jsonError(c, 400, 'INVALID_BIO', '个人签名最多 60 个字符');
   }
   if (nextEmail !== String(user.email).toLowerCase()) {
     return jsonError(c, 400, 'EMAIL_CHANGE_REQUIRES_VERIFY', '更换邮箱需要通过验证码校验');
@@ -3647,7 +3647,7 @@ app.patch('/api/profile', async (c) => {
 
   if (nameChanged) {
     await addSecurityLog(db, user.id, '昵称已更新', `${user.display_name} → ${name}`, 'blue', 'i-pen');
-    await addActivity(db, user.id, '更新星际档案', `昵称已改为 ${name}`, 'blue', 'i-pen');
+    await addActivity(db, user.id, '更新个人资料', `昵称已改为 ${name}`, 'blue', 'i-pen');
   }
 
   const updated = await db.prepare('SELECT * FROM users WHERE id = ?').bind(user.id).first();
@@ -3676,7 +3676,7 @@ app.post('/api/profile/avatar', async (c) => {
   await c.env.DB.prepare('UPDATE users SET avatar_text = ?, avatar_tone = ? WHERE id = ?')
     .bind(text, tone, user.id)
     .run();
-  await addActivity(c.env.DB, user.id, '更新星际头像', `头像已更换为「${text}」`, 'purple', 'i-user');
+  await addActivity(c.env.DB, user.id, '更新头像', `头像已更换为「${text}」`, 'purple', 'i-user');
 
   const updated = await c.env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(user.id).first();
   return ok(c, { user: await serializeUserFor(c, updated) });
@@ -3696,7 +3696,7 @@ app.post('/api/profile/phone/code', async (c) => {
   const conflict = await c.env.DB.prepare('SELECT id FROM users WHERE phone = ? AND id <> ?')
     .bind(phone, user.id)
     .first();
-  if (conflict) return jsonError(c, 409, 'PHONE_TAKEN', '该手机号已绑定其他星际档案');
+  if (conflict) return jsonError(c, 409, 'PHONE_TAKEN', '该手机号已绑定其他个人资料');
 
   const result = await issueVerificationCode(c, user, 'phone', phone);
   if (result.error) return result.error;
@@ -3761,7 +3761,7 @@ app.post('/api/profile/email/code', async (c) => {
   const conflict = await c.env.DB.prepare('SELECT id FROM users WHERE email = ? AND id <> ?')
     .bind(email, user.id)
     .first();
-  if (conflict) return jsonError(c, 409, 'EMAIL_TAKEN', '该邮箱已被其他星际档案使用');
+  if (conflict) return jsonError(c, 409, 'EMAIL_TAKEN', '该邮箱已被其他个人资料使用');
 
   const result = await issueVerificationCode(c, user, 'email', email);
   if (result.error) return result.error;
@@ -3785,7 +3785,7 @@ app.post('/api/profile/email/verify', async (c) => {
   const conflict = await c.env.DB.prepare('SELECT id FROM users WHERE email = ? AND id <> ?')
     .bind(email, user.id)
     .first();
-  if (conflict) return jsonError(c, 409, 'EMAIL_TAKEN', '该邮箱已被其他星际档案使用');
+  if (conflict) return jsonError(c, 409, 'EMAIL_TAKEN', '该邮箱已被其他个人资料使用');
 
   const oldEmail = user.email;
   await c.env.DB.prepare('UPDATE users SET email = ?, email_verified = 1 WHERE id = ?')
@@ -3804,15 +3804,15 @@ app.post('/api/profile/verify', async (c) => {
   const user = c.get('userRow');
   const settings = await siteSettings(c);
   if (!settings.featureVerification || settings.verificationMode === 'off') {
-    return jsonError(c, 503, 'VERIFICATION_UNAVAILABLE', '星际公民认证通道已关闭，请联系管理员');
+    return jsonError(c, 503, 'VERIFICATION_UNAVAILABLE', '实名认证通道已关闭，请联系管理员');
   }
   if (user.verified) {
-    return ok(c, { user: await serializeUserFor(c, user), message: '星际公民身份已认证' });
+    return ok(c, { user: await serializeUserFor(c, user), message: '实名用户身份已认证' });
   }
 
   await db.prepare('UPDATE users SET verified = 1 WHERE id = ?').bind(user.id).run();
-  await addSecurityLog(db, user.id, '星际公民认证完成', '身份核验通过 · 权限已解锁', 'green', 'i-idcard');
-  await addActivity(db, user.id, '完成星际公民认证', '补给站下单与星能提现已解锁', 'purple', 'i-idcard');
+  await addSecurityLog(db, user.id, '实名认证完成', '身份核验通过 · 权限已解锁', 'green', 'i-idcard');
+  await addActivity(db, user.id, '完成实名认证', '积分商城下单与余额提现已解锁', 'purple', 'i-idcard');
 
   const updated = await db.prepare('SELECT * FROM users WHERE id = ?').bind(user.id).first();
   return ok(c, { user: await serializeUserFor(c, updated) });
@@ -3879,9 +3879,8 @@ app.get('/api/security', async (c) => {
     user: await serializeUserFor(c, user),
     score,
     scoreLabel: score >= 90 ? '防护严密' : '仍有提升空间',
-    percentile: score >= 90 ? '高于 92% 星际公民' : '高于 78% 星际公民',
     items: [
-      { label: '密码强度', value: '中等' },
+      { label: '登录密码', value: '已设置' },
       { label: '两步验证', value: user.two_fa ? '已开启' : '未开启' },
       { label: '绑定手机', value: user.phone ? (user.phone_verified ? '已验证' : '待验证') : '未绑定' },
     ],
@@ -4001,7 +4000,7 @@ app.patch('/api/security/guards', async (c) => {
   await db.prepare(`UPDATE users SET ${column} = ? WHERE id = ?`).bind(enabled ? 1 : 0, user.id).run();
   const labels = {
     geo: '异地登录验证',
-    device: '新终端验证',
+    device: '新设备验证',
     sensitive: '敏感操作二次确认',
   };
   await addSecurityLog(
@@ -4042,12 +4041,12 @@ app.post('/api/security/password', async (c) => {
     .bind(user.id, c.get('tokenHash'))
     .run();
 
-  await addSecurityLog(db, user.id, '登录密码已更新', '其余终端已退出登录', 'green', 'i-lock');
-  return ok(c, { ok: true, message: '登录密码已更新，星际密钥已同步' });
+  await addSecurityLog(db, user.id, '登录密码已更新', '其余设备已退出登录', 'green', 'i-lock');
+  return ok(c, { ok: true, message: '登录密码已更新，密钥已同步' });
 });
 
 /* ------------------------------------------------------------------ */
-/* 星际终端                                                             */
+/* 登录设备                                                             */
 /* ------------------------------------------------------------------ */
 
 app.get('/api/devices', async (c) => {
@@ -4062,7 +4061,7 @@ app.get('/api/devices', async (c) => {
       .all(),
     db
       .prepare(
-        `SELECT rowid AS id, token_hash, created_at, expires_at, ip, location, user_agent
+        `SELECT rowid AS id, token_hash, created_at, expires_at, ip, location, user_agent, name
          FROM sessions WHERE user_id = ? AND expires_at > ?
          ORDER BY created_at DESC LIMIT 20`,
       )
@@ -4078,7 +4077,9 @@ app.get('/api/devices', async (c) => {
       return {
         id: row.id,
         current: row.token_hash === currentHash,
-        name: client.name,
+        name: row.name || client.name,
+        defaultName: client.name,
+        customName: Boolean(row.name),
         browser: client.browser,
         browserName: client.browserName,
         browserVersion: client.browserVersion,
@@ -4121,6 +4122,32 @@ app.get('/api/devices/logs', async (c) => {
   });
 });
 
+app.patch('/api/devices/sessions/:id/name', async (c) => {
+  const db = c.env.DB;
+  const user = c.get('userRow');
+  const id = Number(c.req.param('id'));
+  if (!Number.isInteger(id) || id <= 0) {
+    return jsonError(c, 400, 'INVALID_ID', '会话编号无效');
+  }
+  const body = await readJson(c);
+  if (!body) return jsonError(c, 400, 'INVALID_INPUT', '请求内容无法解析');
+  const name = String(body.name || '').trim();
+  if ([...name].length > 24) {
+    return jsonError(c, 400, 'INVALID_NAME', '会话名称最多 24 个字符');
+  }
+
+  const row = await db
+    .prepare('SELECT rowid AS id, user_agent, location FROM sessions WHERE rowid = ? AND user_id = ?')
+    .bind(id, user.id)
+    .first();
+  if (!row) return jsonError(c, 404, 'NOT_FOUND', '该会话已失效');
+
+  await db.prepare('UPDATE sessions SET name = ? WHERE rowid = ? AND user_id = ?').bind(name || null, id, user.id).run();
+  const client = parseUserAgent(row.user_agent);
+  await addSecurityLog(db, user.id, '会话名称已更新', `${client.label} · ${name || client.name}`, 'blue', 'i-pen');
+  return ok(c, { ok: true, name: name || client.name, custom: Boolean(name) });
+});
+
 app.post('/api/devices/sessions/:id/revoke', async (c) => {
   const db = c.env.DB;
   const user = c.get('userRow');
@@ -4154,29 +4181,29 @@ app.post('/api/devices', async (c) => {
   const kind = String(body.kind || 'laptop');
   const os = String(body.os || '').trim() || detectDevice(c);
   if ([...name].length < 2 || [...name].length > 24) {
-    return jsonError(c, 400, 'INVALID_NAME', '终端名称需为 2–24 个字符');
+    return jsonError(c, 400, 'INVALID_NAME', '设备名称需为 2–24 个字符');
   }
   if (!['laptop', 'phone', 'tablet'].includes(kind)) {
-    return jsonError(c, 400, 'INVALID_KIND', '未知的终端类型');
+    return jsonError(c, 400, 'INVALID_KIND', '未知的设备类型');
   }
 
   const count = await db.prepare('SELECT COUNT(*) AS count FROM devices WHERE user_id = ?').bind(user.id).first();
   if ((count?.count || 0) >= 20) {
-    return jsonError(c, 400, 'DEVICE_LIMIT', '最多只能绑定 20 台星际终端，请先解绑不用的终端');
+    return jsonError(c, 400, 'DEVICE_LIMIT', '最多只能绑定 20 台登录设备，请先解绑不用的设备');
   }
 
   const now = nowIso();
   const inserted = await db
     .prepare(
       `INSERT INTO devices (user_id, name, kind, os, ip, location, method, last_active_at, trusted, is_current)
-       VALUES (?, ?, ?, ?, ?, ?, '当前终端验证', ?, 1, 0)`,
+       VALUES (?, ?, ?, ?, ?, ?, '当前设备验证', ?, 1, 0)`,
     )
     .bind(user.id, name, kind, os, clientIp(c), clientLocation(c), now)
     .run();
 
-  await addSecurityLog(db, user.id, '新增星际终端', `${name} · ${clientLocation(c)}`, 'blue', 'i-device');
-  await addActivity(db, user.id, '绑定星际终端', `${name} 已加入可信终端`, 'orange', 'i-device');
-  await pushNotification(db, user.id, 'type_security', '新终端已绑定', `${name} 已加入你的可信终端列表。`, '/devices');
+  await addSecurityLog(db, user.id, '新增登录设备', `${name} · ${clientLocation(c)}`, 'blue', 'i-device');
+  await addActivity(db, user.id, '绑定登录设备', `${name} 已加入可信设备`, 'orange', 'i-device');
+  await pushNotification(db, user.id, 'type_security', '新设备已登录', `${name} 已加入你的登录设备列表。`, '/devices');
 
   const row = await db.prepare('SELECT * FROM devices WHERE id = ?').bind(inserted.meta?.last_row_id).first();
   return ok(c, { device: serializeDevice(row) });
@@ -4191,12 +4218,12 @@ app.post('/api/devices/:id/unbind', async (c) => {
     .bind(id, user.id)
     .first();
 
-  if (!device) return jsonError(c, 404, 'NOT_FOUND', '未找到该星际终端');
+  if (!device) return jsonError(c, 404, 'NOT_FOUND', '未找到该登录设备');
   if (device.is_current) return jsonError(c, 400, 'CURRENT_DEVICE', '当前设备无法直接解绑');
 
   await db.prepare('DELETE FROM devices WHERE id = ?').bind(id).run();
-  await addSecurityLog(db, user.id, '终端已解绑', `${device.name} · ${device.location}`, 'orange', 'i-device');
-  await addActivity(db, user.id, '解绑星际终端', `${device.name} 已退出星际网络`, 'orange', 'i-device');
+  await addSecurityLog(db, user.id, '设备已解绑', `${device.name} · ${device.location}`, 'orange', 'i-device');
+  await addActivity(db, user.id, '解绑登录设备', `${device.name} 已退出服务`, 'orange', 'i-device');
 
   return ok(c, { ok: true });
 });
@@ -4210,7 +4237,7 @@ app.post('/api/devices/logout-others', async (c) => {
     .bind(user.id, tokenHash)
     .run();
 
-  await addSecurityLog(db, user.id, '其余终端已退出', '仅保留当前会话', 'blue', 'i-shield');
+  await addSecurityLog(db, user.id, '其余设备已退出', '仅保留当前会话', 'blue', 'i-shield');
   return ok(c, { ok: true, removed: result.meta?.changes || 0 });
 });
 
@@ -4269,7 +4296,7 @@ app.get('/api/notifications', async (c) => {
       if (item.key === 'channel_push') {
         return {
           ...item,
-          sub: `${deviceTotal} 台可信终端 · 实时推送`,
+          sub: `${deviceTotal} 台登录设备 · 实时推送`,
           enabled: prefMap[item.key] ?? true,
           available: true,
           status: { label: prefMap[item.key] ? '已开启' : '已关闭', tone: prefMap[item.key] ? 'green' : 'gray' },
@@ -4436,13 +4463,20 @@ app.get('/api/member', async (c) => {
     .prepare('SELECT * FROM particle_logs WHERE user_id = ? ORDER BY occurred_at DESC LIMIT 5')
     .bind(user.id)
     .all();
+  const gained = await db
+    .prepare(
+      "SELECT COALESCE(SUM(delta), 0) AS total FROM particle_logs WHERE user_id = ? AND delta > 0 AND occurred_at >= datetime('now', '-30 days')",
+    )
+    .bind(user.id)
+    .first();
+  const dailyRate = Math.max(0, Number(gained?.total || 0)) / 30;
 
   return ok(c, {
-    tier: { ...tier, validUntil: '2027-10-10' },
+    tier,
     next,
     progress,
     remaining,
-    estimatedDays: remaining ? Math.ceil(remaining / 113) : 0,
+    estimatedDays: remaining && dailyRate > 0 ? Math.ceil(remaining / dailyRate) : null,
     benefits: BENEFITS.map((item) => ({ ...item, unlocked: user.particles >= item.min })),
     tiers: TIERS.map((item) => ({
       ...item,
@@ -4457,10 +4491,10 @@ app.get('/api/member', async (c) => {
       occurredAt: row.occurred_at,
     })),
     rules: [
-      { title: '等级如何计算', text: '会员等级由累计 INU 粒子决定：星尘 0、行星 10,000、恒星 50,000、星系 200,000。等级只升不降，粒子消费不会导致降级。' },
-      { title: '粒子如何获得', text: '签署协议、兑换补给、参与星际活动都会获得粒子。补给消费按 100 星能返 5 粒子计算，签署协议奖励以协议配置为准。' },
-      { title: '会员折扣', text: '补给站结算时自动应用当前等级折扣，页面展示的会员价即最终星能价格。' },
-      { title: '有效期', text: '粒子自获得之日起 12 个月内有效，过期后按 100:1 自动折算为星能，折算结果会写入钱包流水。' },
+      { title: '等级如何计算', text: '会员等级由累计 积分决定：普通 0、白银 10,000、黄金 50,000、铂金 200,000。等级只升不降，积分消费不会导致降级。' },
+      { title: '积分如何获得', text: '签署协议、兑换商品、参与活动都会获得积分。商品消费按 100 余额返 5 积分计算，签署协议奖励以协议配置为准。' },
+      { title: '会员折扣', text: '积分商城结算时自动应用当前等级折扣，页面展示的会员价即最终余额价格。' },
+      { title: '有效期', text: '积分自获得之日起 12 个月内有效，过期后按 100:1 自动折算为余额，折算结果会写入钱包流水。' },
     ],
   });
 });
@@ -4574,7 +4608,7 @@ app.get('/api/agreements/:id/export', async (c) => {
     `- 版本：${row.version}`,
     `- 签署状态：${row.status === 'signed' ? '已签署' : '待签署'}`,
     `- 签署时间：${row.signed_at || '—'}`,
-    `- 星际 ID：${user.inu_id}`,
+    `- INU ID：${user.inu_id}`,
     `- 导出时间：${nowIso()}`,
     '',
     '---',
@@ -4583,7 +4617,7 @@ app.get('/api/agreements/:id/export', async (c) => {
     '',
     '---',
     '',
-    '本文件由 INU 星际通行证生成，签署记录可在协议中心查询。',
+    '本文件由 INU 账号中心生成，签署记录可在协议中心查询。',
   ].join('\n');
 
   return new Response(body, {
@@ -4642,7 +4676,7 @@ app.post('/api/agreements/:id/sign', async (c) => {
     user.id,
     'type_member',
     '协议签署完成',
-    `《${agreement.title}》已归档，获得 ${reward} INU 粒子。`,
+    `《${agreement.title}》已归档，获得 ${reward} 积分。`,
     '/agreements',
   );
 
@@ -4660,7 +4694,7 @@ app.post('/api/agreements/:id/sign', async (c) => {
 });
 
 /* ------------------------------------------------------------------ */
-/* 星际补给站                                                           */
+/* 积分商城                                                           */
 /* ------------------------------------------------------------------ */
 
 function serializeOrder(row) {
@@ -4697,7 +4731,7 @@ async function createSupplyOrderFor(c, user, product) {
   const db = c.env.DB;
   const settings = await siteSettings(c);
   if (!settings.featureSupply) {
-    return { error: jsonError(c, 503, 'FEATURE_DISABLED', '星际补给站暂未开放') };
+    return { error: jsonError(c, 503, 'FEATURE_DISABLED', '积分商城暂未开放') };
   }
   if (!user.verified) {
     const verifyClosed = !settings.featureVerification || settings.verificationMode === 'off';
@@ -4706,23 +4740,23 @@ async function createSupplyOrderFor(c, user, product) {
         c,
         403,
         'VERIFY_REQUIRED',
-        verifyClosed ? '实名认证通道已关闭，请联系管理员' : '完成星际公民认证后才可下单',
+        verifyClosed ? '实名认证通道已关闭，请联系管理员' : '完成实名认证后才可下单',
       ),
     };
   }
   if (Number(product.stock) === 0) {
-    return { error: jsonError(c, 400, 'OUT_OF_STOCK', '该补给物资已售罄') };
+    return { error: jsonError(c, 400, 'OUT_OF_STOCK', '该商品物资已售罄') };
   }
 
   const address = await db.prepare('SELECT * FROM addresses WHERE user_id = ?').bind(user.id).first();
   if (!address) {
-    return { error: jsonError(c, 400, 'ADDRESS_REQUIRED', '请先填写收货坐标后再兑换补给') };
+    return { error: jsonError(c, 400, 'ADDRESS_REQUIRED', '请先填写收货地址后再兑换商品') };
   }
 
   const tier = tierOf(user);
   const price = Math.round(product.priceCents * (tier.rate || 0.95));
   if (user.star_energy_cents < price) {
-    return { error: jsonError(c, 400, 'INSUFFICIENT_FUNDS', '星能余额不足，请先补充星能') };
+    return { error: jsonError(c, 400, 'INSUFFICIENT_FUNDS', '账户余额不足，请先补充余额') };
   }
 
   const now = new Date(Date.now() + 8 * 3600 * 1000);
@@ -4746,7 +4780,7 @@ async function createSupplyOrderFor(c, user, product) {
     .prepare(
       `INSERT INTO orders
          (user_id, code, product_id, item, energy_cents, status, created_at, address, tracking_no, carrier, updated_at, paid_at)
-       VALUES (?, ?, ?, ?, ?, 'transit', ?, ?, ?, '星际快递', ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, 'transit', ?, ?, ?, '快递', ?, ?)`,
     )
     .bind(user.id, code, product.id, `${product.name} ×1`, price, createdAt, snapshot, trackingNo, createdAt, createdAt)
     .run();
@@ -4773,13 +4807,13 @@ async function createSupplyOrderFor(c, user, product) {
     .prepare('INSERT INTO particle_logs (user_id, label, delta, balance, occurred_at) VALUES (?, ?, ?, ?, ?)')
     .bind(user.id, `兑换${product.name}`, reward, particles, createdAt)
     .run();
-  await addActivity(db, user.id, '兑换星际补给', `${product.name} · 消耗 ${(price / 100).toFixed(2)} 星能`, 'blue', 'i-box');
+  await addActivity(db, user.id, '兑换商品', `${product.name} · 消耗 ${(price / 100).toFixed(2)} 余额`, 'blue', 'i-box');
   await pushNotification(
     db,
     user.id,
     'type_supply',
-    '补给已进入跃迁队列',
-    `${product.name} 已支付，订单 ${code} 预计 1–3 个星际日送达。`,
+    '商品已进入配送流程',
+    `${product.name} 已支付，订单 ${code} 预计 1–3 个工作日送达。`,
     '/supply',
   );
 
@@ -4858,13 +4892,13 @@ app.get('/api/supply/orders/:id', async (c) => {
   const row = await c.env.DB.prepare('SELECT * FROM orders WHERE id = ? AND user_id = ?')
     .bind(id, c.get('userRow').id)
     .first();
-  if (!row) return jsonError(c, 404, 'NOT_FOUND', '未找到该补给订单');
+  if (!row) return jsonError(c, 404, 'NOT_FOUND', '未找到该订单');
 
-  const timeline = [{ at: row.created_at, title: '订单创建', detail: '补给订单已提交' }];
-  if (row.paid_at) timeline.push({ at: row.paid_at, title: '星能支付完成', detail: `${(row.energy_cents / 100).toFixed(2)} 星能已扣除` });
-  if (row.tracking_no) timeline.push({ at: row.updated_at || row.created_at, title: '已交付星际快递', detail: `运单号 ${row.tracking_no}` });
-  if (row.status === 'delivered' && row.delivered_at) timeline.push({ at: row.delivered_at, title: '补给已送达', detail: '订单已完成' });
-  if (row.status === 'cancelled') timeline.push({ at: row.cancelled_at || row.updated_at, title: '订单已取消', detail: '星能未扣除或已退回' });
+  const timeline = [{ at: row.created_at, title: '订单创建', detail: '订单已提交' }];
+  if (row.paid_at) timeline.push({ at: row.paid_at, title: '余额支付完成', detail: `${(row.energy_cents / 100).toFixed(2)} 余额已扣除` });
+  if (row.tracking_no) timeline.push({ at: row.updated_at || row.created_at, title: '已交付快递', detail: `运单号 ${row.tracking_no}` });
+  if (row.status === 'delivered' && row.delivered_at) timeline.push({ at: row.delivered_at, title: '商品已送达', detail: '订单已完成' });
+  if (row.status === 'cancelled') timeline.push({ at: row.cancelled_at || row.updated_at, title: '订单已取消', detail: '余额未扣除或已退回' });
 
   return ok(c, { order: { ...serializeOrder(row), timeline } });
 });
@@ -4875,7 +4909,7 @@ app.post('/api/supply/orders', async (c) => {
   const body = await readJson(c);
   const products = await listProducts(c.env.DB);
   const product = products.find((item) => item.id === body?.productId);
-  if (!product) return jsonError(c, 404, 'NOT_FOUND', '该补给物资已离开货架');
+  if (!product) return jsonError(c, 404, 'NOT_FOUND', '该商品物资已离开货架');
 
   const result = await createSupplyOrderFor(c, user, product);
   if (result.error) return result.error;
@@ -4888,11 +4922,11 @@ app.post('/api/supply/orders/:id/rebuy', async (c) => {
   const order = await c.env.DB.prepare('SELECT * FROM orders WHERE id = ? AND user_id = ?')
     .bind(id, user.id)
     .first();
-  if (!order) return jsonError(c, 404, 'NOT_FOUND', '未找到该补给订单');
+  if (!order) return jsonError(c, 404, 'NOT_FOUND', '未找到该订单');
 
   const products = await listProducts(c.env.DB);
   const product = products.find((item) => item.id === order.product_id);
-  if (!product) return jsonError(c, 404, 'NOT_FOUND', '该补给物资已下架');
+  if (!product) return jsonError(c, 404, 'NOT_FOUND', '该商品物资已下架');
 
   const result = await createSupplyOrderFor(c, user, product);
   if (result.error) return result.error;
@@ -4906,22 +4940,22 @@ app.post('/api/supply/orders/:id/pay', async (c) => {
   const order = await db.prepare('SELECT * FROM orders WHERE id = ? AND user_id = ?')
     .bind(id, user.id)
     .first();
-  if (!order) return jsonError(c, 404, 'NOT_FOUND', '未找到该补给订单');
+  if (!order) return jsonError(c, 404, 'NOT_FOUND', '未找到该订单');
   if (order.status !== 'pending_payment') {
     return jsonError(c, 409, 'INVALID_STATUS', '该订单当前无需支付');
   }
   if (user.star_energy_cents < order.energy_cents) {
-    return jsonError(c, 400, 'INSUFFICIENT_FUNDS', '星能余额不足，请先补充星能');
+    return jsonError(c, 400, 'INSUFFICIENT_FUNDS', '账户余额不足，请先补充余额');
   }
   const address = await db.prepare('SELECT * FROM addresses WHERE user_id = ?').bind(user.id).first();
-  if (!address) return jsonError(c, 400, 'ADDRESS_REQUIRED', '请先填写收货坐标后再支付');
+  if (!address) return jsonError(c, 400, 'ADDRESS_REQUIRED', '请先填写收货地址后再支付');
 
   const balance = user.star_energy_cents - order.energy_cents;
   const paidAt = nowIso();
   const trackingNo = order.tracking_no || `INU-EXP-${randomDigits(10)}`;
   await db
     .prepare(
-      `UPDATE orders SET status = 'transit', paid_at = ?, updated_at = ?, tracking_no = ?, carrier = '星际快递', address = ?
+      `UPDATE orders SET status = 'transit', paid_at = ?, updated_at = ?, tracking_no = ?, carrier = '快递', address = ?
        WHERE id = ?`,
     )
     .bind(
@@ -4947,8 +4981,8 @@ app.post('/api/supply/orders/:id/pay', async (c) => {
     balanceAfter: balance,
     ref: order.code,
   });
-  await addActivity(db, user.id, '补给订单已支付', `${order.item} · ${(order.energy_cents / 100).toFixed(2)} 星能`, 'blue', 'i-box');
-  await pushNotification(db, user.id, 'type_supply', '补给已进入跃迁队列', `订单 ${order.code} 已支付，预计 1–3 个星际日送达。`, '/supply');
+  await addActivity(db, user.id, '订单已支付', `${order.item} · ${(order.energy_cents / 100).toFixed(2)} 余额`, 'blue', 'i-box');
+  await pushNotification(db, user.id, 'type_supply', '商品已进入配送流程', `订单 ${order.code} 已支付，预计 1–3 个工作日送达。`, '/supply');
 
   const updated = await db.prepare('SELECT * FROM orders WHERE id = ?').bind(id).first();
   return ok(c, { order: serializeOrder(updated), balanceCents: balance });
@@ -4961,7 +4995,7 @@ app.post('/api/supply/orders/:id/cancel', async (c) => {
   const order = await db.prepare('SELECT * FROM orders WHERE id = ? AND user_id = ?')
     .bind(id, user.id)
     .first();
-  if (!order) return jsonError(c, 404, 'NOT_FOUND', '未找到该补给订单');
+  if (!order) return jsonError(c, 404, 'NOT_FOUND', '未找到该订单');
   if (order.status !== 'pending_payment') {
     return jsonError(c, 409, 'INVALID_STATUS', '只有待支付订单可以取消');
   }
@@ -4971,7 +5005,7 @@ app.post('/api/supply/orders/:id/cancel', async (c) => {
     .prepare("UPDATE orders SET status = 'cancelled', cancelled_at = ?, updated_at = ? WHERE id = ?")
     .bind(cancelledAt, cancelledAt, id)
     .run();
-  await addActivity(db, user.id, '取消补给订单', order.code, 'orange', 'i-box');
+  await addActivity(db, user.id, '取消订单', order.code, 'orange', 'i-box');
   const updated = await db.prepare('SELECT * FROM orders WHERE id = ?').bind(id).first();
   return ok(c, { order: serializeOrder(updated) });
 });
@@ -4983,7 +5017,7 @@ app.post('/api/supply/orders/:id/confirm', async (c) => {
   const order = await db.prepare('SELECT * FROM orders WHERE id = ? AND user_id = ?')
     .bind(id, user.id)
     .first();
-  if (!order) return jsonError(c, 404, 'NOT_FOUND', '未找到该补给订单');
+  if (!order) return jsonError(c, 404, 'NOT_FOUND', '未找到该订单');
   if (order.status !== 'transit') {
     return jsonError(c, 409, 'INVALID_STATUS', '该订单当前无法确认收货');
   }
@@ -4993,7 +5027,7 @@ app.post('/api/supply/orders/:id/confirm', async (c) => {
     .prepare("UPDATE orders SET status = 'delivered', delivered_at = ?, updated_at = ? WHERE id = ?")
     .bind(deliveredAt, deliveredAt, id)
     .run();
-  await addActivity(db, user.id, '补给已签收', order.item, 'green', 'i-check');
+  await addActivity(db, user.id, '商品已签收', order.item, 'green', 'i-check');
   const updated = await db.prepare('SELECT * FROM orders WHERE id = ?').bind(id).first();
   return ok(c, { order: serializeOrder(updated) });
 });
@@ -5015,8 +5049,8 @@ app.patch('/api/supply/address', async (c) => {
   if (!/^1[3-9]\d{9}$/.test(phone)) {
     return jsonError(c, 400, 'INVALID_PHONE', '请输入有效的 11 位手机号');
   }
-  if ([...region].length < 2) return jsonError(c, 400, 'INVALID_REGION', '请填写所在星域');
-  if ([...detail].length < 5) return jsonError(c, 400, 'INVALID_DETAIL', '请填写完整的收货坐标');
+  if ([...region].length < 2) return jsonError(c, 400, 'INVALID_REGION', '请填写所在地区');
+  if ([...detail].length < 5) return jsonError(c, 400, 'INVALID_DETAIL', '请填写完整的收货地址');
 
   const updatedAt = nowIso();
   await db
@@ -5037,11 +5071,11 @@ app.patch('/api/supply/address', async (c) => {
 });
 
 /* ------------------------------------------------------------------ */
-/* 星际钱包                                                             */
+/* 账户余额                                                             */
 /* ------------------------------------------------------------------ */
 
 function walletMethodLabel(method) {
-  return { inu_pay: 'INU PAY', alipay: '支付宝', wechat: '微信支付' }[method] || '星际支付';
+  return { inu_pay: 'INU 支付', alipay: '支付宝', wechat: '微信支付' }[method] || '支付';
 }
 
 async function settleRecharge(c, user, order) {
@@ -5055,20 +5089,20 @@ async function settleRecharge(c, user, order) {
   await db.prepare('UPDATE users SET star_energy_cents = ? WHERE id = ?').bind(balance, user.id).run();
   await addWalletTransaction(db, user.id, {
     kind: 'recharge',
-    title: '星能充值到账',
+    title: '余额充值到账',
     detail: `${walletMethodLabel(order.method)} · ${order.code}`,
     amountCents: order.amount_cents,
     balanceAfter: balance,
     ref: order.code,
     createdAt: paidAt,
   });
-  await addActivity(db, user.id, '星能充值到账', `+${(order.amount_cents / 100).toFixed(2)} 星能 · ${walletMethodLabel(order.method)}`, 'blue', 'i-spark');
+  await addActivity(db, user.id, '余额充值到账', `+${(order.amount_cents / 100).toFixed(2)} 余额 · ${walletMethodLabel(order.method)}`, 'blue', 'i-wallet');
   await pushNotification(
     db,
     user.id,
     'type_energy',
-    '星能充值到账',
-    `+${(order.amount_cents / 100).toFixed(2)} 星能已存入星际钱包。`,
+    '余额充值到账',
+    `+${(order.amount_cents / 100).toFixed(2)} 余额已存入账户余额。`,
     '/wallet',
   );
   return { balance, paidAt };
@@ -5142,17 +5176,17 @@ app.post('/api/wallet/recharge', async (c) => {
   const user = c.get('userRow');
   const settings = await siteSettings(c);
   if (!settings.featureRecharge) {
-    return jsonError(c, 503, 'FEATURE_DISABLED', '星能充值暂未开放');
+    return jsonError(c, 503, 'FEATURE_DISABLED', '余额充值暂未开放');
   }
   if (settings.paymentMode === 'off') {
-    return jsonError(c, 503, 'PAYMENT_UNAVAILABLE', '支付通道正在接入星际网络，请稍后再试');
+    return jsonError(c, 503, 'PAYMENT_UNAVAILABLE', '支付通道正在接入服务，请稍后再试');
   }
 
   const body = await readJson(c);
   const amountCents = Math.round(Number(body?.amountCents));
   const method = String(body?.method || 'inu_pay');
   if (!Number.isFinite(amountCents) || amountCents < 1000 || amountCents > 5000000) {
-    return jsonError(c, 400, 'INVALID_AMOUNT', '充值金额需在 10–50000 星能之间');
+    return jsonError(c, 400, 'INVALID_AMOUNT', '充值金额需在 10–50000 余额之间');
   }
   if (!['inu_pay', 'alipay', 'wechat'].includes(method)) {
     return jsonError(c, 400, 'INVALID_METHOD', '未知的支付方式');
@@ -5201,7 +5235,7 @@ app.post('/api/wallet/recharge/:id/pay', async (c) => {
   const user = c.get('userRow');
   const settings = await siteSettings(c);
   if (settings.paymentMode === 'off') {
-    return jsonError(c, 503, 'PAYMENT_UNAVAILABLE', '支付通道正在接入星际网络，请稍后再试');
+    return jsonError(c, 503, 'PAYMENT_UNAVAILABLE', '支付通道正在接入服务，请稍后再试');
   }
   const id = Number(c.req.param('id'));
   const order = await db.prepare('SELECT * FROM recharge_orders WHERE id = ? AND user_id = ?')
@@ -5242,7 +5276,7 @@ app.post('/api/wallet/withdraw', async (c) => {
   const user = c.get('userRow');
   const settings = await siteSettings(c);
   if (!settings.featureWithdraw) {
-    return jsonError(c, 503, 'FEATURE_DISABLED', '星能提现已关闭，请联系管理员');
+    return jsonError(c, 503, 'FEATURE_DISABLED', '余额提现已关闭，请联系管理员');
   }
   if (!user.verified) {
     const verifyClosed = !settings.featureVerification || settings.verificationMode === 'off';
@@ -5250,7 +5284,7 @@ app.post('/api/wallet/withdraw', async (c) => {
       c,
       403,
       'VERIFY_REQUIRED',
-      verifyClosed ? '实名认证通道已关闭，请联系管理员' : '完成星际公民认证后才可提现',
+      verifyClosed ? '实名认证通道已关闭，请联系管理员' : '完成实名认证后才可提现',
     );
   }
   if (!user.phone) {
@@ -5261,10 +5295,10 @@ app.post('/api/wallet/withdraw', async (c) => {
   const amountCents = Math.round(Number(body?.amountCents));
   const account = String(body?.account || '').trim();
   if (!Number.isFinite(amountCents) || amountCents < settings.withdrawMinCents) {
-    return jsonError(c, 400, 'INVALID_AMOUNT', `单次提现至少 ${(settings.withdrawMinCents / 100).toFixed(0)} 星能`);
+    return jsonError(c, 400, 'INVALID_AMOUNT', `单次提现至少 ${(settings.withdrawMinCents / 100).toFixed(0)} 余额`);
   }
   if (amountCents > user.star_energy_cents) {
-    return jsonError(c, 400, 'INSUFFICIENT_FUNDS', '星能余额不足');
+    return jsonError(c, 400, 'INSUFFICIENT_FUNDS', '账户余额不足');
   }
   if ([...account].length < 4 || [...account].length > 80) {
     return jsonError(c, 400, 'INVALID_ACCOUNT', '请填写有效的收款账号');
@@ -5282,15 +5316,15 @@ app.post('/api/wallet/withdraw', async (c) => {
     .run();
   await addWalletTransaction(db, user.id, {
     kind: 'withdraw',
-    title: '星能提现申请',
+    title: '余额提现申请',
     detail: `${code} · 等待复核`,
     amountCents: -amountCents,
     balanceAfter: balance,
     ref: code,
     createdAt,
   });
-  await addSecurityLog(db, user.id, '提交提现申请', `${(amountCents / 100).toFixed(2)} 星能 · ${code}`, 'blue', 'i-wallet');
-  await pushNotification(db, user.id, 'type_energy', '提现申请已提交', `${(amountCents / 100).toFixed(2)} 星能提现已进入人工复核。`, '/wallet');
+  await addSecurityLog(db, user.id, '提交提现申请', `${(amountCents / 100).toFixed(2)} 余额 · ${code}`, 'blue', 'i-wallet');
+  await pushNotification(db, user.id, 'type_energy', '提现申请已提交', `${(amountCents / 100).toFixed(2)} 余额提现已进入人工复核。`, '/wallet');
 
   return ok(c, {
     withdrawal: {
@@ -5340,7 +5374,7 @@ app.onError((error, c) => {
     c.req.path.startsWith('/.well-known/')
   ) {
     return c.json(
-      { error: { code: 'INTERNAL', message: '星际网络暂时波动，请稍后重试' } },
+      { error: { code: 'INTERNAL', message: '服务暂时波动，请稍后重试' } },
       500,
       { ...CORS_HEADERS, 'Cache-Control': 'no-store' },
     );

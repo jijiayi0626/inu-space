@@ -14,7 +14,7 @@ import { useAsyncData } from '../lib/useAsyncData';
 const { data, reload } = useAsyncData(({ force }) => api.get('/security', { force }));
 
 const user = computed(() => data.value?.user || session.user || {});
-const score = computed(() => data.value?.score || 82);
+const score = computed(() => data.value?.score ?? '—');
 const features = computed(() => session.site?.features || {});
 
 const twoFa = ref(false);
@@ -41,7 +41,7 @@ async function toggleTwoFa(event) {
     const result = await api.post('/security/2fa', { enabled });
     twoFa.value = result.twoFa;
     if (session.user) setUser({ ...session.user, twoFa: result.twoFa });
-    toast(enabled ? '两步验证已开启，星际档案更安全了' : '两步验证已关闭');
+    toast(enabled ? '两步验证已开启，个人资料更安全了' : '两步验证已关闭');
     reload({ silent: true });
   } catch (error) {
     event.target.checked = twoFa.value;
@@ -58,7 +58,7 @@ async function toggleGuard(key, event) {
     await api.patch('/security/guards', { key, enabled });
     guards[key] = enabled;
     if (session.user) setUser({ ...session.user, guards: { ...session.user.guards, [key]: enabled } });
-    const labels = { geo: '异地登录验证', device: '新终端验证', sensitive: '敏感操作二次确认' };
+    const labels = { geo: '异地登录验证', device: '新设备验证', sensitive: '敏感操作二次确认' };
     toast(`${labels[key]}已${enabled ? '开启' : '关闭'}`);
     reload({ silent: true });
   } catch (error) {
@@ -155,8 +155,8 @@ async function openAllLogs() {
 <template>
   <PageHeader title="账户安全" sub="管理登录凭证、两步验证与登录保护策略。">
     <template #meta>
-      <span class="badge" :class="score >= 90 ? 'badge-green' : 'badge-green'">安全评分 {{ score }}</span>
-      <span class="head-date">上次检查 {{ timeLabel(user.lastLogin?.at) }}</span>
+      <span class="badge badge-green">安全评分 {{ score }}</span>
+      <span class="head-date">上次登录 {{ timeLabel(user.lastLogin?.at) }}</span>
     </template>
   </PageHeader>
 
@@ -173,7 +173,7 @@ async function openAllLogs() {
         </div>
         <div class="score-line">
           <span class="score-value">{{ data.score }}<small>/ 100</small></span>
-          <span class="badge badge-green">{{ data.percentile }}</span>
+          <span class="badge badge-green">满分 100</span>
         </div>
         <div class="progress"><span :style="{ width: `${data.score}%` }" /></div>
         <div class="score-grid">
@@ -183,7 +183,7 @@ async function openAllLogs() {
           </div>
         </div>
         <p class="card-note">
-          <AppIcon name="spark" />
+          <AppIcon name="shield" />
           <span>开启两步验证并绑定手机号，可将安全评分提升至 96 分。</span>
         </p>
       </section>
@@ -251,7 +251,7 @@ async function openAllLogs() {
             {{ twoFa ? '已开启' : '未开启' }}
           </span>
         </div>
-        <p class="card-desc">登录时在密码之外增加一道动态验证码，即使密码泄露也能守住星际档案。</p>
+        <p class="card-desc">登录时在密码之外增加一道动态验证码，即使密码泄露也能守住个人资料。</p>
 
         <div class="sec-row">
           <span class="sec-icon"><AppIcon name="shield" /></span>
@@ -270,7 +270,7 @@ async function openAllLogs() {
         <div class="verify-strip stacked">
           <div class="verify-item">
             <AppIcon name="phone" />
-            <span class="verify-text"><strong>验证器应用</strong><em>INU Authenticator · 推荐</em></span>
+            <span class="verify-text"><strong>验证器应用</strong><em>任意验证器应用 · 推荐</em></span>
           </div>
           <div class="verify-item">
             <AppIcon name="lock" />
@@ -281,7 +281,7 @@ async function openAllLogs() {
             <span class="verify-text"><strong>恢复方式</strong><em>安全邮箱 · 人工核验</em></span>
           </div>
         </div>
-        <p class="notify-note"><AppIcon name="shield" />建议为星际通行证开启两步验证</p>
+        <p class="notify-note"><AppIcon name="shield" />建议为 INU 账号开启两步验证</p>
       </section>
     </div>
 
@@ -294,7 +294,7 @@ async function openAllLogs() {
         <div class="sec-row">
           <div>
             <p class="sec-title">异地登录验证</p>
-            <p class="sec-sub">新坐标登录时要求二次验证</p>
+            <p class="sec-sub">新地点登录时要求二次验证</p>
           </div>
           <div class="sec-right">
             <label class="switch" aria-label="异地登录验证">
@@ -310,11 +310,11 @@ async function openAllLogs() {
         </div>
         <div class="sec-row">
           <div>
-            <p class="sec-title">新终端验证</p>
+            <p class="sec-title">新设备验证</p>
             <p class="sec-sub">首次登录需短信或邮箱确认</p>
           </div>
           <div class="sec-right">
-            <label class="switch" aria-label="新终端验证">
+            <label class="switch" aria-label="新设备验证">
               <input
                 type="checkbox"
                 :checked="guards.device"
@@ -395,7 +395,7 @@ async function openAllLogs() {
           placeholder="至少 8 位，包含字母与数字"
           autocomplete="new-password"
         />
-        <p class="hint">建议使用 12 位以上，且不与其它星际站点重复</p>
+        <p class="hint">建议使用 12 位以上，且不与其它站点重复</p>
       </div>
       <div class="field">
         <label for="confirmPwd">确认新密码</label>

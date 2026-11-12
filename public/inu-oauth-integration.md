@@ -1,6 +1,6 @@
 # INU 账号登录接入指南（AI 可直接执行）
 
-> 本文档由「INU 无限宇宙 · 星际通行证」超级管理台生成，所有授权服务器地址已解析为：
+> 本文档由「INU 账号中心」超级管理台生成，所有授权服务器地址已解析为：
 >
 > **{{INU_ORIGIN}}**
 >
@@ -64,7 +64,7 @@
 
 | scope | 返回字段 | 说明 |
 | --- | --- | --- |
-| `profile` | `sub`、`name`、`preferred_username`、`inu_id`、`orbit`、`avatar_text`、`tier`、`tier_label` | 默认 scope。昵称、INU ID、轨道编号、头像字符与会员等级 |
+| `profile` | `sub`、`name`、`preferred_username`、`inu_id`、`orbit`、`avatar_text`、`tier`、`tier_label` | 默认 scope。昵称、INU ID、账号编号、头像字符与会员等级 |
 | `email` | `email`、`email_verified` | 邮箱与认证状态。未认证邮箱不要用于找回密码或账号合并 |
 
 `sub` 始终返回，且是稳定的用户唯一标识。
@@ -224,13 +224,13 @@ curl -H "Authorization: Bearer inu_at_xxxxxxxx" \
 ```json
 {
   "sub": "INU-8F2A-9C31",
-  "name": "小星",
-  "preferred_username": "小星",
+  "name": "小逸",
+  "preferred_username": "小逸",
   "inu_id": "INU-8F2A-9C31",
-  "orbit": "ORBIT-07",
-  "avatar_text": "星",
-  "tier": "stargazer",
-  "tier_label": "星际漫游者",
+  "orbit": "INU-8F2A-9C31",
+  "avatar_text": "逸",
+  "tier": "basic",
+  "tier_label": "普通",
   "email": "user@example.com",
   "email_verified": true
 }
@@ -242,8 +242,8 @@ curl -H "Authorization: Bearer inu_at_xxxxxxxx" \
 | --- | --- | --- |
 | `sub` | 始终 | 稳定唯一标识，写入本地用户表的外部 ID 字段 |
 | `name` / `preferred_username` | profile | 展示昵称 |
-| `inu_id` | profile | INU 通行证编号，与 `sub` 相同 |
-| `orbit` | profile | 轨道编号 |
+| `inu_id` | profile | INU 账号编号，与 `sub` 相同 |
+| `orbit` | profile | 账号编号（兼容字段） |
 | `avatar_text` | profile | 单字头像文本 |
 | `tier` / `tier_label` | profile | 会员等级 key 与中文名 |
 | `email` | email | 邮箱 |

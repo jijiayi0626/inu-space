@@ -16,9 +16,9 @@ const notice = computed(() => {
 const noticeIcon = computed(() => {
   if (notice.value?.level === 'success') return 'check';
   if (notice.value?.level === 'warn') return 'shield';
-  return 'spark';
+  return 'info';
 });
-const footerText = computed(() => session.site?.footerText || '© 2026 INU 无限宇宙 · 星际通行证');
+const footerText = computed(() => session.site?.footerText || '© 2026 INU 账号中心');
 const supportEmail = computed(() => session.site?.supportEmail || 'support@inu.space');
 const maintenance = computed(() => {
   const value = session.site?.maintenance;
@@ -78,7 +78,7 @@ onBeforeUnmount(() => {
             <span>·</span>
             <RouterLink to="/agreements">隐私政策</RouterLink>
             <span>·</span>
-            <a class="footer-link-btn" :href="`mailto:${supportEmail}`">帮助终端</a>
+            <a class="footer-link-btn" :href="`mailto:${supportEmail}`">帮助中心</a>
           </span>
         </footer>
       </div>
@@ -90,24 +90,24 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .readonly-banner{
-  display:flex;align-items:flex-start;gap:11px;padding:12px 15px;margin-bottom:16px;
-  border-radius:12px;border:1px solid rgba(255,125,0,.22);background:rgba(255,125,0,.08);
+  display:flex;align-items:flex-start;gap:var(--s-3);padding:var(--s-3);margin-bottom:var(--s-4);
+  border-radius:var(--r-sm);background:color-mix(in srgb, var(--fx-warning) 10%, transparent);
 }
 .readonly-banner-icon{
-  width:30px;height:30px;border-radius:9px;display:grid;place-items:center;flex:none;
-  color:var(--warning);background:rgba(255,125,0,.14);
+  width:30px;height:30px;border-radius:var(--r-xs);display:grid;place-items:center;flex:none;
+  color:var(--fx-warning);background:color-mix(in srgb, var(--fx-warning) 14%, transparent);
 }
 .readonly-banner-icon .icon{width:16px;height:16px}
 .readonly-banner div{display:flex;flex-direction:column;gap:2px;min-width:0}
-.readonly-banner strong{font-size:12.5px;font-weight:700;color:var(--text)}
-.readonly-banner span{font-size:12px;line-height:1.6;color:var(--text-sub)}
+.readonly-banner strong{font-size:var(--fx-text-sm);font-weight:var(--fx-weight-medium);color:var(--fx-foreground)}
+.readonly-banner span{font-size:var(--fx-text-xs);line-height:1.6;color:var(--fx-muted-foreground)}
 
 .site-notice{
-  display:flex;align-items:flex-start;gap:9px;padding:11px 14px;margin-bottom:16px;
-  border-radius:11px;font-size:12.5px;line-height:1.65;
-  color:var(--primary);background:var(--primary-light);border:1px solid rgba(22,93,255,.14);
+  display:flex;align-items:flex-start;gap:var(--s-2);padding:var(--s-2) var(--s-3);margin-bottom:var(--s-4);
+  border-radius:var(--r-sm);font-size:var(--fx-text-xs);line-height:1.65;
+  color:var(--fx-foreground);background:var(--fx-muted);
 }
-.site-notice .icon{width:16px;height:16px;margin-top:2px;flex:none}
-.site-notice.is-success{color:var(--success);background:rgba(0,180,42,.08);border-color:rgba(0,180,42,.16)}
-.site-notice.is-warn{color:var(--warning);background:rgba(255,125,0,.08);border-color:rgba(255,125,0,.18)}
+.site-notice .icon{width:16px;height:16px;margin-top:2px;flex:none;color:var(--fx-muted-foreground)}
+.site-notice.is-success{color:var(--fx-success);background:color-mix(in srgb, var(--fx-success) 10%, transparent)}
+.site-notice.is-warn{color:var(--fx-warning);background:color-mix(in srgb, var(--fx-warning) 10%, transparent)}
 </style>

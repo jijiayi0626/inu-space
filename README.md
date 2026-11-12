@@ -1,10 +1,10 @@
-# INU 星际通行证
+# INU 账号中心
 
-Vue 3 + Cloudflare Workers + D1 实现的「INU 无限宇宙」账号中心。包含账号业务页面、登录鉴权、真实的 D1 数据读写、会员/协议/补给站业务流程、第三方授权管理，以及一套可直接部署到 Cloudflare 的工程结构。
+Vue 3 + Cloudflare Workers + D1 实现的「INU」账号中心。包含账号业务页面、登录鉴权、真实的 D1 数据读写、会员/协议/积分商城业务流程、第三方授权管理，以及一套可直接部署到 Cloudflare 的工程结构。
 
 在此之上还实现了：
 
-- **完整业务闭环**：星能钱包充值 / 提现、补给站订单支付 / 取消 / 确认收货 / 再次购买、协议模板与签署快照导出、通知收件箱与全站广播、手机号 / 邮箱绑定、真实头像配色、密码找回申请与管理员重置。
+- **完整业务闭环**：余额钱包充值 / 提现、积分商城订单支付 / 取消 / 确认收货 / 再次购买、协议模板与签署快照导出、通知收件箱与全站广播、手机号 / 邮箱绑定、真实头像配色、密码找回申请与管理员重置。
 - **超级管理台** `/admin`：配置 GitHub / Google 登录方式、管理第三方 OAuth 应用、站点功能开关、商品与协议内容、订单与提现复核、用户管理与密码重置、审计日志与管理员。
 - **INU OAuth 2.0 身份提供方**：其他应用可以用「使用 INU 账号登录」接入，支持授权码模式、PKCE、userinfo 与令牌撤销。
 
@@ -19,24 +19,29 @@ Vue 3 + Cloudflare Workers + D1 实现的「INU 无限宇宙」账号中心。�
 | 数据库 | Cloudflare D1（SQLite） |
 | 部署 | Workers Static Assets + Wrangler 4 |
 | 鉴权 | HttpOnly Cookie Session + PBKDF2-SHA256 + D1 会话表 |
+| 设计系统 | Fuxsto Design Pro 0.1.5 + lucide-vue-next |
+
+## 设计系统
+
+界面基于 [Fuxsto Design Pro](https://pro.design.fuxsto.com/) 0.1.5：颜色、圆角、阴影、间距、字号与动效均使用 `--fx-*` 令牌，`FxConfigProvider` 统一管理主题、动效与减少动态效果偏好，图标使用 lucide 线性图标。项目约定与设计细则见 `AGENTS.md`、`docs/design-rules.md` 与 `docs/product-principles.md`，每次开发前优先阅读。
 
 ## 功能
 
-- **总览**：星能钱包、INU 粒子、会员进度、快捷入口、最近动态；钱包卡片可直接进入充值 / 提现。
-- **个人资料**：昵称/邮箱/签名修改、头像配色、星际 ID 复制、手机号与邮箱验证码绑定（控制台验证码模式）、星际公民认证。
+- **总览**：余额钱包、积分、会员进度、快捷入口、最近动态；钱包卡片可直接进入充值 / 提现。
+- **个人资料**：昵称/邮箱/签名修改、头像配色、INU ID 复制、手机号与邮箱验证码绑定（控制台验证码模式）、实名认证。
 - **账户安全**：安全评分、两步验证开关、登录保护策略、密码修改、安全日志（支持分页 / 筛选）。
 - **授权应用**：独立页面展示通过「使用 INU 账号登录」授权的第三方应用、权限范围、有效期与最近使用时间，可一键撤销授权并吊销令牌。
-- **星际终端**：受信设备、活跃会话与 UA 解析（系统 / 浏览器 / 机型）、按会话退出、新增设备、解绑、退出其余终端、登录记录。
+- **登录设备**：受信设备、活跃会话与 UA 解析（系统 / 浏览器 / 机型）、按会话退出、新增设备、解绑、退出其他设备、登录记录。
 - **通知偏好**：通知类型、渠道开关、免打扰时段、每周摘要，以及站内信收件箱（标记已读 / 全部已读 / 删除）。
-- **会员中心**：等级进度、四档会员权益、粒子流水（分页）。
-- **协议中心**：协议列表、正文详情、待签署提醒、签署时写入协议快照、签署后发放 50 INU 粒子、已签协议导出文本。
-- **补给站**：会员价商品、星能兑换下单、订单详情与物流时间线、待支付订单支付 / 取消、确认收货、再次购买、收货坐标。
-- **星能钱包**：充值（模拟支付 / 关闭）、提现申请（管理员复核）、钱包流水、充值订单状态。
+- **会员中心**：等级进度、四档会员权益、积分流水（分页）。
+- **协议中心**：协议列表、正文详情、待签署提醒、签署时写入协议快照、签署后发放 50 积分、已签协议导出文本。
+- **积分商城**：会员价商品、余额兑换下单、订单详情与物流时间线、待支付订单支付 / 取消、确认收货、再次购买、收货地址。
+- **余额钱包**：充值（模拟支付 / 关闭）、提现申请（管理员复核）、钱包流水、充值订单状态。
 - **找回密码**：登录页提交找回申请，管理员在「用户管理」中重置密码并标记处理。
 - **超级管理台**：登录方式配置、OAuth 应用与密钥管理、站点功能开关、商品与协议模板、全站广播、财务与订单复核、用户搜索与调整、密码重置、接入指引、审计日志、管理员授权。
 - **INU 授权登录**：第三方应用通过 `/oauth/authorize` 获取授权码，兑换令牌后读取用户资料。
 
-> 「星际公民认证」提供两种模式：`console`（控制台输出验证码，开发 / 演示）与 `off`（关闭）。生产环境请接入真实的实名 / 活体核验服务。支付当前为模拟模式，接入真实支付渠道后可保持同一套订单与流水结构。
+> 「实名认证」提供两种模式：`console`（控制台输出验证码，开发 / 演示）与 `off`（关闭）。生产环境请接入真实的实名 / 活体核验服务。支付当前为模拟模式，接入真实支付渠道后可保持同一套订单与流水结构。
 
 ## 本地运行
 
@@ -64,8 +69,8 @@ npm run worker:dev
 前后端分离调试（可选）：
 
 ```bash
-npm run worker:dev   # 终端 A，API 在 8787
-npm run dev          # 终端 B，Vite 在 5173，/api 已代理到 8787
+npm run worker:dev   # 设备 1，API 在 8787
+npm run dev          # 设备 2，Vite 在 5173，/api 已代理到 8787
 ```
 
 ## 部署到 Cloudflare
@@ -91,11 +96,11 @@ npm run dev          # 终端 B，Vite 在 5173，/api 已代理到 8787
    # 首次部署：建表 + 演示数据 + OAuth + 管理台 + 功能表
    npm run db:remote
 
-   # 已有数据的库升级：执行 0001 与 0003–0006，不会重置演示账号
+   # 已有数据的库升级：执行 0001 与 0003–0008，不会重置演示账号
    npm run db:migrate:remote
    ```
 
-   `0005_features.sql` 含 `ALTER TABLE`，对已升级过的库重复执行会报「duplicate column」；已手动执行过该文件的库可跳过它，只补 `0006_password_reset.sql`。
+   `0005_features.sql` 与 `0008_session_names.sql` 含 `ALTER TABLE`，对已升级过的库重复执行会报「duplicate column」，可跳过已执行过的文件；`0007_neutral_tiers.sql` 是等级键数据更新，可安全重复执行。
 
 4. 配置 Worker 密钥：
 
@@ -160,9 +165,9 @@ npm run dev          # 终端 B，Vite 在 5173，/api 已代理到 8787
 | --- | --- |
 | 登录方式 | 配置 GitHub / Google 的 Client ID、Client Secret、启用状态，保存即生效 |
 | 站点设置 | 演示账号入口显隐与只读、站点公告、欢迎语与页脚、客服邮箱与钱包卡号尾号、9 项功能开关、支付 / 验证模式、充值预设、提现门槛、改名冷却、维护模式 |
-| 内容与商品 | 全站广播（按通知偏好送达站内信）、补给站商品增删改（名称、价格、会员价、库存、图标、色系、上下架）、协议模板增删改（标题、版本、正文、奖励粒子、启用状态） |
-| 财务与订单 | 收入 / 支出 / 待复核提现 / 订单数统计、提现复核（通过并打款 / 驳回并退款）、补给订单状态与物流（承运商、单号、时间线）、充值订单列表 |
-| 用户管理 | 用户搜索（邮箱 / 昵称 / INU ID / 手机号）、认证与管理员标记、粒子与余额增减、昵称修改、重置登录密码、处理密码找回申请 |
+| 内容与商品 | 全站广播（按通知偏好送达站内信）、积分商城商品增删改（名称、价格、会员价、库存、图标、色系、上下架）、协议模板增删改（标题、版本、正文、奖励积分、启用状态） |
+| 财务与订单 | 收入 / 支出 / 待复核提现 / 订单数统计、提现复核（通过并打款 / 驳回并退款）、订单状态与物流（承运商、单号、时间线）、充值订单列表 |
+| 用户管理 | 用户搜索（邮箱 / 昵称 / INU ID / 手机号）、认证与管理员标记、积分与余额增减、昵称修改、重置登录密码、处理密码找回申请 |
 | 应用接入 | 创建、编辑、停用、删除 OAuth 应用，重置 Client Secret，配置回调地址与权限范围 |
 | 接入指引 | 展示端点、scope、接入步骤和服务端示例代码，可下载 / 复制 AI 可直接执行的 Markdown 接入文档 |
 | 审计日志 | 记录创建/删除应用、重置密钥、修改登录方式、更新站点设置、商品与模板变更、广播、订单 / 提现处理、用户调整、授予/移除管理员等操作 |
@@ -183,19 +188,19 @@ npm run dev          # 终端 B，Vite 在 5173，/api 已代理到 8787
 | `site.notice_enabled` | `0` | 站点公告开关 |
 | `site.notice_text` | 空 | 公告内容，最多 200 字 |
 | `site.notice_level` | `info` | `info` / `success` / `warn` |
-| `site.footer_text` | `© 2026 INU 无限宇宙 · 星际通行证` | 登录页与内页页脚 |
-| `site.login_welcome` | `使用你的 INU 星际档案继续旅程。` | 登录页欢迎语 |
+| `site.footer_text` | `© 2026 INU · INU 账号` | 登录页与内页页脚 |
+| `site.login_welcome` | `使用你的 INU 个人资料继续旅程。` | 登录页欢迎语 |
 | `site.support_email` | `support@inu.space` | 客服邮箱（登录页找回密码与帮助入口） |
 | `site.wallet_card_last4` | `0721` | 钱包卡片尾号展示 |
-| `site.feature_recharge` | `1` | 星能充值开关，关闭后 `/api/wallet/recharge` 返回功能关闭 |
+| `site.feature_recharge` | `1` | 余额充值开关，关闭后 `/api/wallet/recharge` 返回功能关闭 |
 | `site.feature_withdraw` | `0` | 提现开关，默认关闭 |
 | `site.feature_phone_bind` | `1` | 手机号绑定与解绑 |
 | `site.feature_email_change` | `1` | 邮箱换绑 |
 | `site.feature_avatar` | `1` | 头像配色修改 |
-| `site.feature_supply` | `1` | 补给站下单（关闭后仅可浏览） |
+| `site.feature_supply` | `1` | 积分商城下单（关闭后仅可浏览） |
 | `site.feature_agreements` | `1` | 协议签署（关闭后仅可浏览） |
 | `site.feature_register` | `0` | 开放邮箱自助注册 |
-| `site.feature_verification` | `1` | 星际公民实名认证入口；关闭后认证按钮显示「认证通道已关闭」，服务端拒绝认证、下单与提现 |
+| `site.feature_verification` | `1` | 实名用户实名认证入口；关闭后认证按钮显示「认证通道已关闭」，服务端拒绝认证、下单与提现 |
 | `site.payment_mode` | `mock` | `mock` 模拟支付 / `off` 关闭在线支付 |
 | `site.verification_mode` | `console` | `console` 返回验证码 devCode 并开放模拟认证 / `off` 关闭验证码与模拟认证 |
 | `site.recharge_presets` | `50,100,200,500,1000` | 充值金额预设（元，1–8 个） |
@@ -249,9 +254,9 @@ INU 同时是一个标准的 OAuth 2.0 授权服务器。第三方应用把用�
 - 授权码有效期 5 分钟，只能使用一次；`access_token` 有效期 1 小时，不提供 refresh token。
 - 机密客户端可使用 Client Secret 认证；公开客户端（SPA、移动应用）不保存 Secret，必须使用 PKCE `S256`。
 - `redirect_uri` 必须与管理台登记的地址完全一致；仅允许 `https://`，本地调试可用 `http://localhost` / `http://127.0.0.1`。
-- scope 目前支持 `profile`（昵称、INU ID、轨道编号、会员等级、头像字符）与 `email`（邮箱和认证状态）。
+- scope 目前支持 `profile`（昵称、INU ID、账号编号、会员等级、头像字符）与 `email`（邮箱和认证状态）。
 - 已授权过的应用默认跳过同意页；使用 `prompt=consent` 可强制重新展示。
-- `userinfo` 的 `sub` 是 INU 用户 ID；`email_verified` 表示该账号已通过 INU 的星际公民认证，不表示邮箱控制权验证。
+- `userinfo` 的 `sub` 是 INU 用户 ID；`email_verified` 表示该账号已通过 INU 的实名认证，不表示邮箱控制权验证。
 
 ### AI 接入文档
 
@@ -286,9 +291,9 @@ https://pass.inumc.dpdns.org/api/auth/oauth/google/callback
 
 ## 钱包、订单与找回密码
 
-- **充值**：`POST /api/wallet/recharge` 创建充值单，金额 10–50000 星能，支付方式 `inu_pay` / `alipay` / `wechat`。`mock` 模式下立即入账并写入 `wallet_transactions`；`off` 模式下接口返回 `PAYMENT_UNAVAILABLE`。
-- **提现**：要求已完成星际公民认证并绑定手机号，单次不低于 `site.withdraw_min_cents`。申请时冻结扣减余额，状态为 `processing`；管理员「通过并打款」后变为 `paid`，「驳回并退款」会把金额退回余额并记流水。
-- **补给订单**：状态为 `pending_payment` / `transit` / `delivered` / `cancelled`。待支付可支付或取消，支付扣减星能并写流水；管理员可在财务页填写承运商、运单号并推进物流时间线；用户确认收货或再次购买（生成新订单）。
+- **充值**：`POST /api/wallet/recharge` 创建充值单，金额 10–50000 余额，支付方式 `inu_pay` / `alipay` / `wechat`。`mock` 模式下立即入账并写入 `wallet_transactions`；`off` 模式下接口返回 `PAYMENT_UNAVAILABLE`。
+- **提现**：要求已完成实名认证并绑定手机号，单次不低于 `site.withdraw_min_cents`。申请时冻结扣减余额，状态为 `processing`；管理员「通过并打款」后变为 `paid`，「驳回并退款」会把金额退回余额并记流水。
+- **订单**：状态为 `pending_payment` / `transit` / `delivered` / `cancelled`。待支付可支付或取消，支付扣减余额并写流水；管理员可在财务页填写承运商、运单号并推进物流时间线；用户确认收货或再次购买（生成新订单）。
 - **验证码**：手机号绑定、邮箱换绑使用 6 位验证码，10 分钟有效、最多尝试 5 次、每小时最多 5 条；`console` 模式会直接返回 `devCode` 供联调，关闭后接口拒绝。
 - **密码找回**：登录页提交邮箱后生成 `password_reset_requests` 记录（10 分钟内去重）并通知管理员；管理员在「用户管理」中重置密码后，待处理申请自动标记为已处理。接口对邮箱是否存在都返回同一句话，避免账号枚举。
 
@@ -313,7 +318,7 @@ https://pass.inumc.dpdns.org/api/auth/oauth/google/callback
 | POST | `/api/profile/phone/code`、`/api/profile/phone/verify` | 发送 / 校验绑定手机验证码 |
 | DELETE | `/api/profile/phone` | 解绑手机号（需密码） |
 | POST | `/api/profile/email/code`、`/api/profile/email/verify` | 发送 / 校验换绑邮箱验证码 |
-| POST | `/api/profile/verify` | 星际公民认证（受 `site.verification_mode` 控制） |
+| POST | `/api/profile/verify` | 实名认证（受 `site.verification_mode` 控制） |
 | GET | `/api/security` | 安全评分、凭证、策略、日志与已授权应用（`connections`） |
 | GET | `/api/security/connections` | 已授权应用独立接口（授权范围、最近使用、有效令牌数） |
 | GET | `/api/security/logs` | 安全日志分页 |
@@ -321,10 +326,10 @@ https://pass.inumc.dpdns.org/api/auth/oauth/google/callback
 | PATCH | `/api/security/guards` | 登录保护开关 |
 | POST | `/api/security/password` | 修改密码并吊销其它会话 |
 | DELETE | `/api/security/connections/:clientId` | 撤销第三方应用授权（吊销全部令牌） |
-| GET | `/api/devices` | 受信终端、登录记录与活跃会话（`sessions`，含 UA 解析） |
+| GET | `/api/devices` | 受信设备、登录记录与活跃会话（`sessions`，含 UA 解析） |
 | GET | `/api/devices/logs` | 登录记录分页 |
 | POST | `/api/devices` | 新增受信设备 |
-| POST | `/api/devices/:id/unbind` | 解绑终端 |
+| POST | `/api/devices/:id/unbind` | 解绑设备 |
 | POST | `/api/devices/sessions/:id/revoke` | 退出指定的其它活跃会话 |
 | POST | `/api/devices/logout-others` | 退出其余会话 |
 | GET | `/api/notifications` | 通知偏好聚合 |
@@ -333,20 +338,20 @@ https://pass.inumc.dpdns.org/api/auth/oauth/google/callback
 | DELETE | `/api/notifications/messages/:id` | 删除站内信 |
 | PATCH | `/api/notifications/prefs` | 更新通知类型/渠道 |
 | PATCH | `/api/notifications/settings` | 免打扰与摘要 |
-| GET | `/api/member` | 会员等级、权益、粒子流水 |
-| GET | `/api/member/particles` | 粒子流水分页 |
+| GET | `/api/member` | 会员等级、权益、积分流水 |
+| GET | `/api/member/particles` | 积分流水分页 |
 | GET | `/api/agreements` | 协议列表 |
 | GET | `/api/agreements/:id` | 协议正文与签署状态 |
 | GET | `/api/agreements/:id/export` | 导出已签协议文本（含快照） |
-| POST | `/api/agreements/:id/sign` | 签署协议 +50 粒子 |
-| GET | `/api/supply` | 补给站聚合数据 |
+| POST | `/api/agreements/:id/sign` | 签署协议 +50 积分 |
+| GET | `/api/supply` | 积分商城聚合数据 |
 | GET | `/api/supply/orders`、`/api/supply/orders/:id` | 订单列表 / 详情与物流 |
-| POST | `/api/supply/orders` | 星能兑换下单 |
+| POST | `/api/supply/orders` | 余额兑换下单 |
 | POST | `/api/supply/orders/:id/pay` | 支付待支付订单 |
 | POST | `/api/supply/orders/:id/cancel` | 取消待支付订单并退款 |
 | POST | `/api/supply/orders/:id/confirm` | 确认收货 |
 | POST | `/api/supply/orders/:id/rebuy` | 按原商品再次购买 |
-| PATCH | `/api/supply/address` | 保存收货坐标 |
+| PATCH | `/api/supply/address` | 保存收货地址 |
 | GET | `/api/wallet` | 余额、流水、充值单、提现单与开关 |
 | POST | `/api/wallet/recharge` | 创建充值单（mock 模式立即到账） |
 | POST | `/api/wallet/recharge/:id/pay`、`/cancel` | 支付 / 取消充值单 |
@@ -359,12 +364,12 @@ https://pass.inumc.dpdns.org/api/auth/oauth/google/callback
 | POST | `/api/admin/oauth-clients` | 创建 OAuth 应用（管理员） |
 | PATCH / DELETE | `/api/admin/oauth-clients/:id` | 编辑 / 删除 OAuth 应用（管理员） |
 | POST | `/api/admin/oauth-clients/:id/rotate-secret` | 重置 Client Secret（管理员） |
-| POST / PATCH / DELETE | `/api/admin/products`、`/api/admin/products/:id` | 补给站商品增删改（管理员） |
+| POST / PATCH / DELETE | `/api/admin/products`、`/api/admin/products/:id` | 积分商城商品增删改（管理员） |
 | POST / PATCH / DELETE | `/api/admin/agreement-templates`、`/:id` | 协议模板增删改（管理员） |
 | POST | `/api/admin/notifications` | 全站广播站内信（管理员） |
 | PATCH | `/api/admin/orders/:id` | 更新订单状态、承运商、运单号与时间线（管理员） |
 | PATCH | `/api/admin/withdrawals/:id` | 提现复核：通过并打款 / 驳回并退款（管理员） |
-| GET / PATCH | `/api/admin/users`、`/api/admin/users/:id` | 用户搜索 / 调整资料、粒子余额、重置密码（管理员） |
+| GET / PATCH | `/api/admin/users`、`/api/admin/users/:id` | 用户搜索 / 调整资料、积分余额、重置密码（管理员） |
 | PATCH | `/api/admin/password-resets/:id` | 标记密码找回申请已处理（管理员） |
 | GET | `/api/admin/audit` | 审计日志（管理员） |
 | POST / DELETE | `/api/admin/admins`、`/api/admin/admins/:userId` | 授予 / 移除管理员（管理员） |
@@ -377,7 +382,7 @@ https://pass.inumc.dpdns.org/api/auth/oauth/google/callback
 - 并发相同请求自动合并（in-flight dedupe）；
 - 任意写操作后清空缓存，保证数据一致；
 - 通过 `run_worker_first: ["/api/*", "/oauth/*", "/.well-known/*"]` 让 API 与 OAuth 端点进入 Worker，其余静态资源留在边缘；
-- D1 为会话、日志、设备、订单、粒子流水等查询建立索引。
+- D1 为会话、日志、设备、订单、积分流水等查询建立索引。
 
 这些措施能显著降低 Function 调用与 D1 读取次数。若流量继续增长，正确做法是升级 **Workers Paid**（以及按需的 D1 付费额度），而不是拆分多个 Cloudflare 账号。
 

@@ -12,8 +12,8 @@ const route = useRoute();
 const router = useRouter();
 const menuOpen = ref(false);
 
-const user = computed(() => session.user || { name: '星际旅人', avatarText: '星' });
-const initial = computed(() => user.value.avatarText || user.value.name?.slice(0, 1) || '星');
+const user = computed(() => session.user || { name: '用户', avatarText: 'U' });
+const initial = computed(() => user.value.avatarText || user.value.name?.slice(0, 1) || 'U');
 const activeTop = computed(() => route.meta.top || '');
 
 const navItems = [
@@ -28,10 +28,10 @@ async function handleLogout() {
   menuOpen.value = false;
   try {
     await logout();
-    toast('已退出星际通行证');
+    toast('已退出登录');
     router.replace('/login');
   } catch {
-    toast('退出时星际网络出现波动，请稍后重试', 'error');
+    toast('退出失败，请稍后重试', 'error');
   }
 }
 
@@ -67,11 +67,11 @@ onBeforeUnmount(() => {
       <button class="icon-btn menu-btn" aria-label="打开菜单" @click="$emit('toggle-drawer')">
         <AppIcon name="menu" />
       </button>
-      <RouterLink class="brand" to="/" aria-label="INU 星际通行证">
-        <span class="brand-mark"><AppIcon name="orbit" /></span>
+      <RouterLink class="brand" to="/" aria-label="INU 账号中心">
+        <span class="brand-mark"><AppIcon name="grid" /></span>
         <span class="brand-text">
           <span class="brand-name">INU</span>
-          <span class="brand-sys">星际通行证</span>
+          <span class="brand-sys">账号中心</span>
         </span>
       </RouterLink>
     </div>
@@ -114,13 +114,13 @@ onBeforeUnmount(() => {
                 <AppIcon name="shield" /><span>账户安全</span>
               </RouterLink>
               <RouterLink class="avatar-menu-item" to="/devices" role="menuitem">
-                <AppIcon name="device" /><span>星际终端</span>
+                <AppIcon name="device" /><span>登录设备</span>
               </RouterLink>
               <RouterLink v-if="user.isAdmin" class="avatar-menu-item admin" to="/admin" role="menuitem">
                 <AppIcon name="key" /><span>超级管理台</span>
               </RouterLink>
               <button class="avatar-menu-item danger" type="button" role="menuitem" @click="handleLogout">
-                <AppIcon name="x" /><span>退出登录</span>
+                <AppIcon name="logout" /><span>退出登录</span>
               </button>
             </div>
           </div>

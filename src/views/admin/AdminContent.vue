@@ -128,7 +128,7 @@ async function submitProduct() {
   }
   const priceCents = Math.round(Number(productForm.priceYuan) * 100);
   if (!Number.isFinite(priceCents) || priceCents < 100 || priceCents > 10000000) {
-    productError.value = '商品价格需在 1–100000 星能之间';
+    productError.value = '商品价格需在 1–100000 余额之间';
     return;
   }
   const payload = {
@@ -163,8 +163,8 @@ async function submitProduct() {
 
 function deleteProduct(product) {
   props.askConfirm({
-    title: '删除补给商品',
-    message: `删除「${product.name}」后，补给站将不再展示该商品，历史订单不受影响。`,
+    title: '删除商品',
+    message: `删除「${product.name}」后，积分商城将不再展示该商品，历史订单不受影响。`,
     confirmText: '删除商品',
     danger: true,
     action: async () => {
@@ -267,7 +267,7 @@ function deleteTemplate(template) {
     <div class="admin-section-head">
       <div>
         <h2>内容与商品</h2>
-        <p>补给商品、协议模板与站内信广播，全部写入 D1 并立即生效。</p>
+        <p>商品、协议模板与站内信广播，全部写入 D1 并立即生效。</p>
       </div>
     </div>
 
@@ -279,7 +279,7 @@ function deleteTemplate(template) {
       <div class="broadcast-grid">
         <div class="field">
           <label for="bc-title">消息标题</label>
-          <input id="bc-title" v-model="broadcastForm.title" class="input" maxlength="40" placeholder="例如：星际电台今晚更新" />
+          <input id="bc-title" v-model="broadcastForm.title" class="input" maxlength="40" placeholder="例如：积分商城上新" />
         </div>
         <div class="field">
           <label for="bc-category">消息分类</label>
@@ -311,7 +311,7 @@ function deleteTemplate(template) {
 
     <div class="card">
       <div class="card-head">
-        <h2>补给商品</h2>
+        <h2>商品</h2>
         <div class="head-actions">
           <span class="head-note">{{ productList.length }} 件</span>
           <button class="btn btn-primary btn-sm" type="button" @click="openCreateProduct">
@@ -323,8 +323,8 @@ function deleteTemplate(template) {
 
       <div v-if="!productList.length" class="admin-empty compact">
         <span class="admin-empty-icon"><AppIcon name="box" /></span>
-        <h3>还没有补给商品</h3>
-        <p>新增商品后，已认证的星际公民即可在补给站兑换。</p>
+        <h3>还没有商品</h3>
+        <p>新增商品后，已认证的实名用户即可在积分商城兑换。</p>
       </div>
 
       <div v-else class="manage-list">
@@ -343,7 +343,7 @@ function deleteTemplate(template) {
           </div>
           <div class="manage-price">
             <strong>{{ money(product.priceCents) }}</strong>
-            <span>星能</span>
+            <span>余额</span>
           </div>
           <div class="manage-actions">
             <button class="btn btn-ghost btn-sm" type="button" @click="openEditProduct(product)">编辑</button>
@@ -379,7 +379,7 @@ function deleteTemplate(template) {
               {{ template.title }}
               <span class="badge" :class="template.active ? 'badge-green' : 'badge-gray'">{{ template.active ? '生效中' : '已下架' }}</span>
             </strong>
-            <span>{{ template.version }} · 签署奖励 {{ template.reward }} 粒子 · 排序 {{ template.sort }}</span>
+            <span>{{ template.version }} · 签署奖励 {{ template.reward }} 积分 · 排序 {{ template.sort }}</span>
             <em>{{ (template.content || '').slice(0, 48) }}{{ (template.content || '').length > 48 ? '…' : '' }}</em>
           </div>
           <div class="manage-actions">
@@ -392,21 +392,21 @@ function deleteTemplate(template) {
   </section>
 
   <!-- 商品编辑 -->
-  <BaseModal v-model="productModal" :title="editingProduct ? '编辑补给商品' : '新增补给商品'" width="560px">
+  <BaseModal v-model="productModal" :title="editingProduct ? '编辑商品' : '新增商品'" width="560px">
     <div class="modal-form">
       <div class="settings-fields">
         <div class="field">
           <label for="product-name">商品名称</label>
-          <input id="product-name" v-model="productForm.name" class="input" maxlength="40" placeholder="例如：星尘补给包" />
+          <input id="product-name" v-model="productForm.name" class="input" maxlength="40" placeholder="例如：INU 帆布袋" />
         </div>
         <div class="field">
-          <label for="product-price">价格（星能）</label>
+          <label for="product-price">价格（余额）</label>
           <input id="product-price" v-model="productForm.priceYuan" class="input" type="number" min="1" step="0.01" />
         </div>
       </div>
       <div class="field">
         <label for="product-desc">商品描述</label>
-        <input id="product-desc" v-model="productForm.desc" class="input" maxlength="160" placeholder="一句话介绍这件补给" />
+        <input id="product-desc" v-model="productForm.desc" class="input" maxlength="160" placeholder="一句话介绍这件商品" />
       </div>
       <div class="settings-fields">
         <div class="field">
@@ -455,7 +455,7 @@ function deleteTemplate(template) {
           <span class="track" />
           <span class="thumb" />
         </span>
-        <span><strong>立即上架</strong><em>关闭后商品保留在后台，但补给站不再展示</em></span>
+        <span><strong>立即上架</strong><em>关闭后商品保留在后台，但积分商城不再展示</em></span>
       </label>
       <p v-if="productError" class="modal-error">{{ productError }}</p>
     </div>
@@ -474,7 +474,7 @@ function deleteTemplate(template) {
       <div class="settings-fields">
         <div class="field">
           <label for="template-title">协议名称</label>
-          <input id="template-title" v-model="templateForm.title" class="input" maxlength="40" placeholder="例如：星际航行服务协议" />
+          <input id="template-title" v-model="templateForm.title" class="input" maxlength="40" placeholder="例如：服务协议" />
         </div>
         <div class="field">
           <label for="template-version">版本号</label>
@@ -483,7 +483,7 @@ function deleteTemplate(template) {
       </div>
       <div class="settings-fields">
         <div class="field">
-          <label for="template-reward">签署奖励（粒子）</label>
+          <label for="template-reward">签署奖励（积分）</label>
           <input id="template-reward" v-model.number="templateForm.reward" class="input" type="number" min="0" max="10000" />
         </div>
         <div class="field">

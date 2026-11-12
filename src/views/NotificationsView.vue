@@ -179,9 +179,9 @@ async function onPhoneUpdated() {
 </script>
 
 <template>
-  <PageHeader title="通知偏好" sub="选择你想接收的星际讯息与送达渠道。">
+  <PageHeader title="通知偏好" sub="选择你想接收的通知与送达渠道。">
     <template #meta>
-      <span class="badge badge-blue">安全提醒已开启</span>
+      <span class="badge badge-blue">{{ unread ? `${unread} 条未读` : '无未读消息' }}</span>
       <span class="head-date">{{ channelCount }} 个渠道在线</span>
     </template>
   </PageHeader>
@@ -220,7 +220,7 @@ async function onPhoneUpdated() {
           <div v-if="!inbox.length" class="inline-empty">
             <span class="inline-empty-icon"><AppIcon name="bell" /></span>
             <h3>收件箱还是空的</h3>
-            <p>安全提醒、补给动态与星能变动会通过站内信送达。</p>
+            <p>安全提醒、商城动态与余额变动会通过站内信送达。</p>
           </div>
         </div>
       </section>
@@ -228,7 +228,7 @@ async function onPhoneUpdated() {
       <section id="notify-types" class="card">
         <div class="card-head">
           <h2>通知类型</h2>
-          <span class="head-note">{{ categories.length }} 类讯息</span>
+          <span class="head-note">{{ categories.length }} 类通知</span>
         </div>
         <div class="notify-list">
           <label v-for="item in categories" :key="item.key" class="notify-row">
@@ -326,13 +326,13 @@ async function onPhoneUpdated() {
 
       <section id="digest" class="card">
         <div class="card-head">
-          <h2>星际摘要</h2>
+          <h2>邮件摘要</h2>
           <span class="badge badge-blue">每周一</span>
         </div>
         <div class="sec-row">
           <div>
             <p class="sec-title">每周邮件摘要</p>
-            <p class="sec-sub">汇总粒子、权益与补给动态</p>
+            <p class="sec-sub">汇总积分、权益与商城动态</p>
           </div>
           <div class="sec-right">
             <label class="switch" aria-label="每周邮件摘要">
@@ -371,7 +371,7 @@ async function onPhoneUpdated() {
       <div v-if="!allMessages.length" class="inline-empty">
         <span class="inline-empty-icon"><AppIcon name="bell" /></span>
         <h3>暂无站内信</h3>
-        <p>新的星际讯息会出现在这里。</p>
+        <p>新的通知会出现在这里。</p>
       </div>
     </div>
   </BaseModal>

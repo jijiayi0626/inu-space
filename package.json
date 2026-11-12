@@ -1,22 +1,24 @@
 {
   "name": "inu-space-pass",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "private": true,
   "type": "module",
-  "description": "INU 星际通行证 · Vue 3 + Cloudflare Workers + D1",
+  "description": "INU 账号中心 · Vue 3 + Cloudflare Workers + D1",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
     "worker:dev": "wrangler dev --local --port 8787",
-    "db:local": "wrangler d1 execute inu-space-db --local --file=./migrations/0001_schema.sql && wrangler d1 execute inu-space-db --local --file=./migrations/0002_seed.sql && wrangler d1 execute inu-space-db --local --file=./migrations/0003_oauth.sql && wrangler d1 execute inu-space-db --local --file=./migrations/0004_admin_oauth.sql && wrangler d1 execute inu-space-db --local --file=./migrations/0005_features.sql && wrangler d1 execute inu-space-db --local --file=./migrations/0006_password_reset.sql",
-    "db:remote": "wrangler d1 execute inu-space-db --remote --file=./migrations/0001_schema.sql && wrangler d1 execute inu-space-db --remote --file=./migrations/0002_seed.sql && wrangler d1 execute inu-space-db --remote --file=./migrations/0003_oauth.sql && wrangler d1 execute inu-space-db --remote --file=./migrations/0004_admin_oauth.sql && wrangler d1 execute inu-space-db --remote --file=./migrations/0005_features.sql && wrangler d1 execute inu-space-db --remote --file=./migrations/0006_password_reset.sql",
-    "db:migrate:local": "wrangler d1 execute inu-space-db --local --file=./migrations/0001_schema.sql && wrangler d1 execute inu-space-db --local --file=./migrations/0003_oauth.sql && wrangler d1 execute inu-space-db --local --file=./migrations/0004_admin_oauth.sql && wrangler d1 execute inu-space-db --local --file=./migrations/0005_features.sql && wrangler d1 execute inu-space-db --local --file=./migrations/0006_password_reset.sql",
-    "db:migrate:remote": "wrangler d1 execute inu-space-db --remote --file=./migrations/0001_schema.sql && wrangler d1 execute inu-space-db --remote --file=./migrations/0003_oauth.sql && wrangler d1 execute inu-space-db --remote --file=./migrations/0004_admin_oauth.sql && wrangler d1 execute inu-space-db --remote --file=./migrations/0005_features.sql && wrangler d1 execute inu-space-db --remote --file=./migrations/0006_password_reset.sql",
+    "db:local": "wrangler d1 execute inu-space-db --local --file=./migrations/0001_schema.sql && wrangler d1 execute inu-space-db --local --file=./migrations/0002_seed.sql && wrangler d1 execute inu-space-db --local --file=./migrations/0003_oauth.sql && wrangler d1 execute inu-space-db --local --file=./migrations/0004_admin_oauth.sql && wrangler d1 execute inu-space-db --local --file=./migrations/0005_features.sql && wrangler d1 execute inu-space-db --local --file=./migrations/0006_password_reset.sql && wrangler d1 execute inu-space-db --local --file=./migrations/0007_neutral_tiers.sql && wrangler d1 execute inu-space-db --local --file=./migrations/0008_session_names.sql",
+    "db:remote": "wrangler d1 execute inu-space-db --remote --file=./migrations/0001_schema.sql && wrangler d1 execute inu-space-db --remote --file=./migrations/0002_seed.sql && wrangler d1 execute inu-space-db --remote --file=./migrations/0003_oauth.sql && wrangler d1 execute inu-space-db --remote --file=./migrations/0004_admin_oauth.sql && wrangler d1 execute inu-space-db --remote --file=./migrations/0005_features.sql && wrangler d1 execute inu-space-db --remote --file=./migrations/0006_password_reset.sql && wrangler d1 execute inu-space-db --remote --file=./migrations/0007_neutral_tiers.sql && wrangler d1 execute inu-space-db --remote --file=./migrations/0008_session_names.sql",
+    "db:migrate:local": "wrangler d1 execute inu-space-db --local --file=./migrations/0001_schema.sql && wrangler d1 execute inu-space-db --local --file=./migrations/0003_oauth.sql && wrangler d1 execute inu-space-db --local --file=./migrations/0004_admin_oauth.sql && wrangler d1 execute inu-space-db --local --file=./migrations/0005_features.sql && wrangler d1 execute inu-space-db --local --file=./migrations/0006_password_reset.sql && wrangler d1 execute inu-space-db --local --file=./migrations/0007_neutral_tiers.sql && wrangler d1 execute inu-space-db --local --file=./migrations/0008_session_names.sql",
+    "db:migrate:remote": "wrangler d1 execute inu-space-db --remote --file=./migrations/0001_schema.sql && wrangler d1 execute inu-space-db --remote --file=./migrations/0003_oauth.sql && wrangler d1 execute inu-space-db --remote --file=./migrations/0004_admin_oauth.sql && wrangler d1 execute inu-space-db --remote --file=./migrations/0005_features.sql && wrangler d1 execute inu-space-db --remote --file=./migrations/0006_password_reset.sql && wrangler d1 execute inu-space-db --remote --file=./migrations/0007_neutral_tiers.sql && wrangler d1 execute inu-space-db --remote --file=./migrations/0008_session_names.sql",
     "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
+    "fuxsto-design-pro": "^0.1.5",
     "hono": "^4.13.14",
+    "lucide-vue-next": "^1.0.0",
     "vue": "^3.5.44",
     "vue-router": "^4.6.4"
   },

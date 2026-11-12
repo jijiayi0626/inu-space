@@ -255,7 +255,7 @@ function deleteClient(client) {
     <div class="modal-form">
       <div class="field">
         <label for="client-name">应用名称</label>
-        <input id="client-name" v-model="clientForm.name" class="input" maxlength="40" placeholder="例如：星环笔记" />
+        <input id="client-name" v-model="clientForm.name" class="input" maxlength="40" placeholder="例如：示例应用" />
       </div>
       <div class="field">
         <label for="client-desc">应用描述</label>
