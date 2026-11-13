@@ -249,10 +249,33 @@ function tierForParticles(particles) {
 }
 
 // 等级只升不降：同时参考已存储等级与当前积分，历史高等级不会因消费回落。
-function tierOf(userRow) {
+function permanentTierOf(userRow) {
   const stored = TIER_MAP[userRow.member_tier] || TIERS[0];
   const earned = tierForParticles(userRow.particles);
   return earned.min > stored.min ? earned : stored;
+}
+
+// 付费会员卡按有效期生效，过期后自动回落到成长等级。
+function paidTierOf(userRow) {
+  const key = String(userRow.member_paid_tier || '');
+  const until = userRow.member_paid_until;
+  if (!key || !until) return null;
+  const time = Date.parse(until);
+  if (!Number.isFinite(time) || time <= Date.now()) return null;
+  return TIER_MAP[key] || null;
+}
+
+function membershipOf(userRow) {
+  const permanent = permanentTierOf(userRow);
+  const paid = paidTierOf(userRow);
+  if (paid && paid.min > permanent.min) {
+    return { tier: paid, validUntil: userRow.member_paid_until, permanentTier: permanent, paid: true };
+  }
+  return { tier: permanent, validUntil: null, permanentTier: permanent, paid: false };
+}
+
+function tierOf(userRow) {
+  return membershipOf(userRow).tier;
 }
 
 function higherTier(first, second) {
@@ -260,7 +283,14 @@ function higherTier(first, second) {
 }
 
 function nextTierAfter(userRow, nextParticles) {
-  return higherTier(tierOf(userRow), tierForParticles(nextParticles));
+  return higherTier(permanentTierOf(userRow), tierForParticles(nextParticles));
+}
+
+function addMonthsIso(value, months) {
+  const base = new Date(value);
+  const next = new Date(base.getTime());
+  next.setUTCMonth(next.getUTCMonth() + months);
+  return next.toISOString();
 }
 
 function parsePaymentMode(value) {
@@ -281,6 +311,7 @@ function serializeProduct(row) {
     paymentMode: parsePaymentMode(row.payment_mode),
     kind: parseProductKind(row.kind),
     grantTier: row.grant_tier || '',
+    grantMonths: Number(row.grant_months) || 12,
     appKey: row.app_key || '',
     icon: row.icon,
     tag: row.tag,
@@ -290,7 +321,8 @@ function serializeProduct(row) {
 }
 
 function serializeUser(row, options = {}) {
-  const tier = tierOf(row);
+  const membership = membershipOf(row);
+  const tier = membership.tier;
   return {
     id: row.id,
     email: row.email,
@@ -305,6 +337,8 @@ function serializeUser(row, options = {}) {
     tier: tier.key,
     tierLabel: tier.label,
     tierEn: tier.en,
+    tierValidUntil: membership.validUntil ? membership.validUntil.slice(0, 10) : null,
+    permanentTier: membership.permanentTier.key,
     particles: row.particles,
     starEnergyCents: row.star_energy_cents,
     miles: row.miles,
@@ -2898,6 +2932,7 @@ function serializeAdminProduct(row) {
     paymentMode: parsePaymentMode(row.payment_mode),
     kind: parseProductKind(row.kind),
     grantTier: row.grant_tier || '',
+    grantMonths: Number(row.grant_months) || 12,
     appKey: row.app_key || '',
     icon: row.icon,
     tag: row.tag,
@@ -2942,11 +2977,18 @@ function readProductInput(body, base = null) {
   }
 
   let grantTier = '';
+  let grantMonths = 12;
   if (kind === 'membership') {
     grantTier = String(body.grantTier !== undefined ? body.grantTier : base?.grantTier || '');
-    if (!['silver', 'gold', 'platinum'].includes(grantTier)) {
-      return { error: '会员商品需选择白银、黄金或铂金等级' };
+    if (!TIER_MAP[grantTier] || grantTier === 'basic') {
+      return { error: '会员商品需选择白银及以上的会员等级' };
     }
+    const monthsRaw =
+      body.grantMonths !== undefined ? Math.round(Number(body.grantMonths)) : Number(base?.grantMonths ?? 12);
+    if (!Number.isFinite(monthsRaw) || monthsRaw < 1 || monthsRaw > 36) {
+      return { error: '会员有效期需在 1–36 个月之间' };
+    }
+    grantMonths = monthsRaw;
   }
 
   let appKey = '';
@@ -2988,6 +3030,7 @@ function readProductInput(body, base = null) {
       paymentMode,
       kind,
       grantTier,
+      grantMonths,
       appKey,
       icon,
       tag,
@@ -3017,9 +3060,9 @@ app.post('/api/admin/products', async (c) => {
   const value = parsed.value;
   await c.env.DB.prepare(
     `INSERT INTO products
-       (id, name, desc, price_cents, points_price, payment_mode, kind, grant_tier, app_key,
+       (id, name, desc, price_cents, points_price, payment_mode, kind, grant_tier, grant_months, app_key,
         icon, tag, tone, stock, active, sort, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       id,
@@ -3030,6 +3073,7 @@ app.post('/api/admin/products', async (c) => {
       value.paymentMode,
       value.kind,
       value.grantTier,
+      value.grantMonths,
       value.appKey,
       value.icon,
       value.tag,
@@ -3060,7 +3104,7 @@ app.patch('/api/admin/products/:id', async (c) => {
 
   await c.env.DB.prepare(
     `UPDATE products SET name = ?, desc = ?, price_cents = ?, points_price = ?, payment_mode = ?,
-       kind = ?, grant_tier = ?, app_key = ?, icon = ?, tag = ?, tone = ?,
+       kind = ?, grant_tier = ?, grant_months = ?, app_key = ?, icon = ?, tag = ?, tone = ?,
        stock = ?, active = ?, sort = ?, updated_at = ? WHERE id = ?`,
   )
     .bind(
@@ -3071,6 +3115,7 @@ app.patch('/api/admin/products/:id', async (c) => {
       value.paymentMode,
       value.kind,
       value.grantTier,
+      value.grantMonths,
       value.appKey,
       value.icon,
       value.tag,
@@ -3683,6 +3728,7 @@ app.get('/api/overview', async (c) => {
     user: await serializeUserFor(c, user),
     dateLabel: dateLabel(),
     wallet: { balanceCents: user.star_energy_cents, cardLast4: (await siteSettings(c)).walletCardLast4 },
+    tiers: TIERS.map((item) => ({ key: item.key, label: item.label, min: item.min })),
     counts: {
       devices: deviceCount?.count || 0,
       agreementsSigned: agreements?.signed || 0,
@@ -4600,14 +4646,20 @@ app.patch('/api/notifications/settings', async (c) => {
 app.get('/api/member', async (c) => {
   const db = c.env.DB;
   const user = c.get('userRow');
-  const tier = tierOf(user);
-  const index = TIERS.findIndex((item) => item.key === tier.key);
+  const membership = membershipOf(user);
+  const tier = {
+    ...membership.tier,
+    validUntil: membership.validUntil ? membership.validUntil.slice(0, 10) : null,
+    paid: membership.paid,
+  };
+  const index = TIERS.findIndex((item) => item.key === membership.permanentTier.key);
   const next = TIERS[index + 1] || null;
-  const span = next ? next.min - tier.min : 1;
+  const span = next ? next.min - membership.permanentTier.min : 1;
   const progress = next
-    ? Math.max(0, Math.min(99, Math.floor(((user.particles - tier.min) / span) * 100)))
+    ? Math.max(0, Math.min(99, Math.floor(((user.particles - membership.permanentTier.min) / span) * 100)))
     : 100;
   const remaining = next ? Math.max(0, next.min - user.particles) : 0;
+  const ladder = TIERS.map((item) => `${item.label} ${item.min.toLocaleString('en-US')}`).join('、');
   const logs = await db
     .prepare('SELECT * FROM particle_logs WHERE user_id = ? ORDER BY occurred_at DESC LIMIT 5')
     .bind(user.id)
@@ -4640,10 +4692,11 @@ app.get('/api/member', async (c) => {
       occurredAt: row.occurred_at,
     })),
     rules: [
-      { title: '等级如何计算', text: '会员等级按历史最高积分判定：普通 0、白银 10,000、黄金 50,000、铂金 200,000。达到后不会因积分消费降级，购买会员商品可直接升级。' },
-      { title: '积分如何获得', text: '签署协议、参与活动可获得积分，也可以把余额按站点设置的比例兑换为积分；兑换后的积分不可退回余额。' },
+      { title: '等级如何计算', text: `会员等级按历史最高积分判定：${ladder}。达到后不会因积分消费降级，成长等级长期有效。` },
+      { title: '付费会员', text: '积分商城可购买 12 个月会员卡，支付后立即生效，到期自动回落到成长等级；同等级续费会顺延有效期。' },
+      { title: '积分如何获得', text: '签署协议、参与活动可获得积分，也可以把余额按站点设置的比例兑换为积分，会员等级越高兑换加成越多；兑换后的积分不可退回余额。' },
       { title: '积分与余额', text: '积分用于会员等级与积分商品，余额用于充值、提现与余额商品。两类资产相互独立，结算时按商品标注的方式扣款。' },
-      { title: '会员折扣', text: '积分商城结算时自动应用当前等级折扣，积分价与余额价都会按会员折扣计算。' },
+      { title: '会员折扣', text: '积分商城结算时自动应用当前等级折扣，积分价与余额价都会按会员折扣计算，白银及以上生效。' },
     ],
   });
 });
@@ -4917,7 +4970,9 @@ async function createSupplyOrderFor(c, user, product) {
     }
   }
 
-  const tier = tierOf(user);
+  const membership = membershipOf(user);
+  const tier = membership.tier;
+  const permanent = membership.permanentTier;
   const rate = tier.rate || 1;
   const paymentMode = parsePaymentMode(product.paymentMode);
   const pointsCost =
@@ -4933,12 +4988,26 @@ async function createSupplyOrderFor(c, user, product) {
   }
 
   let grantedTier = null;
+  let paidUntil = '';
   if (kind === 'membership') {
     const wanted = TIER_MAP[product.grantTier];
-    if (wanted && wanted.min <= tier.min) {
-      return { error: jsonError(c, 409, 'TIER_ALREADY_UNLOCKED', '当前等级已不低于该会员权益，无需重复购买') };
+    if (!wanted) {
+      return { error: jsonError(c, 400, 'INVALID_PRODUCT', '该会员商品未配置有效等级') };
     }
-    if (wanted) grantedTier = wanted;
+    if (wanted.min <= permanent.min) {
+      return { error: jsonError(c, 409, 'TIER_ALREADY_UNLOCKED', '当前成长等级已永久达到该等级，无需购买会员卡') };
+    }
+    const paid = paidTierOf(user);
+    if (paid && paid.min > wanted.min) {
+      return { error: jsonError(c, 409, 'TIER_ALREADY_UNLOCKED', '当前付费会员等级更高，无需购买低等级会员卡') };
+    }
+    grantedTier = wanted;
+    const months = Math.max(1, Math.min(36, Number(product.grantMonths) || 12));
+    const extendFrom =
+      paid && paid.key === wanted.key && user.member_paid_until
+        ? Math.max(Date.now(), Date.parse(user.member_paid_until) || 0)
+        : Date.now();
+    paidUntil = addMonthsIso(new Date(extendFrom).toISOString(), months);
   }
 
   const now = new Date(Date.now() + 8 * 3600 * 1000);
@@ -4949,6 +5018,8 @@ async function createSupplyOrderFor(c, user, product) {
   const balance = user.star_energy_cents - balanceCost;
   const particles = Math.max(0, user.particles - pointsCost);
   const memberTier = grantedTier || tier;
+  const paidTierKey = grantedTier ? grantedTier.key : user.member_paid_tier || '';
+  const paidUntilValue = grantedTier ? paidUntil : user.member_paid_until || null;
   const trackingNo = isGoods ? `INU-EXP-${randomDigits(10)}` : '';
   const snapshot = address
     ? JSON.stringify({
@@ -4989,8 +5060,11 @@ async function createSupplyOrderFor(c, user, product) {
     .run();
 
   await db
-    .prepare('UPDATE users SET star_energy_cents = ?, particles = ?, member_tier = ? WHERE id = ?')
-    .bind(balance, particles, memberTier.key, user.id)
+    .prepare(
+      `UPDATE users SET star_energy_cents = ?, particles = ?, member_tier = ?,
+         member_paid_tier = ?, member_paid_until = ? WHERE id = ?`,
+    )
+    .bind(balance, particles, permanent.key, paidTierKey, paidUntilValue, user.id)
     .run();
 
   if (isGoods && typeof product.stock === 'number' && product.stock > 0) {
@@ -5034,7 +5108,7 @@ async function createSupplyOrderFor(c, user, product) {
     kind === 'membership'
       ? {
           title: '会员权益已生效',
-          body: `${product.name} 已开通，当前等级为${memberTier.label}会员。`,
+          body: `${product.name} 已开通，当前等级为${memberTier.label}会员，有效期至 ${paidUntil.slice(0, 10)}。`,
         }
       : kind === 'app'
         ? {
@@ -5058,6 +5132,7 @@ async function createSupplyOrderFor(c, user, product) {
     paymentMode,
     tier: memberTier.key,
     tierLabel: memberTier.label,
+    validUntil: paidUntil ? paidUntil.slice(0, 10) : null,
   };
 }
 
@@ -5139,6 +5214,7 @@ app.get('/api/supply', async (c) => {
               : tip,
           ),
     discountLabel: tier.discount,
+    exchangeBonus: Number(tier.exchangeBonus) || 0,
     verified: Boolean(user.verified),
     verificationAvailable:
       settings.featureVerification && settings.verificationMode !== 'off',
@@ -5402,7 +5478,11 @@ app.post('/api/wallet/points/exchange', async (c) => {
     return jsonError(c, 400, 'INSUFFICIENT_FUNDS', '账户余额不足');
   }
 
-  const points = Math.floor((amountCents / 100) * settings.pointsPerYuan);
+  const memberTier = tierOf(user);
+  const basePoints = Math.floor((amountCents / 100) * settings.pointsPerYuan);
+  const bonusRate = Number(memberTier.exchangeBonus) || 0;
+  const bonusPoints = Math.floor(basePoints * bonusRate);
+  const points = basePoints + bonusPoints;
   if (points < 1) {
     return jsonError(c, 400, 'INVALID_AMOUNT', '兑换金额过小，无法获得积分');
   }
@@ -5412,6 +5492,10 @@ app.post('/api/wallet/points/exchange', async (c) => {
   const tier = nextTierAfter(user, particles);
   const at = nowIso();
   const ref = `PTS-${Date.now().toString(36).toUpperCase()}`;
+  const detailText =
+    bonusPoints > 0
+      ? `${amountCents / 100} 余额 → ${points} 积分（含会员加成 ${bonusPoints}）`
+      : `${amountCents / 100} 余额 → ${points} 积分`;
 
   await db.batch([
     db
@@ -5422,34 +5506,19 @@ app.post('/api/wallet/points/exchange', async (c) => {
         `INSERT INTO wallet_transactions (user_id, kind, title, detail, amount_cents, balance_after, ref, created_at)
          VALUES (?, 'points_exchange', ?, ?, ?, ?, ?, ?)`,
       )
-      .bind(
-        user.id,
-        '余额兑换积分',
-        `${amountCents / 100} 余额 → ${points} 积分`,
-        -amountCents,
-        balance,
-        ref,
-        at,
-      ),
+      .bind(user.id, '余额兑换积分', detailText, -amountCents, balance, ref, at),
     db
       .prepare('INSERT INTO particle_logs (user_id, label, delta, balance, occurred_at) VALUES (?, ?, ?, ?, ?)')
       .bind(user.id, '余额兑换积分', points, particles, at),
   ]);
 
-  await addActivity(
-    db,
-    user.id,
-    '余额兑换积分',
-    `${amountCents / 100} 余额 → ${points} 积分`,
-    'purple',
-    'i-star',
-  );
+  await addActivity(db, user.id, '余额兑换积分', detailText, 'purple', 'i-star');
   await pushNotification(
     db,
     user.id,
     'type_member',
     '积分兑换成功',
-    `已使用 ${amountCents / 100} 余额兑换 ${points} 积分，当前等级为${tier.label}会员。`,
+    `已使用 ${amountCents / 100} 余额兑换 ${points} 积分${bonusPoints ? `（含会员加成 ${bonusPoints}）` : ''}，当前等级为${memberTier.label}会员。`,
     '/supply',
   );
 
@@ -5457,6 +5526,8 @@ app.post('/api/wallet/points/exchange', async (c) => {
     balanceCents: balance,
     particles,
     points,
+    basePoints,
+    bonusPoints,
     amountCents,
     perYuan: settings.pointsPerYuan,
     tier: tier.key,

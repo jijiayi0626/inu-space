@@ -64,11 +64,12 @@ async function openAllParticles() {
       </div>
       <div class="hero-progress">
         <div class="hero-progress-head">
-          <span>{{ next ? `距离${next.label}等级` : '已抵达最高等级' }}</span>
+          <span>{{ next ? `${tier.paid ? '成长进度 · ' : ''}距离${next.label}等级` : '已抵达最高等级' }}</span>
           <span>{{ progress }}%</span>
         </div>
         <div class="hero-track"><span :style="{ width: `${progress}%` }" /></div>
         <p class="hero-desc">
+          <template v-if="tier.paid && tier.validUntil">付费会员有效期至 {{ tier.validUntil }}。 </template>
           <template v-if="next">
             还需 {{ number(data.remaining) }} 积分<template v-if="data.estimatedDays"> · 预计 {{ data.estimatedDays }} 天后达成</template>
           </template>
@@ -107,7 +108,11 @@ async function openAllParticles() {
           :class="{ current: item.current }"
         >
           <p class="tier-name"><AppIcon :name="item.icon" />{{ item.label }}</p>
-          <p class="tier-meta"><b>{{ number(item.min) }}</b> 积分起 · {{ item.discount }}会员价</p>
+          <p class="tier-meta">
+            <b>{{ number(item.min) }}</b> 积分起
+            <template v-if="item.rate < 1"> · {{ item.discount }}会员价 · 兑换 +{{ Math.round((item.exchangeBonus || 0) * 100) }}%</template>
+            <template v-else> · 无会员折扣</template>
+          </p>
           <span class="badge" :class="item.current ? 'badge-blue' : item.unlocked ? 'badge-green' : 'badge-gray'">
             {{ item.current ? '当前' : item.unlocked ? '已解锁' : '未解锁' }}
           </span>

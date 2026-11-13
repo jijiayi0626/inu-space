@@ -17,20 +17,18 @@ const user = computed(() => data.value?.user || session.user || {});
 const wallet = computed(() => data.value?.wallet || { balanceCents: user.value.starEnergyCents || 0, cardLast4: '0721' });
 const balance = computed(() => moneyParts(wallet.value.balanceCents));
 const particles = computed(() => user.value.particles || 0);
-const tierSteps = [
-  { key: 'basic', label: '普通', min: 0 },
-  { key: 'silver', label: '白银', min: 10000 },
-  { key: 'gold', label: '黄金', min: 50000 },
-  { key: 'platinum', label: '铂金', min: 200000 },
-];
+const tierSteps = computed(() => {
+  const list = data.value?.tiers;
+  return Array.isArray(list) && list.length ? list : [{ key: 'basic', label: '普通', min: 0 }];
+});
 const tierIndex = computed(() => {
-  const index = tierSteps.findIndex((item) => item.key === user.value.tier);
+  const index = tierSteps.value.findIndex((item) => item.key === user.value.tier);
   return index >= 0 ? index : 0;
 });
-const nextTier = computed(() => tierSteps[tierIndex.value + 1] || null);
+const nextTier = computed(() => tierSteps.value[tierIndex.value + 1] || null);
 const progress = computed(() => {
   if (!nextTier.value) return 100;
-  const currentMin = tierSteps[tierIndex.value].min;
+  const currentMin = tierSteps.value[tierIndex.value].min;
   const span = nextTier.value.min - currentMin;
   return Math.max(0, Math.min(99, Math.floor(((particles.value - currentMin) / span) * 100)));
 });

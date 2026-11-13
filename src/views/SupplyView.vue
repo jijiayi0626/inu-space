@@ -21,7 +21,10 @@ const verified = computed(() => data.value?.verified ?? session.user?.verified ?
 const verificationAvailable = computed(() => data.value?.verificationAvailable === true);
 const entitlements = computed(() => data.value?.entitlements || []);
 const currentTier = computed(() => data.value?.user?.tier || session.user?.tier || 'basic');
-const tierRank = { basic: 0, silver: 1, gold: 2, platinum: 3 };
+const permanentTier = computed(() => data.value?.user?.permanentTier || currentTier.value);
+const tierValidUntil = computed(() => data.value?.user?.tierValidUntil || null);
+const exchangeBonus = computed(() => Number(data.value?.exchangeBonus) || 0);
+const tierRank = { basic: 0, silver: 1, gold: 2, platinum: 3, diamond: 4, black: 5 };
 const kindLabels = { goods: '实物', membership: '会员', app: '应用' };
 
 function orderCost(order) {
@@ -29,7 +32,19 @@ function orderCost(order) {
 }
 
 function productOwned(product) {
-  return product.kind === 'membership' && (tierRank[product.grantTier] || 0) <= (tierRank[currentTier.value] || 0);
+  if (product.kind !== 'membership') return false;
+  const wanted = tierRank[product.grantTier] || 0;
+  const permanent = tierRank[permanentTier.value] || 0;
+  const current = tierRank[currentTier.value] || 0;
+  return permanent >= wanted || current > wanted;
+}
+
+function productRenew(product) {
+  return (
+    product.kind === 'membership' &&
+    currentTier.value === product.grantTier &&
+    Boolean(tierValidUntil.value)
+  );
 }
 
 function productBlocked(product) {
@@ -90,7 +105,8 @@ const exchangeError = ref('');
 const exchangePoints = computed(() => {
   const yuan = Number(exchangeYuan.value);
   if (!Number.isFinite(yuan) || yuan <= 0) return 0;
-  return Math.floor(yuan * (points.value.perYuan || 0));
+  const base = Math.floor(yuan * (points.value.perYuan || 0));
+  return base + Math.floor(base * exchangeBonus.value);
 });
 
 function openExchange() {
@@ -118,7 +134,11 @@ async function submitExchange() {
       setUser({ ...session.user, starEnergyCents: result.balanceCents, particles: result.particles });
     }
     exchangeOpen.value = false;
-    toast(`兑换成功，+${number(result.points)} 积分`);
+    toast(
+      result.bonusPoints
+        ? `兑换成功，+${number(result.points)} 积分（含会员加成 ${number(result.bonusPoints)}）`
+        : `兑换成功，+${number(result.points)} 积分`,
+    );
     await reload({ silent: true });
   } catch (error) {
     exchangeError.value = error.message;
@@ -286,8 +306,8 @@ async function loadAllOrders() {
 <template>
   <PageHeader title="积分商城" sub="积分与余额分开结算，会员折扣自动生效。">
     <template #meta>
-      <span class="badge badge-blue">{{ data?.user?.tierLabel || '普通' }}会员 · {{ data?.discountLabel || '95 折' }}</span>
-      <span class="head-date">商品每日更新</span>
+      <span class="badge badge-blue">{{ data?.user?.tierLabel || '普通' }}会员 · {{ data?.discountLabel || '无折扣' }}</span>
+      <span class="head-date">{{ tierValidUntil ? `有效期至 ${tierValidUntil}` : '商品每日更新' }}</span>
     </template>
   </PageHeader>
 
@@ -377,15 +397,16 @@ async function loadAllOrders() {
               <Button v-else variant="secondary" size="sm" type="button" disabled>暂不可兑</Button>
             </template>
             <Button v-else variant="primary" size="sm" type="button" :disabled="!featureEnabled" @click="openOrder(product)">
-              {{ featureEnabled ? '兑换' : '暂停开放' }}
+              {{ !featureEnabled ? '暂停开放' : productRenew(product) ? '续期' : '兑换' }}
             </Button>
           </div>
         </article>
       </div>
-      <p v-if="verificationAvailable" class="card-note">
+      <p class="card-note">
         <AppIcon name="idcard" />
-        <span v-if="verified">实名认证已完成，实物商品可正常兑换；会员与应用权益无需认证。</span>
-        <span v-else>实物商品需完成实名认证，会员与应用权益可直接购买。</span>
+        <span v-if="!verificationAvailable">未开放实名认证，会员与应用权益可直接购买，实物商品暂不可兑。</span>
+        <span v-else-if="verified">实名认证已完成，实物商品可正常兑换；会员与应用权益无需认证。</span>
+        <span v-else>未实名认证只能购买虚拟会员与应用权益，完成实名认证后可兑换实物商品。</span>
       </p>
     </section>
 
@@ -503,6 +524,9 @@ async function loadAllOrders() {
         </div>
         <div class="detail-row" v-else><dt>可用余额</dt><dd>{{ money(wallet.balanceCents) }} 余额</dd></div>
         <div class="detail-row" v-if="selectedProduct.kind === 'goods'"><dt>预计送达</dt><dd>1–3 个工作日</dd></div>
+        <div class="detail-row" v-else-if="selectedProduct.kind === 'membership'">
+          <dt>会员有效期</dt><dd>{{ selectedProduct.grantMonths || 12 }} 个月，到期自动回落成长等级</dd>
+        </div>
         <div class="detail-row" v-else><dt>生效方式</dt><dd>兑换后立即生效</dd></div>
       </dl>
       <p class="card-note">
@@ -525,7 +549,10 @@ async function loadAllOrders() {
       <span class="device-icon lg"><AppIcon name="star" /></span>
       <div>
         <p class="modal-device-name">{{ number(points.balance) }} 积分</p>
-        <p class="modal-device-sub">当前余额 {{ money(wallet.balanceCents) }} · 1 余额 = {{ points.perYuan }} 积分</p>
+        <p class="modal-device-sub">
+          当前余额 {{ money(wallet.balanceCents) }} · 1 余额 = {{ points.perYuan }} 积分
+          <template v-if="exchangeBonus > 0"> · 会员加成 +{{ Math.round(exchangeBonus * 100) }}%</template>
+        </p>
       </div>
     </div>
     <div class="field">

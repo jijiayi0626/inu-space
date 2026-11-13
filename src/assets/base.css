@@ -729,7 +729,7 @@ p{text-wrap:pretty}
 .benefit-title{font-size:var(--fx-text-sm);font-weight:var(--fx-weight-medium);line-height:1.4}
 .benefit-desc{font-size:var(--fx-text-xs);color:var(--fx-muted-foreground);line-height:1.55;margin-top:var(--s-1)}
 .benefit-badge{margin-top:var(--s-2)}
-.tier-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--s-2);margin-top:var(--s-4)}
+.tier-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--s-2);margin-top:var(--s-4)}
 .tier-card{border:none;border-radius:var(--r-sm);padding:var(--s-3);background:var(--fx-muted)}
 .tier-card.current{background:var(--fx-secondary)}
 .tier-name{display:flex;align-items:center;gap:var(--s-2);font-size:var(--fx-text-sm);font-weight:var(--fx-weight-medium)}
