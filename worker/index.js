@@ -118,6 +118,10 @@ function monthStartIso() {
   return `${year}-${month}-01T00:00:00`;
 }
 
+function shanghaiDateKey(offsetDays = 0) {
+  return new Date(Date.now() + 8 * 3600 * 1000 + offsetDays * 86400000).toISOString().slice(0, 10);
+}
+
 function clientIp(c) {
   return (
     c.req.header('CF-Connecting-IP') ||
@@ -286,11 +290,8 @@ function nextTierAfter(userRow, nextParticles) {
   return higherTier(permanentTierOf(userRow), tierForParticles(nextParticles));
 }
 
-function addMonthsIso(value, months) {
-  const base = new Date(value);
-  const next = new Date(base.getTime());
-  next.setUTCMonth(next.getUTCMonth() + months);
-  return next.toISOString();
+function addDaysIso(value, days) {
+  return new Date(new Date(value).getTime() + days * 86400000).toISOString();
 }
 
 function parsePaymentMode(value) {
@@ -311,7 +312,7 @@ function serializeProduct(row) {
     paymentMode: parsePaymentMode(row.payment_mode),
     kind: parseProductKind(row.kind),
     grantTier: row.grant_tier || '',
-    grantMonths: Number(row.grant_months) || 12,
+    grantDays: Number(row.grant_days) || (Number(row.grant_months) || 1) * 30,
     appKey: row.app_key || '',
     icon: row.icon,
     tag: row.tag,
@@ -611,7 +612,7 @@ const SITE_DEFAULTS = {
   loginWelcome: '登录后继续管理你的资料与安全。',
   supportEmail: 'support@inu.space',
   walletCardLast4: '0721',
-  featureRecharge: true,
+  featureRecharge: false,
   featureWithdraw: false,
   featurePhoneBind: true,
   featureEmailChange: true,
@@ -621,7 +622,12 @@ const SITE_DEFAULTS = {
   featureRegister: false,
   featureVerification: true,
   featurePointsExchange: true,
-  paymentMode: 'mock',
+  featureCheckin: true,
+  checkinBase: 20,
+  checkinWeekBonus: 100,
+  checkinMonthBonus: 500,
+  registerBonus: 200,
+  paymentMode: 'off',
   verificationMode: 'console',
   pointsPerYuan: 100,
   rechargePresets: '50,100,200,500,1000',
@@ -746,6 +752,11 @@ async function siteSettings(c) {
     featureRegister: bool('feature_register', SITE_DEFAULTS.featureRegister),
     featureVerification: bool('feature_verification', SITE_DEFAULTS.featureVerification),
     featurePointsExchange: bool('feature_points_exchange', SITE_DEFAULTS.featurePointsExchange),
+    featureCheckin: bool('feature_checkin', SITE_DEFAULTS.featureCheckin),
+    checkinBase: int('checkin_base', SITE_DEFAULTS.checkinBase, 1, 1000),
+    checkinWeekBonus: int('checkin_week_bonus', SITE_DEFAULTS.checkinWeekBonus, 0, 10000),
+    checkinMonthBonus: int('checkin_month_bonus', SITE_DEFAULTS.checkinMonthBonus, 0, 50000),
+    registerBonus: int('register_bonus', SITE_DEFAULTS.registerBonus, 0, 10000),
     paymentMode: choice('payment_mode', SITE_DEFAULTS.paymentMode, PAYMENT_MODES),
     verificationMode: choice('verification_mode', SITE_DEFAULTS.verificationMode, VERIFICATION_MODES),
     pointsPerYuan: int('points_per_yuan', SITE_DEFAULTS.pointsPerYuan, 1, 10000),
@@ -789,8 +800,9 @@ function publicSiteSettings(settings) {
       register: settings.featureRegister,
       verification: settings.featureVerification,
       pointsExchange: settings.featurePointsExchange,
+      checkin: settings.featureCheckin,
     },
-    points: { perYuan: settings.pointsPerYuan },
+    points: { perYuan: settings.pointsPerYuan, registerBonus: settings.registerBonus },
     payment: { mode: settings.paymentMode },
     verification: { mode: settings.verificationMode },
     maintenance: {
@@ -1000,6 +1012,7 @@ async function uniqueInuId(db) {
 
 async function findOrCreateOAuthUser(c, provider, identity) {
   const db = c.env.DB;
+  const settings = await siteSettings(c);
   const linked = await db
     .prepare('SELECT * FROM oauth_accounts WHERE provider = ? AND subject = ?')
     .bind(provider.id, identity.subject)
@@ -1017,6 +1030,7 @@ async function findOrCreateOAuthUser(c, provider, identity) {
 
   let user = await db.prepare('SELECT * FROM users WHERE email = ?').bind(identity.email).first();
   let created = false;
+  let registerBonus = 0;
 
   if (!user) {
     const name = cleanDisplayName(identity.name, identity.email.split('@')[0]);
@@ -1032,8 +1046,21 @@ async function findOrCreateOAuthUser(c, provider, identity) {
         )
         .bind(identity.email, `oauth$${randomBase64Url(24)}`, name, inuId, orbit, avatarTextOf(name))
         .run();
-      user = await db.prepare('SELECT * FROM users WHERE id = ?').bind(inserted.meta?.last_row_id).first();
+      const userId = inserted.meta?.last_row_id;
+      user = await db.prepare('SELECT * FROM users WHERE id = ?').bind(userId).first();
       created = true;
+      registerBonus = Math.max(0, Number(settings.registerBonus) || 0);
+      if (registerBonus > 0) {
+        await db
+          .prepare('UPDATE users SET particles = ?, member_tier = ? WHERE id = ?')
+          .bind(registerBonus, tierForParticles(registerBonus).key, userId)
+          .run();
+        await db
+          .prepare('INSERT INTO particle_logs (user_id, label, delta, balance, occurred_at) VALUES (?, ?, ?, ?, ?)')
+          .bind(userId, '新人注册奖励', registerBonus, registerBonus, nowIso())
+          .run();
+        user = await db.prepare('SELECT * FROM users WHERE id = ?').bind(userId).first();
+      }
     } catch (error) {
       user = await db.prepare('SELECT * FROM users WHERE email = ?').bind(identity.email).first();
       if (!user) throw error;
@@ -1057,7 +1084,24 @@ async function findOrCreateOAuthUser(c, provider, identity) {
 
   if (created) {
     try {
-      await addActivity(db, user.id, '加入 INU 服务', `通过 ${provider.label} 创建账号`, 'blue', 'i-user');
+      await addActivity(
+        db,
+        user.id,
+        '加入 INU 服务',
+        `通过 ${provider.label} 创建账号${registerBonus ? ` · 新人礼 +${registerBonus} 积分` : ''}`,
+        'blue',
+        'i-user',
+      );
+      await pushNotification(
+        db,
+        user.id,
+        'type_security',
+        '欢迎加入 INU 服务',
+        registerBonus
+          ? `你的INU 账号已激活，新人礼 ${registerBonus} 积分已到账，可在会员中心每日签到。`
+          : '你的INU 账号已激活，建议先完成实名认证并开启两步验证。',
+        '/profile',
+      );
     } catch {
       /* 活动记录失败不影响登录 */
     }
@@ -1353,6 +1397,17 @@ app.post('/api/auth/register', async (c) => {
     .run();
 
   const userId = inserted.meta?.last_row_id;
+  const registerBonus = Math.max(0, Number(settings.registerBonus) || 0);
+  if (registerBonus > 0) {
+    await db
+      .prepare('UPDATE users SET particles = ?, member_tier = ? WHERE id = ?')
+      .bind(registerBonus, tierForParticles(registerBonus).key, userId)
+      .run();
+    await db
+      .prepare('INSERT INTO particle_logs (user_id, label, delta, balance, occurred_at) VALUES (?, ?, ?, ?, ?)')
+      .bind(userId, '新人注册奖励', registerBonus, registerBonus, createdAt)
+      .run();
+  }
   let user = await db.prepare('SELECT * FROM users WHERE id = ?').bind(userId).first();
 
   await ensureAgreementsForUser(db, userId);
@@ -1363,9 +1418,9 @@ app.post('/api/auth/register', async (c) => {
     )
     .bind(userId)
     .run();
-  await addActivity(db, userId, '加入 INU 服务', `账号 ${inuId} 已激活`, 'blue', 'i-user');
+  await addActivity(db, userId, '加入 INU 服务', `账号 ${inuId} 已激活${registerBonus ? ` · 新人礼 +${registerBonus} 积分` : ''}`, 'blue', 'i-user');
   await addSecurityLog(db, userId, '账号注册成功', `${detectClient(c).label} · ${clientLocation(c)}`, 'green', 'i-check');
-  await pushNotification(db, userId, 'type_security', '欢迎加入 INU 服务', '你的INU 账号已激活，建议先完成实名认证并开启两步验证。', '/profile');
+  await pushNotification(db, userId, 'type_security', '欢迎加入 INU 服务', registerBonus ? `你的INU 账号已激活，新人礼 ${registerBonus} 积分已到账，可在会员中心每日签到。` : '你的INU 账号已激活，建议先完成实名认证并开启两步验证。', '/profile');
 
   let sessionUser = await createSessionForUser(c, user, '注册并登录');
   sessionUser = await ensureAdminAccess(c, sessionUser);
@@ -2107,6 +2162,14 @@ app.get('/oauth/userinfo', async (c) => {
     payload.email_verified = Boolean(user.verified);
   }
   if (scopes.includes('entitlements')) {
+    const membership = membershipOf(user);
+    payload.membership = {
+      tier: membership.tier.key,
+      tier_label: membership.tier.label,
+      paid: membership.paid,
+      valid_until: membership.validUntil || null,
+      permanent_tier: membership.permanentTier.key,
+    };
     try {
       const rows = await c.env.DB.prepare(
         'SELECT app_key, plan, granted_at FROM user_entitlements WHERE user_id = ? ORDER BY granted_at DESC',
@@ -2468,6 +2531,7 @@ app.patch('/api/admin/settings', async (c) => {
     'featureRegister',
     'featureVerification',
     'featurePointsExchange',
+    'featureCheckin',
     'maintenanceEnabled',
   ];
   for (const key of boolKeys) {
@@ -2538,6 +2602,21 @@ app.patch('/api/admin/settings', async (c) => {
     next.pointsPerYuan = Math.round(value);
   }
 
+  const pointSettings = [
+    ['checkinBase', 1, 1000, '每日签到积分需在 1–1000 之间'],
+    ['checkinWeekBonus', 0, 10000, '连续 7 天奖励需在 0–10000 之间'],
+    ['checkinMonthBonus', 0, 50000, '连续 30 天奖励需在 0–50000 之间'],
+    ['registerBonus', 0, 10000, '新人注册奖励需在 0–10000 之间'],
+  ];
+  for (const [key, min, max, message] of pointSettings) {
+    if (body[key] === undefined) continue;
+    const value = Number(body[key]);
+    if (!Number.isFinite(value) || value < min || value > max) {
+      return jsonError(c, 400, 'INVALID_POINTS_SETTING', message);
+    }
+    next[key] = Math.round(value);
+  }
+
   if (body.rechargePresets !== undefined) {
     const source = Array.isArray(body.rechargePresets)
       ? body.rechargePresets
@@ -2601,6 +2680,11 @@ app.patch('/api/admin/settings', async (c) => {
     boolSetting('feature_register', next.featureRegister),
     boolSetting('feature_verification', next.featureVerification),
     boolSetting('feature_points_exchange', next.featurePointsExchange),
+    boolSetting('feature_checkin', next.featureCheckin),
+    saveSetting(c.env.DB, `${SITE_PREFIX}checkin_base`, String(next.checkinBase)),
+    saveSetting(c.env.DB, `${SITE_PREFIX}checkin_week_bonus`, String(next.checkinWeekBonus)),
+    saveSetting(c.env.DB, `${SITE_PREFIX}checkin_month_bonus`, String(next.checkinMonthBonus)),
+    saveSetting(c.env.DB, `${SITE_PREFIX}register_bonus`, String(next.registerBonus)),
     saveSetting(c.env.DB, `${SITE_PREFIX}payment_mode`, next.paymentMode),
     saveSetting(c.env.DB, `${SITE_PREFIX}verification_mode`, next.verificationMode),
     saveSetting(c.env.DB, `${SITE_PREFIX}points_per_yuan`, String(next.pointsPerYuan)),
@@ -2932,7 +3016,7 @@ function serializeAdminProduct(row) {
     paymentMode: parsePaymentMode(row.payment_mode),
     kind: parseProductKind(row.kind),
     grantTier: row.grant_tier || '',
-    grantMonths: Number(row.grant_months) || 12,
+    grantDays: Number(row.grant_days) || (Number(row.grant_months) || 1) * 30,
     appKey: row.app_key || '',
     icon: row.icon,
     tag: row.tag,
@@ -2977,18 +3061,18 @@ function readProductInput(body, base = null) {
   }
 
   let grantTier = '';
-  let grantMonths = 12;
+  let grantDays = 30;
   if (kind === 'membership') {
     grantTier = String(body.grantTier !== undefined ? body.grantTier : base?.grantTier || '');
     if (!TIER_MAP[grantTier] || grantTier === 'basic') {
       return { error: '会员商品需选择白银及以上的会员等级' };
     }
-    const monthsRaw =
-      body.grantMonths !== undefined ? Math.round(Number(body.grantMonths)) : Number(base?.grantMonths ?? 12);
-    if (!Number.isFinite(monthsRaw) || monthsRaw < 1 || monthsRaw > 36) {
-      return { error: '会员有效期需在 1–36 个月之间' };
+    const daysRaw =
+      body.grantDays !== undefined ? Math.round(Number(body.grantDays)) : Number(base?.grantDays ?? 30);
+    if (!Number.isFinite(daysRaw) || daysRaw < 1 || daysRaw > 3650) {
+      return { error: '会员有效期需在 1–3650 天之间' };
     }
-    grantMonths = monthsRaw;
+    grantDays = daysRaw;
   }
 
   let appKey = '';
@@ -3030,7 +3114,7 @@ function readProductInput(body, base = null) {
       paymentMode,
       kind,
       grantTier,
-      grantMonths,
+      grantDays,
       appKey,
       icon,
       tag,
@@ -3060,7 +3144,7 @@ app.post('/api/admin/products', async (c) => {
   const value = parsed.value;
   await c.env.DB.prepare(
     `INSERT INTO products
-       (id, name, desc, price_cents, points_price, payment_mode, kind, grant_tier, grant_months, app_key,
+       (id, name, desc, price_cents, points_price, payment_mode, kind, grant_tier, grant_days, app_key,
         icon, tag, tone, stock, active, sort, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
@@ -3073,7 +3157,7 @@ app.post('/api/admin/products', async (c) => {
       value.paymentMode,
       value.kind,
       value.grantTier,
-      value.grantMonths,
+      value.grantDays,
       value.appKey,
       value.icon,
       value.tag,
@@ -3104,7 +3188,7 @@ app.patch('/api/admin/products/:id', async (c) => {
 
   await c.env.DB.prepare(
     `UPDATE products SET name = ?, desc = ?, price_cents = ?, points_price = ?, payment_mode = ?,
-       kind = ?, grant_tier = ?, grant_months = ?, app_key = ?, icon = ?, tag = ?, tone = ?,
+       kind = ?, grant_tier = ?, grant_days = ?, app_key = ?, icon = ?, tag = ?, tone = ?,
        stock = ?, active = ?, sort = ?, updated_at = ? WHERE id = ?`,
   )
     .bind(
@@ -3115,7 +3199,7 @@ app.patch('/api/admin/products/:id', async (c) => {
       value.paymentMode,
       value.kind,
       value.grantTier,
-      value.grantMonths,
+      value.grantDays,
       value.appKey,
       value.icon,
       value.tag,
@@ -3771,8 +3855,9 @@ app.get('/api/overview/activities', async (c) => {
 app.get('/api/profile', async (c) => {
   const db = c.env.DB;
   const user = c.get('userRow');
+  const currentHash = c.get('tokenHash') || '';
 
-  const [devices, agreements] = await Promise.all([
+  const [devices, agreements, sessionRow] = await Promise.all([
     db.prepare('SELECT COUNT(*) AS count FROM devices WHERE user_id = ?').bind(user.id).first(),
     db
       .prepare(
@@ -3783,7 +3868,17 @@ app.get('/api/profile', async (c) => {
       )
       .bind(user.id)
       .first(),
+    currentHash
+      ? db
+          .prepare(
+            'SELECT created_at, expires_at, ip, location, user_agent FROM sessions WHERE token_hash = ? AND user_id = ?',
+          )
+          .bind(currentHash, user.id)
+          .first()
+      : Promise.resolve(null),
   ]);
+
+  const client = sessionRow ? parseUserAgent(sessionRow.user_agent || '') : null;
 
   return ok(c, {
     user: await serializeUserFor(c, user),
@@ -3794,6 +3889,17 @@ app.get('/api/profile', async (c) => {
       agreementsTotal: agreements?.total || 0,
       agreementsPending: agreements?.pending || 0,
     },
+    currentSession: sessionRow
+      ? {
+          device: client.name,
+          browser: client.browser,
+          os: client.os,
+          ip: sessionRow.ip || '',
+          location: sessionRow.location || '',
+          loggedInAt: sessionRow.created_at,
+          expiresAt: sessionRow.expires_at,
+        }
+      : null,
     memberSince: user.created_at,
   });
 });
@@ -4007,7 +4113,7 @@ app.post('/api/profile/verify', async (c) => {
 
   await db.prepare('UPDATE users SET verified = 1 WHERE id = ?').bind(user.id).run();
   await addSecurityLog(db, user.id, '实名认证完成', '身份核验通过 · 权限已解锁', 'green', 'i-idcard');
-  await addActivity(db, user.id, '完成实名认证', '积分商城下单与余额提现已解锁', 'purple', 'i-idcard');
+  await addActivity(db, user.id, '完成实名认证', '积分商城实物兑换已解锁', 'purple', 'i-idcard');
 
   const updated = await db.prepare('SELECT * FROM users WHERE id = ?').bind(user.id).first();
   return ok(c, { user: await serializeUserFor(c, updated) });
@@ -4643,9 +4749,109 @@ app.patch('/api/notifications/settings', async (c) => {
 /* 会员中心                                                             */
 /* ------------------------------------------------------------------ */
 
+function checkinReward(settings, streak) {
+  let points = Math.max(0, Number(settings.checkinBase) || 0);
+  if (streak > 0 && streak % 7 === 0) points += Math.max(0, Number(settings.checkinWeekBonus) || 0);
+  if (streak > 0 && streak % 30 === 0) points += Math.max(0, Number(settings.checkinMonthBonus) || 0);
+  return points;
+}
+
+async function checkinState(db, userRow, settings) {
+  const today = shanghaiDateKey();
+  const latest = await db
+    .prepare('SELECT * FROM checkins WHERE user_id = ? ORDER BY checkin_date DESC LIMIT 1')
+    .bind(userRow.id)
+    .first();
+  const checked = Boolean(latest && latest.checkin_date === today);
+  const active = Boolean(
+    latest && (latest.checkin_date === today || latest.checkin_date === shanghaiDateKey(-1)),
+  );
+  const streak = active ? Number(latest.streak) || 0 : 0;
+  const nextStreak = checked ? streak : active ? streak + 1 : 1;
+  return {
+    enabled: Boolean(settings.featureCheckin),
+    checked,
+    streak,
+    todayPoints: checked ? Number(latest.points) || 0 : checkinReward(settings, nextStreak),
+    basePoints: Math.max(0, Number(settings.checkinBase) || 0),
+    weekBonus: Math.max(0, Number(settings.checkinWeekBonus) || 0),
+    monthBonus: Math.max(0, Number(settings.checkinMonthBonus) || 0),
+    nextStreak,
+  };
+}
+
+app.post('/api/member/checkin', async (c) => {
+  const db = c.env.DB;
+  const user = c.get('userRow');
+  const settings = await siteSettings(c);
+  if (!settings.featureCheckin) {
+    return jsonError(c, 503, 'FEATURE_DISABLED', '每日签到暂未开放');
+  }
+
+  const today = shanghaiDateKey();
+  const latest = await db
+    .prepare('SELECT * FROM checkins WHERE user_id = ? ORDER BY checkin_date DESC LIMIT 1')
+    .bind(user.id)
+    .first();
+  if (latest && latest.checkin_date === today) {
+    return jsonError(c, 409, 'ALREADY_CHECKED', '今天已经签到过了，明天再来');
+  }
+
+  const active = Boolean(latest && latest.checkin_date === shanghaiDateKey(-1));
+  const streak = active ? (Number(latest.streak) || 0) + 1 : 1;
+  const points = checkinReward(settings, streak);
+  if (points < 1) {
+    return jsonError(c, 503, 'CHECKIN_POINTS_DISABLED', '签到积分暂未配置');
+  }
+
+  const particles = user.particles + points;
+  const tier = nextTierAfter(user, particles);
+  const at = nowIso();
+
+  try {
+    await db.batch([
+      db
+        .prepare('INSERT INTO checkins (user_id, checkin_date, points, streak, created_at) VALUES (?, ?, ?, ?, ?)')
+        .bind(user.id, today, points, streak, at),
+      db
+        .prepare('UPDATE users SET particles = ?, member_tier = ? WHERE id = ?')
+        .bind(particles, tier.key, user.id),
+      db
+        .prepare('INSERT INTO particle_logs (user_id, label, delta, balance, occurred_at) VALUES (?, ?, ?, ?, ?)')
+        .bind(user.id, `每日签到 · 连续 ${streak} 天`, points, particles, at),
+    ]);
+  } catch {
+    return jsonError(c, 409, 'ALREADY_CHECKED', '今天已经签到过了，明天再来');
+  }
+
+  await addActivity(db, user.id, '每日签到', `连续 ${streak} 天 · +${points} 积分`, 'purple', 'i-star');
+  if (streak % 7 === 0 || streak % 30 === 0) {
+    const milestone = streak % 30 === 0 ? '连续 30 天' : '连续 7 天';
+    await pushNotification(
+      db,
+      user.id,
+      'type_member',
+      '签到里程碑达成',
+      `${milestone}签到达成，本次获得 ${points} 积分，继续保持。`,
+      '/member',
+    );
+  }
+
+  const updated = await db.prepare('SELECT * FROM users WHERE id = ?').bind(user.id).first();
+  return ok(c, {
+    checkin: await checkinState(db, updated, settings),
+    points,
+    particles,
+    tier: tier.key,
+    tierLabel: tier.label,
+    user: await serializeUserFor(c, updated),
+  });
+});
+
 app.get('/api/member', async (c) => {
   const db = c.env.DB;
   const user = c.get('userRow');
+  const settings = await siteSettings(c);
   const membership = membershipOf(user);
   const tier = {
     ...membership.tier,
@@ -4664,13 +4870,13 @@ app.get('/api/member', async (c) => {
     .prepare('SELECT * FROM particle_logs WHERE user_id = ? ORDER BY occurred_at DESC LIMIT 5')
     .bind(user.id)
     .all();
-  const gained = await db
-    .prepare(
-      "SELECT COALESCE(SUM(delta), 0) AS total FROM particle_logs WHERE user_id = ? AND delta > 0 AND occurred_at >= datetime('now', '-30 days')",
-    )
-    .bind(user.id)
-    .first();
-  const dailyRate = Math.max(0, Number(gained?.total || 0)) / 30;
+  const checkinDaily = settings.featureCheckin
+    ? Math.max(0, Number(settings.checkinBase) || 0) +
+      Math.max(0, Number(settings.checkinWeekBonus) || 0) / 7 +
+      Math.max(0, Number(settings.checkinMonthBonus) || 0) / 30
+    : 0;
+  const dailyRate = checkinDaily;
+  const checkin = await checkinState(db, user, settings);
 
   return ok(c, {
     tier,
@@ -4678,6 +4884,8 @@ app.get('/api/member', async (c) => {
     progress,
     remaining,
     estimatedDays: remaining && dailyRate > 0 ? Math.ceil(remaining / dailyRate) : null,
+    checkin,
+    registerBonus: Math.max(0, Number(settings.registerBonus) || 0),
     benefits: BENEFITS.map((item) => ({ ...item, unlocked: tier.min >= item.min })),
     tiers: TIERS.map((item) => ({
       ...item,
@@ -4693,9 +4901,9 @@ app.get('/api/member', async (c) => {
     })),
     rules: [
       { title: '等级如何计算', text: `会员等级按历史最高积分判定：${ladder}。达到后不会因积分消费降级，成长等级长期有效。` },
-      { title: '付费会员', text: '积分商城可购买 12 个月会员卡，支付后立即生效，到期自动回落到成长等级；同等级续费会顺延有效期。' },
-      { title: '积分如何获得', text: '签署协议、参与活动可获得积分，也可以把余额按站点设置的比例兑换为积分，会员等级越高兑换加成越多；兑换后的积分不可退回余额。' },
-      { title: '积分与余额', text: '积分用于会员等级与积分商品，余额用于充值、提现与余额商品。两类资产相互独立，结算时按商品标注的方式扣款。' },
+      { title: '付费会员', text: '积分商城可用积分购买 7 天或 30 天会员卡，支付后立即生效，到期自动回落到成长等级；同等级续费会顺延有效期。' },
+      { title: '积分如何获得', text: `新注册赠送 ${settings.registerBonus} 积分；每日签到 +${settings.checkinBase} 积分，连续 7 天额外 +${settings.checkinWeekBonus}，连续 30 天额外 +${settings.checkinMonthBonus}；签署协议也会发放积分。` },
+      { title: '积分与余额', text: '积分用于会员等级与会员卡兑换，余额相关接口暂未开放；两类资产相互独立，结算时按商品标注的方式扣款。' },
       { title: '会员折扣', text: '积分商城结算时自动应用当前等级折扣，积分价与余额价都会按会员折扣计算，白银及以上生效。' },
     ],
   });
@@ -4981,7 +5189,7 @@ async function createSupplyOrderFor(c, user, product) {
     paymentMode === 'balance' ? Math.max(0, Math.round(Number(product.priceCents || 0) * rate)) : 0;
 
   if (paymentMode === 'points' && user.particles < pointsCost) {
-    return { error: jsonError(c, 400, 'INSUFFICIENT_POINTS', '积分不足，可用余额兑换积分后再试') };
+    return { error: jsonError(c, 400, 'INSUFFICIENT_POINTS', '积分不足，可通过每日签到与活动获取积分') };
   }
   if (paymentMode === 'balance' && user.star_energy_cents < balanceCost) {
     return { error: jsonError(c, 400, 'INSUFFICIENT_FUNDS', '账户余额不足，请先充值或选择积分商品') };
@@ -5002,12 +5210,12 @@ async function createSupplyOrderFor(c, user, product) {
       return { error: jsonError(c, 409, 'TIER_ALREADY_UNLOCKED', '当前付费会员等级更高，无需购买低等级会员卡') };
     }
     grantedTier = wanted;
-    const months = Math.max(1, Math.min(36, Number(product.grantMonths) || 12));
+    const days = Math.max(1, Math.min(3650, Number(product.grantDays) || 30));
     const extendFrom =
       paid && paid.key === wanted.key && user.member_paid_until
         ? Math.max(Date.now(), Date.parse(user.member_paid_until) || 0)
         : Date.now();
-    paidUntil = addMonthsIso(new Date(extendFrom).toISOString(), months);
+    paidUntil = addDaysIso(new Date(extendFrom).toISOString(), days);
   }
 
   const now = new Date(Date.now() + 8 * 3600 * 1000);

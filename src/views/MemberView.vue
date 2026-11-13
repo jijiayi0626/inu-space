@@ -7,14 +7,37 @@ import PageHeader from '../components/PageHeader.vue';
 import SkeletonBlock from '../components/SkeletonBlock.vue';
 import { api } from '../lib/api';
 import { dateTimeLabel, number } from '../lib/format';
+import { setUser } from '../lib/session';
 import { toast } from '../lib/toast';
 import { useAsyncData } from '../lib/useAsyncData';
 
-const { data } = useAsyncData(({ force }) => api.get('/member', { force }));
+const { data, reload } = useAsyncData(({ force }) => api.get('/member', { force }));
 
 const tier = computed(() => data.value?.tier || {});
 const next = computed(() => data.value?.next || null);
 const progress = computed(() => data.value?.progress || 0);
+const checkin = computed(() => data.value?.checkin || {});
+const weekProgress = computed(() => {
+  const streak = Number(checkin.value.streak) || 0;
+  return Math.min(7, Math.max(0, streak));
+});
+
+const checkinLoading = ref(false);
+
+async function doCheckin() {
+  if (checkin.value.checked || checkinLoading.value || !checkin.value.enabled) return;
+  checkinLoading.value = true;
+  try {
+    const result = await api.post('/member/checkin');
+    if (result.user) setUser(result.user);
+    toast(`签到成功，+${number(result.points)} 积分`, 'success');
+    await reload({ silent: true });
+  } catch (error) {
+    toast(error.message, 'error');
+  } finally {
+    checkinLoading.value = false;
+  }
+}
 
 const rulesOpen = ref(false);
 const particlesOpen = ref(false);
@@ -64,17 +87,60 @@ async function openAllParticles() {
       </div>
       <div class="hero-progress">
         <div class="hero-progress-head">
-          <span>{{ next ? `${tier.paid ? '成长进度 · ' : ''}距离${next.label}等级` : '已抵达最高等级' }}</span>
+          <span>{{ next ? `${tier.paid ? '永久成长进度 · ' : ''}距离${next.label}等级` : '已抵达最高等级' }}</span>
           <span>{{ progress }}%</span>
         </div>
         <div class="hero-track"><span :style="{ width: `${progress}%` }" /></div>
         <p class="hero-desc">
           <template v-if="tier.paid && tier.validUntil">付费会员有效期至 {{ tier.validUntil }}。 </template>
           <template v-if="next">
-            还需 {{ number(data.remaining) }} 积分<template v-if="data.estimatedDays"> · 预计 {{ data.estimatedDays }} 天后达成</template>
+            还需 {{ number(data.remaining) }} 积分<template v-if="data.estimatedDays"> · 按签到节奏约 {{ data.estimatedDays }} 天</template>
           </template>
           <template v-else>已达到最高等级，感谢你的长期支持。</template>
         </p>
+      </div>
+    </section>
+
+    <section v-if="checkin.enabled" class="checkin-card">
+      <div class="checkin-head">
+        <div class="checkin-copy">
+          <p class="checkin-kicker">每日签到</p>
+          <p class="checkin-title">
+            <template v-if="checkin.streak">连续签到 <b>{{ checkin.streak }}</b> 天</template>
+            <template v-else>今天开始连续签到</template>
+            <span v-if="checkin.checked" class="badge badge-green">今日已完成</span>
+          </p>
+          <p class="checkin-sub">
+            每天 +{{ number(checkin.basePoints) }} 积分 · 连续 7 天额外 +{{ number(checkin.weekBonus) }} · 连续 30 天额外 +{{ number(checkin.monthBonus) }}
+          </p>
+          <p v-if="data.registerBonus" class="checkin-sub">新注册账号赠送 {{ number(data.registerBonus) }} 积分，签到和活动积分可用于购买会员卡。</p>
+        </div>
+        <div class="checkin-action">
+          <p class="checkin-reward">
+            <span>{{ checkin.checked ? '今日获得' : '今日可得' }}</span>
+            <b>+{{ number(checkin.todayPoints) }}</b>
+          </p>
+          <Button
+            variant="primary"
+            size="sm"
+            type="button"
+            :disabled="checkin.checked || checkinLoading"
+            @click="doCheckin"
+          >
+            {{ checkin.checked ? '今日已签到' : checkinLoading ? '签到中…' : '立即签到' }}
+          </Button>
+        </div>
+      </div>
+      <div class="checkin-week" aria-label="连续签到进度">
+        <div
+          v-for="day in 7"
+          :key="day"
+          class="checkin-day"
+          :class="{ done: day <= weekProgress, bonus: day === 7 }"
+        >
+          <span class="checkin-dot">{{ day }}</span>
+          <span class="checkin-day-points">+{{ number(day === 7 ? checkin.basePoints + checkin.weekBonus : checkin.basePoints) }}</span>
+        </div>
       </div>
     </section>
 
@@ -146,7 +212,7 @@ async function openAllParticles() {
       </div>
       <p class="card-note">
         <AppIcon name="star" />
-        <span>积分与余额相互独立，积分可升级等级、兑换商品，也可在积分商城用余额按比例兑换。</span>
+        <span>积分可用于等级成长和购买会员卡；余额相关接口暂未开放。签到、注册奖励与活动积分都会记录在这里。</span>
       </p>
     </section>
   </div>

@@ -47,7 +47,12 @@ const siteForm = reactive({
   featureRegister: false,
   featureVerification: true,
   featurePointsExchange: true,
-  paymentMode: 'mock',
+  featureCheckin: true,
+  checkinBase: 20,
+  checkinWeekBonus: 100,
+  checkinMonthBonus: 500,
+  registerBonus: 200,
+  paymentMode: 'off',
   verificationMode: 'console',
   pointsPerYuan: 100,
   rechargePresets: '50,100,200,500,1000',
@@ -81,7 +86,12 @@ watch(
     siteForm.featureRegister = Boolean(value.featureRegister);
     siteForm.featureVerification = value.featureVerification !== false;
     siteForm.featurePointsExchange = value.featurePointsExchange !== false;
-    siteForm.paymentMode = value.paymentMode || 'mock';
+    siteForm.featureCheckin = value.featureCheckin !== false;
+    siteForm.checkinBase = value.checkinBase ?? 20;
+    siteForm.checkinWeekBonus = value.checkinWeekBonus ?? 100;
+    siteForm.checkinMonthBonus = value.checkinMonthBonus ?? 500;
+    siteForm.registerBonus = value.registerBonus ?? 200;
+    siteForm.paymentMode = value.paymentMode || 'off';
     siteForm.verificationMode = value.verificationMode || 'console';
     siteForm.pointsPerYuan = value.pointsPerYuan ?? 100;
     siteForm.rechargePresets = (value.rechargePresets || []).join(',');
@@ -134,6 +144,26 @@ async function saveSiteSettings() {
     toast('积分兑换比例需在 1–10000 之间', 'error');
     return;
   }
+  const checkinBase = Number(siteForm.checkinBase);
+  if (!Number.isFinite(checkinBase) || checkinBase < 1 || checkinBase > 1000) {
+    toast('每日签到积分需在 1–1000 之间', 'error');
+    return;
+  }
+  const checkinWeekBonus = Number(siteForm.checkinWeekBonus);
+  if (!Number.isFinite(checkinWeekBonus) || checkinWeekBonus < 0 || checkinWeekBonus > 10000) {
+    toast('连续 7 天奖励需在 0–10000 之间', 'error');
+    return;
+  }
+  const checkinMonthBonus = Number(siteForm.checkinMonthBonus);
+  if (!Number.isFinite(checkinMonthBonus) || checkinMonthBonus < 0 || checkinMonthBonus > 50000) {
+    toast('连续 30 天奖励需在 0–50000 之间', 'error');
+    return;
+  }
+  const registerBonus = Number(siteForm.registerBonus);
+  if (!Number.isFinite(registerBonus) || registerBonus < 0 || registerBonus > 10000) {
+    toast('新人注册奖励需在 0–10000 之间', 'error');
+    return;
+  }
   siteForm.saving = true;
   try {
     await api.patch('/admin/settings', {
@@ -156,6 +186,11 @@ async function saveSiteSettings() {
       featureRegister: siteForm.featureRegister,
       featureVerification: siteForm.featureVerification,
       featurePointsExchange: siteForm.featurePointsExchange,
+      featureCheckin: siteForm.featureCheckin,
+      checkinBase: Math.round(checkinBase),
+      checkinWeekBonus: Math.round(checkinWeekBonus),
+      checkinMonthBonus: Math.round(checkinMonthBonus),
+      registerBonus: Math.round(registerBonus),
       paymentMode: siteForm.paymentMode,
       verificationMode: siteForm.verificationMode,
       pointsPerYuan: Math.round(pointsPerYuan),
@@ -275,6 +310,7 @@ async function saveSiteSettings() {
               { key: 'featureAgreements', title: '协议中心', desc: '协议签署、查看与导出' },
               { key: 'featureVerification', title: '实名认证', desc: '实名认证入口与核验通道' },
               { key: 'featurePointsExchange', title: '余额兑积分', desc: '把余额按比例兑换为积分' },
+              { key: 'featureCheckin', title: '每日签到', desc: '签到发放积分与连续签到奖励' },
               { key: 'featureAvatar', title: '头像自定义', desc: '修改头像文字与配色' },
               { key: 'featurePhoneBind', title: '手机绑定', desc: '绑定 / 更换安全手机' },
               { key: 'featureEmailChange', title: '邮箱更换', desc: '更换安全邮箱' },
@@ -333,6 +369,35 @@ async function saveSiteSettings() {
             <Input aria-label="昵称修改间隔（天）" :model-value="siteForm.nameChangeDays" type="number" min="0" max="365" @update:model-value="siteForm.nameChangeDays = Number($event)" />
           </div>
         </div>
+      </article>
+
+      <article class="card settings-card settings-card-wide">
+        <div class="settings-head">
+          <span class="settings-icon is-cyan"><AppIcon name="star" /></span>
+          <div><strong>积分经济</strong><span>签到、连续签到与新人注册奖励，保存后立即生效</span></div>
+        </div>
+
+        <div class="settings-fields">
+          <div class="field">
+            <span class="field-label">每日签到（积分）</span>
+            <Input aria-label="每日签到积分" :model-value="siteForm.checkinBase" type="number" min="1" max="1000" @update:model-value="siteForm.checkinBase = Number($event)" />
+          </div>
+          <div class="field">
+            <span class="field-label">连续 7 天额外（积分）</span>
+            <Input aria-label="连续 7 天额外积分" :model-value="siteForm.checkinWeekBonus" type="number" min="0" max="10000" @update:model-value="siteForm.checkinWeekBonus = Number($event)" />
+          </div>
+          <div class="field">
+            <span class="field-label">连续 30 天额外（积分）</span>
+            <Input aria-label="连续 30 天额外积分" :model-value="siteForm.checkinMonthBonus" type="number" min="0" max="50000" @update:model-value="siteForm.checkinMonthBonus = Number($event)" />
+          </div>
+          <div class="field">
+            <span class="field-label">新人注册奖励（积分）</span>
+            <Input aria-label="新人注册奖励" :model-value="siteForm.registerBonus" type="number" min="0" max="10000" @update:model-value="siteForm.registerBonus = Number($event)" />
+          </div>
+        </div>
+        <p class="hint">
+          新账号注册即得 {{ siteForm.registerBonus }} 积分；每日签到 {{ siteForm.checkinBase }} 积分，连续 7 天再 +{{ siteForm.checkinWeekBonus }}，连续 30 天再 +{{ siteForm.checkinMonthBonus }}。会员卡目前用积分购买，余额充值与提现保持关闭。
+        </p>
       </article>
 
       <article class="card settings-card">

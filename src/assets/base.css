@@ -738,6 +738,31 @@ p{text-wrap:pretty}
 .tier-meta b{color:var(--fx-foreground);font-weight:var(--fx-weight-medium)}
 .tier-card .badge{margin-top:var(--s-2)}
 
+/* 每日签到 */
+.checkin-card{border-radius:var(--r-md);padding:var(--s-5);background:var(--fx-surface);border:1px solid var(--fx-border);box-shadow:var(--fx-shadow-1);margin-bottom:var(--s-5)}
+.checkin-head{display:flex;justify-content:space-between;gap:var(--s-4);align-items:center;flex-wrap:wrap}
+.checkin-kicker{font-size:var(--fx-text-2xs);letter-spacing:.12em;text-transform:uppercase;color:var(--fx-muted-foreground)}
+.checkin-title{font-size:var(--fx-text-xl);font-weight:var(--fx-weight-medium);margin-top:2px;display:flex;align-items:center;gap:var(--s-2);flex-wrap:wrap}
+.checkin-title b{font-weight:var(--fx-weight-bold)}
+.checkin-sub{font-size:var(--fx-text-xs);color:var(--fx-muted-foreground);line-height:1.6;margin-top:var(--s-1)}
+.checkin-action{display:flex;align-items:center;gap:var(--s-4);flex-wrap:wrap}
+.checkin-reward{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+.checkin-reward span{font-size:var(--fx-text-2xs);color:var(--fx-muted-foreground)}
+.checkin-reward b{font-size:var(--fx-text-2xl);font-weight:var(--fx-weight-bold);line-height:1;font-variant-numeric:tabular-nums}
+.checkin-week{display:grid;grid-template-columns:repeat(7,1fr);gap:var(--s-2);margin-top:var(--s-4)}
+.checkin-day{display:flex;flex-direction:column;align-items:center;gap:4px;padding:var(--s-2) var(--s-1);border-radius:var(--r-sm);background:var(--fx-muted);color:var(--fx-muted-foreground)}
+.checkin-dot{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:var(--fx-text-xs);font-weight:var(--fx-weight-medium);background:var(--fx-surface);color:var(--fx-muted-foreground)}
+.checkin-day.done .checkin-dot{background:var(--primary);color:var(--primary-contrast)}
+.checkin-day.bonus .checkin-dot{box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--primary) 45%, transparent)}
+.checkin-day-points{font-size:var(--fx-text-2xs);font-variant-numeric:tabular-nums;white-space:nowrap}
+@media(max-width:640px){
+ .checkin-card{padding:var(--s-4)}
+ .checkin-action{width:100%;justify-content:space-between}
+ .checkin-reward{align-items:flex-start}
+ .checkin-week{gap:var(--s-1)}
+ .checkin-day-points{font-size:10px}
+}
+
 /* 通知渠道 */
 .channel-list{display:flex;flex-direction:column}
 .channel-row{display:flex;align-items:center;gap:var(--s-3);padding:var(--s-3) 0;border-bottom:1px solid var(--fx-border)}

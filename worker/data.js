@@ -78,7 +78,7 @@ export const BENEFITS = [
     key: 'supply-discount',
     icon: 'i-box',
     title: '商城折扣',
-    desc: '白银及以上享 98 折起会员价，积分商品与余额商品结算时自动抵扣。',
+    desc: '白银及以上享 98 折起会员价，积分商城结算时自动抵扣。',
     min: 2000,
   },
   {
@@ -99,7 +99,7 @@ export const BENEFITS = [
     key: 'member-card',
     icon: 'i-star',
     title: '付费会员',
-    desc: '可在积分商城购买 12 个月会员卡，立即生效，到期后恢复成长等级。',
+    desc: '可用积分购买 7 天或 30 天会员卡，立即生效，到期后回落到成长等级。',
     min: 0,
   },
 ];
@@ -124,10 +124,11 @@ export const NOTIFICATION_CHANNELS = [
 ];
 
 export const SUPPLY_TIPS = [
-  { icon: 'i-chart', text: '积分与余额相互独立：积分用于等级与积分商品，余额用于充值、提现与余额商品。' },
+  { icon: 'i-chart', text: '会员卡与积分商品使用积分结算；余额充值与提现接口暂未开放。' },
   { icon: 'i-box', text: '实物商品需完成实名认证并填写收货地址，预计 1–3 个工作日送达。' },
-  { icon: 'i-wallet', text: '余额可按站点设置的比例兑换为积分，兑换后不可退回。' },
-  { icon: 'i-star', text: '会员与应用权益无需实名认证，购买后立即生效；付费会员卡按有效期计算。' },
+  { icon: 'i-wallet', text: '已有余额可按站点设置的比例兑换为积分，兑换后不可退回。' },
+  { icon: 'i-star', text: '会员与应用权益无需实名认证，购买后立即生效；会员卡按购买的天数计算有效期。' },
+  { icon: 'i-bell', text: '每日签到、连续 7 / 30 天与新人注册都会发放积分，会员卡到期自动回落到成长等级。' },
 ];
 
 export const SECURITY_ADVICE = [

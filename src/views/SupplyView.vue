@@ -304,7 +304,7 @@ async function loadAllOrders() {
 </script>
 
 <template>
-  <PageHeader title="积分商城" sub="积分与余额分开结算，会员折扣自动生效。">
+  <PageHeader title="积分商城" sub="会员卡用积分兑换，余额接口暂未开放充值。">
     <template #meta>
       <span class="badge badge-blue">{{ data?.user?.tierLabel || '普通' }}会员 · {{ data?.discountLabel || '无折扣' }}</span>
       <span class="head-date">{{ tierValidUntil ? `有效期至 ${tierValidUntil}` : '商品每日更新' }}</span>
@@ -330,7 +330,7 @@ async function loadAllOrders() {
           <button v-if="points.exchangeEnabled" class="btn btn-text" type="button" @click="openExchange">
             用余额兑换积分
           </button>
-          <span v-else>积分用于等级与积分商品</span>
+          <span v-else>积分可用于购买会员卡与积分商品</span>
         </p>
       </article>
       <article class="stat-card">
@@ -525,7 +525,7 @@ async function loadAllOrders() {
         <div class="detail-row" v-else><dt>可用余额</dt><dd>{{ money(wallet.balanceCents) }} 余额</dd></div>
         <div class="detail-row" v-if="selectedProduct.kind === 'goods'"><dt>预计送达</dt><dd>1–3 个工作日</dd></div>
         <div class="detail-row" v-else-if="selectedProduct.kind === 'membership'">
-          <dt>会员有效期</dt><dd>{{ selectedProduct.grantMonths || 12 }} 个月，到期自动回落成长等级</dd>
+          <dt>会员有效期</dt><dd>{{ selectedProduct.grantDays || 30 }} 天，到期自动回落成长等级</dd>
         </div>
         <div class="detail-row" v-else><dt>生效方式</dt><dd>兑换后立即生效</dd></div>
       </dl>

@@ -101,7 +101,7 @@ const productForm = reactive({
   priceYuan: '0',
   pointsPrice: 1000,
   grantTier: 'silver',
-  grantMonths: 12,
+  grantDays: 30,
   appKey: '',
   icon: 'i-box',
   tag: '',
@@ -122,7 +122,7 @@ function openCreateProduct() {
     priceYuan: '0',
     pointsPrice: 1000,
     grantTier: 'silver',
-    grantMonths: 12,
+    grantDays: 30,
     appKey: '',
     icon: 'i-box',
     tag: '',
@@ -146,7 +146,7 @@ function openEditProduct(product) {
     priceYuan: ((product.priceCents || 0) / 100).toFixed(2).replace(/\.?0+$/, '') || '0',
     pointsPrice: product.pointsPrice || 0,
     grantTier: product.grantTier || 'silver',
-    grantMonths: product.grantMonths || 12,
+    grantDays: product.grantDays || 30,
     appKey: product.appKey || '',
     icon: product.icon,
     tag: product.tag || '',
@@ -180,9 +180,9 @@ async function submitProduct() {
     productError.value = '应用标识只能包含小写字母、数字与连字符（2–40 位）';
     return;
   }
-  const grantMonths = Math.round(Number(productForm.grantMonths));
-  if (productForm.kind === 'membership' && (!Number.isFinite(grantMonths) || grantMonths < 1 || grantMonths > 36)) {
-    productError.value = '会员有效期需在 1–36 个月之间';
+  const grantDays = Math.round(Number(productForm.grantDays));
+  if (productForm.kind === 'membership' && (!Number.isFinite(grantDays) || grantDays < 1 || grantDays > 3650)) {
+    productError.value = '会员有效期需在 1–3650 天之间';
     return;
   }
   const payload = {
@@ -193,7 +193,7 @@ async function submitProduct() {
     priceCents: Number.isFinite(priceCents) ? priceCents : 0,
     pointsPrice: Number.isFinite(pointsPrice) ? pointsPrice : 0,
     grantTier: productForm.kind === 'membership' ? productForm.grantTier : '',
-    grantMonths: productForm.kind === 'membership' ? grantMonths : 12,
+    grantDays: productForm.kind === 'membership' ? grantDays : 30,
     appKey: productForm.kind === 'app' ? productForm.appKey.trim().toLowerCase() : '',
     icon: productForm.icon,
     tag: productForm.tag.trim(),
@@ -400,7 +400,7 @@ function deleteTemplate(template) {
             <em>
               {{ product.id }} · 排序 {{ product.sort }}
               <template v-if="product.kind === 'goods'"> · 库存 {{ stockLabel(product.stock) }}</template>
-              <template v-else-if="product.kind === 'membership'"> · {{ tierLabels[product.grantTier] || product.grantTier }} {{ product.grantMonths || 12 }} 个月</template>
+              <template v-else-if="product.kind === 'membership'"> · {{ tierLabels[product.grantTier] || product.grantTier }} {{ product.grantDays || 30 }} 天</template>
               <template v-else-if="product.kind === 'app'"> · {{ product.appKey }}</template>
             </em>
           </div>
@@ -493,15 +493,15 @@ function deleteTemplate(template) {
         <FxField v-select-label="'升级等级'" label="升级等级">
           <Select v-model="productForm.grantTier" :options="grantTierOptions" />
         </FxField>
-        <FxField v-select-label="'有效期（月）'" label="有效期（月）">
+        <FxField v-select-label="'有效期（天）'" label="有效期（天）">
           <Input
-            aria-label="有效期（月）"
-            :model-value="productForm.grantMonths"
+            aria-label="有效期（天）"
+            :model-value="productForm.grantDays"
             type="number"
             min="1"
-            max="36"
+            max="3650"
             step="1"
-            @update:model-value="productForm.grantMonths = Number($event)"
+            @update:model-value="productForm.grantDays = Number($event)"
           />
         </FxField>
       </div>

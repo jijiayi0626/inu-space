@@ -7,7 +7,7 @@ import ContactVerifyModal from '../components/ContactVerifyModal.vue';
 import PageHeader from '../components/PageHeader.vue';
 import SkeletonBlock from '../components/SkeletonBlock.vue';
 import { api } from '../lib/api';
-import { dateLabel, number, timeLabel } from '../lib/format';
+import { dateLabel, dateTimeLabel, number, timeLabel } from '../lib/format';
 import { session, setUser } from '../lib/session';
 import { toast } from '../lib/toast';
 import { useAsyncData } from '../lib/useAsyncData';
@@ -22,6 +22,13 @@ const verificationAvailable = computed(
   () => features.value.verification !== false && session.site?.verification?.mode !== 'off',
 );
 const nameChangeDays = computed(() => Number(session.site?.nameChangeDays ?? 30));
+
+function sessionIcon(value) {
+  const name = String(value?.device || '').toLowerCase();
+  if (name.includes('iphone') || name.includes('android') || name.includes('phone')) return 'phone';
+  if (name.includes('ipad') || name.includes('tablet')) return 'tablet';
+  return 'laptop';
+}
 
 const form = reactive({ name: '', email: '', bio: '' });
 const saving = ref(false);
@@ -308,7 +315,7 @@ const linkItems = computed(() => [
           </span>
         </div>
         <p class="card-desc">
-          完成认证后可解锁实物商品兑换、余额提现等权限，并显著提升账户安全等级。
+          完成认证后可解锁实物商品兑换等权限，并显著提升账户安全等级。
         </p>
 
         <div v-if="user.verified" class="verify-strip stacked">
@@ -318,7 +325,7 @@ const linkItems = computed(() => [
           </div>
           <div class="verify-item">
             <AppIcon name="shield" />
-            <span class="verify-text"><strong>权限状态</strong><em>实物商品兑换、余额提现已解锁</em></span>
+            <span class="verify-text"><strong>权限状态</strong><em>实物商品兑换已解锁</em></span>
           </div>
           <div class="verify-item">
             <AppIcon name="check" />
@@ -368,6 +375,27 @@ const linkItems = computed(() => [
     </div>
 
     <aside class="profile-side">
+      <section v-if="data.currentSession" id="current-session" class="card">
+        <div class="card-head">
+          <h2>当前会话</h2>
+          <span class="badge badge-green">本机在线</span>
+        </div>
+        <div class="session-strip">
+          <span class="device-icon lg"><AppIcon :name="sessionIcon(data.currentSession)" /></span>
+          <div class="session-copy">
+            <p class="modal-device-name">{{ data.currentSession.device }}</p>
+            <p class="modal-device-sub">{{ data.currentSession.os }} · {{ data.currentSession.browser }}</p>
+          </div>
+        </div>
+        <dl class="detail-list">
+          <div class="detail-row"><dt>IP 地址</dt><dd>{{ data.currentSession.ip || '—' }}</dd></div>
+          <div class="detail-row"><dt>登录位置</dt><dd>{{ data.currentSession.location || '—' }}</dd></div>
+          <div class="detail-row"><dt>登录时间</dt><dd>{{ dateTimeLabel(data.currentSession.loggedInAt) }}</dd></div>
+          <div class="detail-row"><dt>有效期至</dt><dd>{{ dateTimeLabel(data.currentSession.expiresAt) }}</dd></div>
+        </dl>
+        <RouterLink class="btn btn-ghost btn-sm session-link" to="/devices">管理全部会话</RouterLink>
+      </section>
+
       <section id="account-summary" class="card">
         <div class="card-head">
           <h2>账户概况</h2>
@@ -412,7 +440,7 @@ const linkItems = computed(() => [
           <h2>资料完善建议</h2>
         </div>
         <div v-if="!user.verified && verificationAvailable" class="tip-item">
-          <AppIcon name="idcard" /><span>完成实名认证，可解锁实物商品兑换与余额提现。</span>
+          <AppIcon name="idcard" /><span>完成实名认证，可解锁实物商品兑换。</span>
         </div>
         <div v-if="!user.phone" class="tip-item">
           <AppIcon name="phone" /><span>绑定手机号，让账号找回与安全验证更可靠。</span>
@@ -443,7 +471,7 @@ const linkItems = computed(() => [
     <dl class="detail-list">
       <div class="detail-row"><dt>认证项目</dt><dd>身份证件 · 人脸识别</dd></div>
       <div class="detail-row"><dt>所属地区</dt><dd>{{ user.region }}</dd></div>
-      <div class="detail-row"><dt>解锁权限</dt><dd>实物商品兑换 · 余额提现</dd></div>
+      <div class="detail-row"><dt>解锁权限</dt><dd>实物商品兑换</dd></div>
     </dl>
     <p class="card-note">
       <AppIcon name="info" />
@@ -525,4 +553,7 @@ const linkItems = computed(() => [
 .tone-dot.tone-green{background:color-mix(in srgb, var(--fx-foreground) 50%, var(--fx-background))}
 .tone-dot.tone-orange{background:color-mix(in srgb, var(--fx-foreground) 34%, var(--fx-background))}
 .tone-dot.active{border-color:var(--fx-background);box-shadow:0 0 0 2px var(--fx-foreground)}
+.session-strip{display:flex;align-items:center;gap:var(--s-3);margin:var(--s-3) 0 var(--s-2)}
+.session-copy{min-width:0}
+.session-link{margin-top:var(--s-3);width:100%;justify-content:center}
 </style>

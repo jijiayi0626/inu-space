@@ -327,7 +327,7 @@ async function openAllLogs() {
         <div class="sec-row">
           <div>
             <p class="sec-title">敏感操作二次确认</p>
-            <p class="sec-sub">提现、解绑与协议签署前复核</p>
+            <p class="sec-sub">解绑与协议签署前复核</p>
           </div>
           <div class="sec-right">
             <Switch

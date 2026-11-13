@@ -113,6 +113,12 @@ const quicks = computed(() => {
   }
   items.push(
     {
+      to: '/member',
+      icon: 'star',
+      title: '每日签到',
+      sub: '签到得积分 · 可兑换会员卡',
+    },
+    {
       to: '/profile#basic',
       icon: 'pen',
       title: '修改昵称',
@@ -156,7 +162,8 @@ const quicks = computed(() => {
       <div class="wallet-foot">
         <span class="wallet-num">INU ···· {{ wallet.cardLast4 }}</span>
         <div class="wallet-actions">
-          <Button variant="secondary" size="sm" class="btn-wallet" @click="openRecharge">充值</Button>
+          <Button v-if="rechargeEnabled" variant="secondary" size="sm" class="btn-wallet" @click="openRecharge">充值</Button>
+          <span v-else class="badge badge-gray">充值暂未开放</span>
           <RouterLink class="btn btn-sm btn-glass" to="/supply">明细</RouterLink>
         </div>
       </div>
@@ -170,7 +177,7 @@ const quicks = computed(() => {
         <p class="stat-name">积分</p>
         <p class="stat-value">{{ number(particles) }}</p>
       </div>
-      <p class="stat-foot">用于升级会员等级与兑换商品</p>
+      <p class="stat-foot">用于升级会员等级与兑换会员卡</p>
     </article>
 
     <article class="stat-card">
