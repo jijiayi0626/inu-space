@@ -23,7 +23,7 @@ Vue 3 + Cloudflare Workers + D1 实现的「INU」账号中心。包含账号业
 
 ## 设计系统
 
-界面基于 [Fuxsto Design Pro](https://pro.design.fuxsto.com/) 0.1.5，并完成组件级接入：按钮、输入框、文本域、下拉选择、开关、复选框、对话框与轻提示全部使用库组件；颜色、圆角、阴影、间距、字号与动效均使用 `--fx-*` 令牌。主题为蓝紫品牌色（亮色 `#4F46E5`，暗色 `#A5B4FC`），`FxConfigProvider` 统一管理主题、动效与减少动态效果偏好，业务图标使用 lucide 线性图标。
+界面基于 [Fuxsto Design Pro](https://pro.design.fuxsto.com/) 0.1.5，并完成组件级接入：按钮、输入框、文本域、下拉选择、开关、复选框、对话框与轻提示全部使用库组件；颜色、圆角、阴影、间距、字号与动效均使用 `--fx-*` 令牌。主题为蓝紫品牌色（亮色 `#5B97FF`，暗色 `#89B4FF`），`FxConfigProvider` 统一管理主题、动效与减少动态效果偏好，业务图标使用 lucide 线性图标。
 
 样式导入顺序为 `layers.css` → 库 `styles.css` → `base.css`，通过 `@layer reset, theme, components, app` 固定层叠优先级，避免重置样式压过组件样式。项目约定与设计细则见 `AGENTS.md`、`docs/design-rules.md` 与 `docs/product-principles.md`，每次开发前优先阅读。
 
@@ -430,11 +430,11 @@ inu-cloud/
 
 ## 设计系统
 
-- 背景 `#F4F7FB`，主色 `#165DFF`，辅助色 `#8B5CF6` / `#06B6D4`
-- 文字 `#1D2129` / `#4E5969` / `#86909C`
-- 状态色 `#00B42A` / `#FF7D00` / `#F53F3F`
-- 64px 顶栏、244px 侧栏、16px 卡片圆角
-- 支持明暗主题、桌面/平板/手机响应式布局
+- 背景 `#FAFAFF`，主色 `#5B97FF`，强调面 `#EEF2FF` / 深靛 `#1E1B4B`
+- 文字 `#14121F` / `#6F6B82` / `#AAA5BF`
+- 状态色 `#10B981` / `#F59E0B` / `#EF4444`
+- 64px 顶栏、244px 侧栏、控件与卡片 12px 圆角，内层 8px
+- 默认跟随系统明暗主题，手动切换后记住选择；桌面/平板/手机响应式布局
 
 ## 更新日志
 

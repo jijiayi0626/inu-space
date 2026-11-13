@@ -80,6 +80,12 @@
 
 /* 品牌主题：蓝紫。只覆盖 Fuxsto 令牌，组件与语义变量自动跟随。 */
 :root{
+ /* 圆角：控件与卡片 12，内层 8 */
+ --fx-radius-control:12px;
+ --fx-radius-card:12px;
+ --fx-radius-surface:12px;
+ --fx-radius-inner:8px;
+
  --fx-background:#fafaff;
  --fx-surface:#ffffff;
  --fx-foreground:#14121f;
@@ -88,15 +94,15 @@
  --fx-muted-foreground:#6f6b82;
  --fx-accent:#eef2ff;
  --fx-accent-foreground:#312e81;
- --fx-primary:#4f46e5;
+ --fx-primary:#5b97ff;
  --fx-primary-foreground:#ffffff;
  --fx-secondary:#eef2ff;
  --fx-secondary-foreground:#312e81;
  --fx-border:#e7e5f2;
  --fx-border-hover:#d8d5e8;
  --fx-input:#e7e5f2;
- --fx-ring:#6366f1;
- --fx-ring-soft:#6366f133;
+ --fx-ring:#5b97ff;
+ --fx-ring-soft:#5b97ff33;
  --fx-chart-0:#ece9fe;
  --fx-chart-1:#c7d2fe;
  --fx-chart-2:#a5b4fc;
@@ -111,15 +117,15 @@
  --fx-dark-muted-foreground:#aaa5bf;
  --fx-dark-accent:#2a2547;
  --fx-dark-accent-foreground:#f5f4fb;
- --fx-dark-primary:#a5b4fc;
+ --fx-dark-primary:color-mix(in srgb, #5b97ff 72%, white);
  --fx-dark-primary-foreground:#1e1b4b;
  --fx-dark-secondary:#2a2547;
  --fx-dark-secondary-foreground:#e0e7ff;
  --fx-dark-border:#2c2844;
  --fx-dark-border-hover:#3f3960;
  --fx-dark-input:#2c2844;
- --fx-dark-ring:#a5b4fc;
- --fx-dark-ring-soft:#a5b4fc3d;
+ --fx-dark-ring:var(--fx-dark-primary);
+ --fx-dark-ring-soft:color-mix(in srgb, var(--fx-dark-primary) 24%, transparent);
  --fx-dark-scrim:#07060fa6;
 
  --panel-strong:#1e1b4b;

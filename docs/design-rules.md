@@ -4,7 +4,7 @@
 
 ## 1. 颜色
 
-设计令牌由 Fuxsto Design Pro 提供，业务样式只引用 `--fx-*` 或 `src/assets/base.css` 中的语义变量。品牌色为蓝紫：亮色 `#4F46E5`，暗色 `#A5B4FC`。
+设计令牌由 Fuxsto Design Pro 提供，业务样式只引用 `--fx-*` 或 `src/assets/base.css` 中的语义变量。品牌色为蓝紫：亮色 `#5B97FF`，暗色 `#89B4FF`。
 
 | 角色 | 令牌 | 亮色 | 暗色 |
 | --- | --- | --- | --- |
@@ -15,15 +15,15 @@
 | 弱文字 | `--fx-muted-foreground` | `#6F6B82` | `#AAA5BF` |
 | 下沉区域 | `--fx-muted` | `#F3F2FA` | `#201D32` |
 | 分割线 | `--fx-border` | `#E7E5F2` | `#2C2844` |
-| 主操作 | `--fx-primary` | `#4F46E5` | `#A5B4FC` |
+| 主操作 | `--fx-primary` | `#5B97FF` | `#89B4FF` |
 | 主操作文字 | `--fx-primary-foreground` | `#FFFFFF` | `#1E1B4B` |
 | 浅色强调面 | `--fx-secondary` | `#EEF2FF` | `#2A2547` |
-| 链接 / 焦点环 | `--fx-ring` | `#6366F1` | `#A5B4FC` |
+| 链接 / 焦点环 | `--fx-ring` | `#5B97FF` | `#89B4FF` |
 | 危险 | `--fx-destructive` | `#EF4444` | 由 Fuxsto 暗色令牌提供 |
 | 成功 | `--fx-success` | `#10B981` | 由 Fuxsto 暗色令牌提供 |
 | 警告 | `--fx-warning` | `#F59E0B` | 由 Fuxsto 暗色令牌提供 |
 
-暗色主题由 `[data-theme="dark"]` 切换。`base.css` 必须在该选择器内把 `--fx-*` 重新映射到 `--fx-dark-*`，否则库的暗色令牌会被应用层的亮色值覆盖。深色强调面板（余额 / 会员卡）使用 `--panel-strong` 系列变量。
+暗色主题由 `[data-theme="dark"]` 切换；默认跟随系统（`prefers-color-scheme`），手动切换后记住选择。`base.css` 必须在该选择器内把 `--fx-*` 重新映射到 `--fx-dark-*`，否则库的暗色令牌会被应用层的亮色值覆盖。深色强调面板（余额 / 会员卡）使用 `--panel-strong` 系列变量。
 
 规则：
 - 大面积背景不用品牌色、不用渐变。
@@ -38,11 +38,11 @@
 --s-5: 20px   --s-6: 24px   --s-7: 28px   --s-8: 32px
 --s-10: 40px  --s-12: 48px
 
---r-xs: 4px   /* 内层 */
---r-sm: 8px   /* 控件 */
---r-md: 8px   /* 卡片 */
---r-lg: 12px
---r-xl: 16px
+--r-xs: 8px   /* 内层 */
+--r-sm: 12px  /* 控件 */
+--r-md: 12px  /* 卡片 */
+--r-lg: 16px
+--r-xl: 20px
 --r-full: 9999px
 ```
 
@@ -116,9 +116,9 @@
 
 ## 8. 侧边栏
 
-- 宽度 240px；独立面板，12px 外边距，圆角 16px。
+- 宽度 240px；独立面板，12px 外边距，圆角 12px。
 - 分组标题 11px / 600 / 弱文字；组间 24px。
-- 菜单行高 40px，圆角 8px，图标 18px，图文间距 10px。
+- 菜单行高 40px，圆角 12px，图标 18px，图文间距 10px。
 - 当前项：`--fx-secondary` 底 + `--fx-secondary-foreground` 字，不加渐变、发光或右侧装饰。
 - 悬停：`--hover-soft` 底。
 - 底部认证提示使用普通浅色面板，不使用渐变。

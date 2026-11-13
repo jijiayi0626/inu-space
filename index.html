@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN" data-theme="light">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -11,10 +11,19 @@
     />
     <title>INU 账号中心</title>
     <script>
-      try {
-        const saved = localStorage.getItem('inu-theme')
-        if (saved === 'dark') document.documentElement.setAttribute('data-theme', 'dark')
-      } catch (e) {}
+      ;(function () {
+        var mode = 'light'
+        try {
+          var saved = localStorage.getItem('inu-theme')
+          if (saved === 'light' || saved === 'dark') mode = saved
+          else if (window.matchMedia('(prefers-color-scheme: dark)').matches) mode = 'dark'
+        } catch (e) {
+          try {
+            if (window.matchMedia('(prefers-color-scheme: dark)').matches) mode = 'dark'
+          } catch (e2) {}
+        }
+        document.documentElement.setAttribute('data-theme', mode)
+      })()
     </script>
   </head>
   <body>

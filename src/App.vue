@@ -13,6 +13,7 @@ const isPublic = computed(() => Boolean(route.meta.public));
  <FxConfigProvider
  :theme="theme"
  :motion="true"
+ :enter-on-mount="true"
  :duration-scale="1"
  :stagger="{ step: 40, max: 320, window: 48 }"
  :respect-reduced-motion="true"
