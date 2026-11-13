@@ -46,8 +46,10 @@ const siteForm = reactive({
   featureAgreements: true,
   featureRegister: false,
   featureVerification: true,
+  featurePointsExchange: true,
   paymentMode: 'mock',
   verificationMode: 'console',
+  pointsPerYuan: 100,
   rechargePresets: '50,100,200,500,1000',
   withdrawMinYuan: 100,
   nameChangeDays: 30,
@@ -78,8 +80,10 @@ watch(
     siteForm.featureAgreements = Boolean(value.featureAgreements);
     siteForm.featureRegister = Boolean(value.featureRegister);
     siteForm.featureVerification = value.featureVerification !== false;
+    siteForm.featurePointsExchange = value.featurePointsExchange !== false;
     siteForm.paymentMode = value.paymentMode || 'mock';
     siteForm.verificationMode = value.verificationMode || 'console';
+    siteForm.pointsPerYuan = value.pointsPerYuan ?? 100;
     siteForm.rechargePresets = (value.rechargePresets || []).join(',');
     siteForm.withdrawMinYuan = Math.round((value.withdrawMinCents || 10000) / 100);
     siteForm.nameChangeDays = value.nameChangeDays ?? 30;
@@ -125,6 +129,11 @@ async function saveSiteSettings() {
     toast('昵称修改间隔需在 0–365 天之间', 'error');
     return;
   }
+  const pointsPerYuan = Number(siteForm.pointsPerYuan);
+  if (!Number.isFinite(pointsPerYuan) || pointsPerYuan < 1 || pointsPerYuan > 10000) {
+    toast('积分兑换比例需在 1–10000 之间', 'error');
+    return;
+  }
   siteForm.saving = true;
   try {
     await api.patch('/admin/settings', {
@@ -146,8 +155,10 @@ async function saveSiteSettings() {
       featureAgreements: siteForm.featureAgreements,
       featureRegister: siteForm.featureRegister,
       featureVerification: siteForm.featureVerification,
+      featurePointsExchange: siteForm.featurePointsExchange,
       paymentMode: siteForm.paymentMode,
       verificationMode: siteForm.verificationMode,
+      pointsPerYuan: Math.round(pointsPerYuan),
       rechargePresets: presets,
       withdrawMinCents: Math.round(withdrawMinYuan * 100),
       nameChangeDays: Math.round(nameChangeDays),
@@ -263,6 +274,7 @@ async function saveSiteSettings() {
               { key: 'featureSupply', title: '积分商城', desc: '商品兑换、订单与物流' },
               { key: 'featureAgreements', title: '协议中心', desc: '协议签署、查看与导出' },
               { key: 'featureVerification', title: '实名认证', desc: '实名认证入口与核验通道' },
+              { key: 'featurePointsExchange', title: '余额兑积分', desc: '把余额按比例兑换为积分' },
               { key: 'featureAvatar', title: '头像自定义', desc: '修改头像文字与配色' },
               { key: 'featurePhoneBind', title: '手机绑定', desc: '绑定 / 更换安全手机' },
               { key: 'featureEmailChange', title: '邮箱更换', desc: '更换安全邮箱' },
@@ -296,8 +308,14 @@ async function saveSiteSettings() {
 
         <FxField v-select-label="'验证码通道'" label="验证码通道">
           <Select v-model="siteForm.verificationMode" :options="verificationModeOptions" />
-          <p class="hint">关闭后手机 / 邮箱验证码与实名用户自助认证都不可用；「实名认证」功能开关关闭时，认证入口显示为暂未开放。</p>
+          <p class="hint">关闭后手机 / 邮箱验证码与实名用户自助认证都不可用；实名认证接口未配置时，前端不展示任何认证入口。</p>
         </FxField>
+
+        <div class="field">
+          <span class="field-label">每 1 余额兑换积分</span>
+          <Input aria-label="积分兑换比例" :model-value="siteForm.pointsPerYuan" type="number" min="1" max="10000" @update:model-value="siteForm.pointsPerYuan = Number($event)" />
+          <p class="hint">仅影响余额兑换积分的比例，积分兑换后不可退回。</p>
+        </div>
 
         <div class="field">
           <span class="field-label">充值快捷金额（余额）</span>

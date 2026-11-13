@@ -107,7 +107,7 @@ async function openAllParticles() {
           :class="{ current: item.current }"
         >
           <p class="tier-name"><AppIcon :name="item.icon" />{{ item.label }}</p>
-          <p class="tier-meta"><b>{{ number(item.min) }}</b> 积分起 · {{ item.discount }}商品</p>
+          <p class="tier-meta"><b>{{ number(item.min) }}</b> 积分起 · {{ item.discount }}会员价</p>
           <span class="badge" :class="item.current ? 'badge-blue' : item.unlocked ? 'badge-green' : 'badge-gray'">
             {{ item.current ? '当前' : item.unlocked ? '已解锁' : '未解锁' }}
           </span>
@@ -140,8 +140,8 @@ async function openAllParticles() {
         </table>
       </div>
       <p class="card-note">
-        <AppIcon name="clock" />
-        <span>积分有效期为 12 个月，过期后将按 100:1 自动折算为余额。</span>
+        <AppIcon name="star" />
+        <span>积分与余额相互独立，积分可升级等级、兑换商品，也可在积分商城用余额按比例兑换。</span>
       </p>
     </section>
   </div>

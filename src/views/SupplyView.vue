@@ -6,7 +6,7 @@ import BaseModal from '../components/BaseModal.vue';
 import PageHeader from '../components/PageHeader.vue';
 import SkeletonBlock from '../components/SkeletonBlock.vue';
 import { api } from '../lib/api';
-import { maskPhone, money, moneyParts, timeLabel } from '../lib/format';
+import { maskPhone, money, moneyParts, number, timeLabel } from '../lib/format';
 import { session, setUser } from '../lib/session';
 import { toast } from '../lib/toast';
 import { useAsyncData } from '../lib/useAsyncData';
@@ -15,8 +15,26 @@ const { data, reload } = useAsyncData(({ force }) => api.get('/supply', { force 
 
 const wallet = computed(() => data.value?.wallet || { balanceCents: 0, cardLast4: '0721' });
 const balanceParts = computed(() => moneyParts(wallet.value.balanceCents));
+const points = computed(() => data.value?.points || { balance: 0, perYuan: 100, exchangeEnabled: false });
 const address = computed(() => data.value?.address || null);
 const verified = computed(() => data.value?.verified ?? session.user?.verified ?? false);
+const verificationAvailable = computed(() => data.value?.verificationAvailable === true);
+const entitlements = computed(() => data.value?.entitlements || []);
+const currentTier = computed(() => data.value?.user?.tier || session.user?.tier || 'basic');
+const tierRank = { basic: 0, silver: 1, gold: 2, platinum: 3 };
+const kindLabels = { goods: '实物', membership: '会员', app: '应用' };
+
+function orderCost(order) {
+  return order.paymentMode === 'points' ? `${number(order.pointsSpent)} 积分` : `${money(order.energyCents)} 余额`;
+}
+
+function productOwned(product) {
+  return product.kind === 'membership' && (tierRank[product.grantTier] || 0) <= (tierRank[currentTier.value] || 0);
+}
+
+function productBlocked(product) {
+  return product.kind === 'goods' && !verified.value;
+}
 
 const statusMap = {
   transit: { label: '配送中', tone: 'orange' },
@@ -43,19 +61,69 @@ async function confirmOrder() {
   try {
     const result = await api.post('/supply/orders', { productId: selectedProduct.value.id });
     orderOpen.value = false;
-    if (session.user) {
+    if (result.user) {
+      setUser(result.user);
+    } else if (session.user) {
       setUser({
         ...session.user,
         starEnergyCents: result.balanceCents,
         particles: result.particles,
       });
     }
-    toast(`兑换成功，+${result.reward} 积分`);
+    toast(
+      result.paymentMode === 'points'
+        ? `兑换成功，-${number(result.pointsSpent)} 积分`
+        : `兑换成功，-${money(result.order?.energyCents || 0)} 余额`,
+    );
     await reload({ silent: true });
   } catch (error) {
     toast(error.message, 'error');
   } finally {
     ordering.value = false;
+  }
+}
+
+const exchangeOpen = ref(false);
+const exchangeYuan = ref(10);
+const exchanging = ref(false);
+const exchangeError = ref('');
+const exchangePoints = computed(() => {
+  const yuan = Number(exchangeYuan.value);
+  if (!Number.isFinite(yuan) || yuan <= 0) return 0;
+  return Math.floor(yuan * (points.value.perYuan || 0));
+});
+
+function openExchange() {
+  exchangeError.value = '';
+  exchangeYuan.value = Math.min(10, Math.floor(wallet.value.balanceCents / 100) || 1);
+  exchangeOpen.value = true;
+}
+
+async function submitExchange() {
+  exchangeError.value = '';
+  const yuan = Number(exchangeYuan.value);
+  const amountCents = Math.round(yuan * 100);
+  if (!Number.isFinite(amountCents) || amountCents < 100) {
+    exchangeError.value = '单次至少兑换 1 余额';
+    return;
+  }
+  if (amountCents > wallet.value.balanceCents) {
+    exchangeError.value = '账户余额不足';
+    return;
+  }
+  exchanging.value = true;
+  try {
+    const result = await api.post('/wallet/points/exchange', { amountCents });
+    if (session.user) {
+      setUser({ ...session.user, starEnergyCents: result.balanceCents, particles: result.particles });
+    }
+    exchangeOpen.value = false;
+    toast(`兑换成功，+${number(result.points)} 积分`);
+    await reload({ silent: true });
+  } catch (error) {
+    exchangeError.value = error.message;
+  } finally {
+    exchanging.value = false;
   }
 }
 
@@ -216,7 +284,7 @@ async function loadAllOrders() {
 </script>
 
 <template>
-  <PageHeader title="积分商城" sub="用账户余额兑换商品，会员折扣自动生效。">
+  <PageHeader title="积分商城" sub="积分与余额分开结算，会员折扣自动生效。">
     <template #meta>
       <span class="badge badge-blue">{{ data?.user?.tierLabel || '普通' }}会员 · {{ data?.discountLabel || '95 折' }}</span>
       <span class="head-date">商品每日更新</span>
@@ -231,6 +299,22 @@ async function loadAllOrders() {
     <div class="overview-grid">
       <article class="stat-card">
         <div class="stat-top">
+          <span class="stat-icon"><AppIcon name="star" /></span>
+          <span class="badge badge-blue">积分</span>
+        </div>
+        <div>
+          <p class="stat-name">可用积分</p>
+          <p class="stat-value">{{ number(points.balance) }}</p>
+        </div>
+        <p class="stat-foot">
+          <button v-if="points.exchangeEnabled" class="btn btn-text" type="button" @click="openExchange">
+            用余额兑换积分
+          </button>
+          <span v-else>积分用于等级与积分商品</span>
+        </p>
+      </article>
+      <article class="stat-card">
+        <div class="stat-top">
           <span class="stat-icon"><AppIcon name="wallet" /></span>
           <span class="badge badge-blue">INU 支付</span>
         </div>
@@ -238,28 +322,18 @@ async function loadAllOrders() {
           <p class="stat-name">可用余额</p>
           <p class="stat-value">{{ balanceParts.integer }}<small>.{{ balanceParts.decimal }}</small></p>
         </div>
-        <p class="stat-foot">账户余额 · INU ···· {{ wallet.cardLast4 }}</p>
-      </article>
-      <article class="stat-card">
-        <div class="stat-top">
-          <span class="stat-icon"><AppIcon name="box" /></span>
-          <span class="badge badge-orange">{{ data.counts.transit }} 单</span>
-        </div>
-        <div>
-          <p class="stat-name">运输中订单</p>
-          <p class="stat-value">{{ data.counts.transit }}</p>
-        </div>
-        <p class="stat-foot">配送进度可在订单详情查看</p>
+        <p class="stat-foot">INU ···· {{ wallet.cardLast4 }} · 1 余额 = {{ points.perYuan }} 积分</p>
       </article>
       <article class="stat-card">
         <div class="stat-top">
           <span class="stat-icon"><AppIcon name="chart" /></span>
+          <span class="badge badge-orange">{{ data.counts.transit }} 单配送中</span>
         </div>
         <div>
-          <p class="stat-name">本月商品</p>
-          <p class="stat-value">{{ data.counts.monthOrders }}<small>单</small></p>
+          <p class="stat-name">本月消耗</p>
+          <p class="stat-value">{{ number(data.counts.monthSpendPoints) }}<small>积分</small></p>
         </div>
-        <p class="stat-foot">累计消耗 {{ money(data.counts.monthSpendCents) }} 余额</p>
+        <p class="stat-foot">{{ data.counts.monthOrders }} 单 · 余额 {{ money(data.counts.monthSpendCents) }}</p>
       </article>
     </div>
 
@@ -268,10 +342,16 @@ async function loadAllOrders() {
         <h2>在售商品</h2>
         <span class="head-note">会员价已生效</span>
       </div>
-      <div class="product-grid">
+      <div v-if="!data.products.length" class="inline-empty">
+        <span class="inline-empty-icon"><AppIcon name="box" /></span>
+        <h3>货架暂时是空的</h3>
+        <p>管理员上架商品后，会立即出现在这里。</p>
+      </div>
+      <div v-else class="product-grid">
         <article v-for="product in data.products" :key="product.id" class="product-card">
           <div class="product-top">
             <span class="product-icon" :class="`product-${product.tone}`"><AppIcon :name="product.icon" /></span>
+            <span class="badge badge-gray">{{ kindLabels[product.kind] || '实物' }}</span>
             <span class="badge" :class="product.tone === 'blue' ? 'badge-blue' : product.tone === 'orange' ? 'badge-orange' : 'badge-gray'">
               {{ product.tag }}
             </span>
@@ -282,27 +362,57 @@ async function loadAllOrders() {
           </div>
           <div class="product-foot">
             <div class="product-price">
-              <strong>{{ money(product.memberPriceCents) }}</strong><span>余额</span>
-              <em v-if="product.memberPriceCents < product.priceCents">{{ money(product.priceCents) }}</em>
+              <template v-if="product.paymentMode === 'points'">
+                <strong>{{ number(product.memberPointsPrice) }}</strong><span>积分</span>
+                <em v-if="product.memberPointsPrice < product.pointsPrice">{{ number(product.pointsPrice) }} 积分</em>
+              </template>
+              <template v-else>
+                <strong>{{ money(product.memberPriceCents) }}</strong><span>余额</span>
+                <em v-if="product.memberPriceCents < product.priceCents">{{ money(product.priceCents) }}</em>
+              </template>
             </div>
-            <RouterLink v-if="!verified" class="btn btn-ghost btn-sm" to="/profile#verify">需认证</RouterLink>
-            <Button variant="primary" size="sm" v-else type="button" :disabled="!featureEnabled" @click="openOrder(product)">
+            <span v-if="productOwned(product)" class="badge badge-green">已拥有</span>
+            <template v-else-if="productBlocked(product)">
+              <RouterLink v-if="verificationAvailable" class="btn btn-ghost btn-sm" to="/profile#verify">需认证</RouterLink>
+              <Button v-else variant="secondary" size="sm" type="button" disabled>暂不可兑</Button>
+            </template>
+            <Button v-else variant="primary" size="sm" type="button" :disabled="!featureEnabled" @click="openOrder(product)">
               {{ featureEnabled ? '兑换' : '暂停开放' }}
             </Button>
           </div>
         </article>
       </div>
-      <p class="card-note">
+      <p v-if="verificationAvailable" class="card-note">
         <AppIcon name="idcard" />
-        <span v-if="verified">实名认证已完成，商品兑换与余额提现能力均已解锁。</span>
-        <span v-else>完成实名认证后，积分商城下单与余额提现能力将一并解锁。</span>
+        <span v-if="verified">实名认证已完成，实物商品可正常兑换；会员与应用权益无需认证。</span>
+        <span v-else>实物商品需完成实名认证，会员与应用权益可直接购买。</span>
       </p>
+    </section>
+
+    <section v-if="entitlements.length" class="card">
+      <div class="card-head">
+        <h2>已开通的应用</h2>
+        <span class="badge badge-green">{{ entitlements.length }} 项</span>
+      </div>
+      <div class="link-list">
+        <div v-for="item in entitlements" :key="item.appKey" class="sec-row">
+          <span class="sec-icon"><AppIcon name="globe" /></span>
+          <div>
+            <p class="sec-title">{{ item.appKey }}</p>
+            <p class="sec-sub">{{ item.plan || '标准版' }} · {{ timeLabel(item.grantedAt) }}</p>
+          </div>
+          <div class="sec-right"><span class="badge badge-green">已开通</span></div>
+        </div>
+      </div>
     </section>
 
     <section id="orders" class="card">
       <div class="card-head">
         <h2>订单</h2>
-        <button class="btn btn-text" @click="loadAllOrders">查看全部</button>
+        <div class="head-actions">
+          <span class="badge badge-orange">{{ data.counts.transit }} 单配送中</span>
+          <button class="btn btn-text" @click="loadAllOrders">查看全部</button>
+        </div>
       </div>
       <div class="table-wrap">
         <table class="data-table responsive orders">
@@ -313,7 +423,7 @@ async function loadAllOrders() {
             <tr v-for="order in data.orders" :key="order.id">
               <td class="num">{{ order.code }}</td>
               <td>{{ order.item }}</td>
-              <td class="num">{{ money(order.energyCents) }}</td>
+              <td class="num">{{ orderCost(order) }}</td>
               <td>
                 <span class="badge" :class="`badge-${statusMap[order.status]?.tone || 'gray'}`">
                   {{ statusMap[order.status]?.label || order.status }}
@@ -379,18 +489,26 @@ async function loadAllOrders() {
         <span class="product-icon" :class="`product-${selectedProduct.tone}`"><AppIcon :name="selectedProduct.icon" /></span>
         <div>
           <p class="modal-device-name">{{ selectedProduct.name }}</p>
-          <p class="modal-device-sub">{{ selectedProduct.tag }} · 会员折扣 {{ data?.discountLabel }}</p>
+          <p class="modal-device-sub">{{ kindLabels[selectedProduct.kind] || '实物' }} · 会员折扣 {{ data?.discountLabel }}</p>
         </div>
       </div>
       <dl class="detail-list">
         <div class="detail-row"><dt>商品</dt><dd>{{ selectedProduct.desc }}</dd></div>
-        <div class="detail-row"><dt>会员价</dt><dd>{{ money(selectedProduct.memberPriceCents) }} 余额</dd></div>
-        <div class="detail-row"><dt>可用余额</dt><dd>{{ money(wallet.balanceCents) }} 余额</dd></div>
-        <div class="detail-row"><dt>预计送达</dt><dd>1–3 个工作日</dd></div>
+        <div class="detail-row" v-if="selectedProduct.paymentMode === 'points'">
+          <dt>会员价</dt><dd>{{ number(selectedProduct.memberPointsPrice) }} 积分</dd>
+        </div>
+        <div class="detail-row" v-else><dt>会员价</dt><dd>{{ money(selectedProduct.memberPriceCents) }} 余额</dd></div>
+        <div class="detail-row" v-if="selectedProduct.paymentMode === 'points'">
+          <dt>可用积分</dt><dd>{{ number(points.balance) }} 积分</dd>
+        </div>
+        <div class="detail-row" v-else><dt>可用余额</dt><dd>{{ money(wallet.balanceCents) }} 余额</dd></div>
+        <div class="detail-row" v-if="selectedProduct.kind === 'goods'"><dt>预计送达</dt><dd>1–3 个工作日</dd></div>
+        <div class="detail-row" v-else><dt>生效方式</dt><dd>兑换后立即生效</dd></div>
       </dl>
       <p class="card-note">
         <AppIcon name="info" />
-        <span>兑换后余额将立即扣除，商品进入配送流程，消费可累计积分。</span>
+        <span v-if="selectedProduct.paymentMode === 'points'">兑换后积分立即扣除，会员等级不会因消费降级。</span>
+        <span v-else>兑换后余额立即扣除，本单不额外返还积分。</span>
       </p>
     </template>
     <template #footer>
@@ -398,6 +516,36 @@ async function loadAllOrders() {
       <Button variant="primary" size="sm" type="button" :disabled="ordering" @click="confirmOrder">
         <span v-if="ordering" class="spinner" />
         {{ ordering ? '正在兑换…' : '确认兑换' }}
+      </Button>
+    </template>
+  </BaseModal>
+
+  <BaseModal v-model="exchangeOpen" title="余额兑换积分" width="460px">
+    <div class="modal-device">
+      <span class="device-icon lg"><AppIcon name="star" /></span>
+      <div>
+        <p class="modal-device-name">{{ number(points.balance) }} 积分</p>
+        <p class="modal-device-sub">当前余额 {{ money(wallet.balanceCents) }} · 1 余额 = {{ points.perYuan }} 积分</p>
+      </div>
+    </div>
+    <div class="field">
+      <span class="field-label">兑换金额（余额）</span>
+      <Input
+        aria-label="兑换金额（余额）"
+        :model-value="exchangeYuan"
+        type="number"
+        min="1"
+        step="1"
+        @update:model-value="exchangeYuan = Number($event)"
+      />
+      <p class="hint">预计获得 {{ number(exchangePoints) }} 积分，兑换后积分不可退回余额。</p>
+    </div>
+    <p v-if="exchangeError" class="form-error"><AppIcon name="shield" /><span>{{ exchangeError }}</span></p>
+    <template #footer>
+      <Button variant="secondary" size="sm" type="button" @click="exchangeOpen = false">取消</Button>
+      <Button variant="primary" size="sm" type="button" :disabled="exchanging" @click="submitExchange">
+        <span v-if="exchanging" class="spinner" />
+        {{ exchanging ? '兑换中…' : `确认兑换 ${number(exchangePoints)} 积分` }}
       </Button>
     </template>
   </BaseModal>
@@ -461,9 +609,12 @@ async function loadAllOrders() {
       </div>
 
       <dl class="detail-list">
-        <div class="detail-row"><dt>余额消耗</dt><dd>{{ money(detailOrder.energyCents) }} 余额</dd></div>
-        <div class="detail-row"><dt>运单号</dt><dd>{{ detailOrder.trackingNo || '待分配' }}</dd></div>
-        <div class="detail-row"><dt>承运方</dt><dd>{{ detailOrder.carrier || '快递' }}</dd></div>
+        <div class="detail-row">
+          <dt>{{ detailOrder.paymentMode === 'points' ? '积分消耗' : '余额消耗' }}</dt>
+          <dd>{{ detailOrder.paymentMode === 'points' ? `${number(detailOrder.pointsSpent)} 积分` : `${money(detailOrder.energyCents)} 余额` }}</dd>
+        </div>
+        <div class="detail-row" v-if="detailOrder.kind === 'goods'"><dt>运单号</dt><dd>{{ detailOrder.trackingNo || '待分配' }}</dd></div>
+        <div class="detail-row" v-if="detailOrder.kind === 'goods'"><dt>承运方</dt><dd>{{ detailOrder.carrier || '快递' }}</dd></div>
         <div v-if="detailOrder.address" class="detail-row">
           <dt>收货地址</dt>
           <dd>{{ detailOrder.address.receiver }} · {{ maskPhone(detailOrder.address.phone) }} · {{ detailOrder.address.region }} {{ detailOrder.address.detail }}</dd>
@@ -502,7 +653,7 @@ async function loadAllOrders() {
           <tr v-for="order in allOrders" :key="order.id">
             <td class="num">{{ order.code }}</td>
             <td>{{ order.item }}</td>
-            <td class="num">{{ money(order.energyCents) }}</td>
+            <td class="num">{{ orderCost(order) }}</td>
             <td>
               <span class="badge" :class="`badge-${statusMap[order.status]?.tone || 'gray'}`">
                 {{ statusMap[order.status]?.label || order.status }}

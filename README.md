@@ -29,7 +29,7 @@ Vue 3 + Cloudflare Workers + D1 实现的「INU」账号中心。包含账号业
 
 ## 功能
 
-- **总览**：余额钱包、积分、会员进度、快捷入口、最近动态；钱包卡片可直接进入充值 / 提现。
+- **总览**：余额钱包、积分、会员进度、快捷入口、最近动态；积分与余额分开展示，钱包卡片可直接进入充值 / 提现。
 - **个人资料**：昵称/邮箱/签名修改、头像配色、INU ID 复制、手机号与邮箱验证码绑定（控制台验证码模式）、实名认证。
 - **账户安全**：安全评分、两步验证开关、登录保护策略、密码修改、安全日志（支持分页 / 筛选）。
 - **授权应用**：独立页面展示通过「使用 INU 账号登录」授权的第三方应用、权限范围、有效期与最近使用时间，可一键撤销授权并吊销令牌。
@@ -37,13 +37,13 @@ Vue 3 + Cloudflare Workers + D1 实现的「INU」账号中心。包含账号业
 - **通知偏好**：通知类型、渠道开关、免打扰时段、每周摘要，以及站内信收件箱（标记已读 / 全部已读 / 删除）。
 - **会员中心**：等级进度、四档会员权益、积分流水（分页）。
 - **协议中心**：协议列表、正文详情、待签署提醒、签署时写入协议快照、签署后发放 50 积分、已签协议导出文本。
-- **积分商城**：会员价商品、余额兑换下单、订单详情与物流时间线、待支付订单支付 / 取消、确认收货、再次购买、收货地址。
+- **积分商城**：积分价 / 余额价商品分开展示，支持实物、会员与应用权益；余额可按站点比例兑换积分，订单详情、物流时间线、取消 / 再次购买与收货地址齐全。
 - **余额钱包**：充值（模拟支付 / 关闭）、提现申请（管理员复核）、钱包流水、充值订单状态。
 - **找回密码**：登录页提交找回申请，管理员在「用户管理」中重置密码并标记处理。
 - **超级管理台**：登录方式配置、OAuth 应用与密钥管理、站点功能开关、商品与协议模板、全站广播、财务与订单复核、用户搜索与调整、密码重置、接入指引、审计日志、管理员授权。
 - **INU 授权登录**：第三方应用通过 `/oauth/authorize` 获取授权码，兑换令牌后读取用户资料。
 
-> 「实名认证」提供两种模式：`console`（控制台输出验证码，开发 / 演示）与 `off`（关闭）。生产环境请接入真实的实名 / 活体核验服务。支付当前为模拟模式，接入真实支付渠道后可保持同一套订单与流水结构。
+> 「实名认证」提供两种模式：`console`（控制台输出验证码，开发 / 演示）与 `off`（关闭）。关闭或未配置认证接口时，前端完全不展示实名认证入口，实物商品暂不可兑换；会员与应用权益不受影响。支付当前为模拟模式，接入真实支付渠道后可保持同一套订单与流水结构。
 
 ## 本地运行
 
@@ -98,11 +98,11 @@ npm run dev          # 设备 2，Vite 在 5173，/api 已代理到 8787
    # 首次部署：建表 + 演示数据 + OAuth + 管理台 + 功能表
    npm run db:remote
 
-   # 已有数据的库升级：执行 0001 与 0003–0009，不会重置演示账号
+   # 已有数据的库升级：执行 0001 与 0003–0010，不会重置演示账号
    npm run db:migrate:remote
    ```
 
-   `0005_features.sql` 与 `0008_session_names.sql` 含 `ALTER TABLE`，对已升级过的库重复执行会报「duplicate column」，可跳过已执行过的文件；`0007_neutral_tiers.sql` 与 `0009_neutral_content.sql` 是数据更新，可安全重复执行。
+   `0005_features.sql`、`0008_session_names.sql` 与 `0010_points_market.sql` 涉及表结构或表重建，对已升级过的库请只执行尚未执行的文件；`0007_neutral_tiers.sql` 与 `0009_neutral_content.sql` 是数据更新，可安全重复执行。`0010_points_market.sql` 会清空现有商城商品，请先备份。
 
 4. 配置 Worker 密钥：
 
@@ -166,8 +166,8 @@ npm run dev          # 设备 2，Vite 在 5173，/api 已代理到 8787
 | 分区 | 能力 |
 | --- | --- |
 | 登录方式 | 配置 GitHub / Google 的 Client ID、Client Secret、启用状态，保存即生效 |
-| 站点设置 | 演示账号入口显隐与只读、站点公告、欢迎语与页脚、客服邮箱与钱包卡号尾号、9 项功能开关、支付 / 验证模式、充值预设、提现门槛、改名冷却、维护模式 |
-| 内容与商品 | 全站广播（按通知偏好送达站内信）、积分商城商品增删改（名称、价格、会员价、库存、图标、色系、上下架）、协议模板增删改（标题、版本、正文、奖励积分、启用状态） |
+| 站点设置 | 演示账号入口显隐与只读、站点公告、欢迎语与页脚、客服邮箱与钱包卡号尾号、10 项功能开关、支付 / 验证模式、积分兑换比例、充值预设、提现门槛、改名冷却、维护模式 |
+| 内容与商品 | 全站广播（按通知偏好送达站内信）、积分商城商品增删改（实物 / 会员 / 应用权益、积分价 / 余额价、会员等级、应用标识、库存、图标、色系、上下架）、协议模板增删改（标题、版本、正文、奖励积分、启用状态） |
 | 财务与订单 | 收入 / 支出 / 待复核提现 / 订单数统计、提现复核（通过并打款 / 驳回并退款）、订单状态与物流（承运商、单号、时间线）、充值订单列表 |
 | 用户管理 | 用户搜索（邮箱 / 昵称 / INU ID / 手机号）、认证与管理员标记、积分与余额增减、昵称修改、重置登录密码、处理密码找回申请 |
 | 应用接入 | 创建、编辑、停用、删除 OAuth 应用，重置 Client Secret，配置回调地址与权限范围 |
@@ -202,9 +202,11 @@ npm run dev          # 设备 2，Vite 在 5173，/api 已代理到 8787
 | `site.feature_supply` | `1` | 积分商城下单（关闭后仅可浏览） |
 | `site.feature_agreements` | `1` | 协议签署（关闭后仅可浏览） |
 | `site.feature_register` | `0` | 开放邮箱自助注册 |
-| `site.feature_verification` | `1` | 实名用户实名认证入口；关闭后认证按钮显示「认证通道已关闭」，服务端拒绝认证、下单与提现 |
+| `site.feature_verification` | `1` | 实名认证入口；关闭后前端完全隐藏认证入口，服务端拒绝实物商品下单与提现 |
 | `site.payment_mode` | `mock` | `mock` 模拟支付 / `off` 关闭在线支付 |
 | `site.verification_mode` | `console` | `console` 返回验证码 devCode 并开放模拟认证 / `off` 关闭验证码与模拟认证 |
+| `site.feature_points_exchange` | `1` | 余额兑换积分的入口与服务端能力 |
+| `site.points_per_yuan` | `100` | 每 1 余额可兑换的积分数（1–10000） |
 | `site.recharge_presets` | `50,100,200,500,1000` | 充值金额预设（元，1–8 个） |
 | `site.withdraw_min_cents` | `10000` | 最低提现金额（分） |
 | `site.name_change_days` | `30` | 昵称修改冷却天数，`0` 表示不限制 |
@@ -256,9 +258,9 @@ INU 同时是一个标准的 OAuth 2.0 授权服务器。第三方应用把用�
 - 授权码有效期 5 分钟，只能使用一次；`access_token` 有效期 1 小时，不提供 refresh token。
 - 机密客户端可使用 Client Secret 认证；公开客户端（SPA、移动应用）不保存 Secret，必须使用 PKCE `S256`。
 - `redirect_uri` 必须与管理台登记的地址完全一致；仅允许 `https://`，本地调试可用 `http://localhost` / `http://127.0.0.1`。
-- scope 目前支持 `profile`（昵称、INU ID、账号编号、会员等级、头像字符）与 `email`（邮箱和认证状态）。
+- scope 目前支持 `profile`（昵称、INU ID、账号编号、会员等级、头像字符）、`email`（邮箱和认证状态）与 `entitlements`（已开通的应用与会员权益）。
 - 已授权过的应用默认跳过同意页；使用 `prompt=consent` 可强制重新展示。
-- `userinfo` 的 `sub` 是 INU 用户 ID；`email_verified` 表示该账号已通过 INU 的实名认证，不表示邮箱控制权验证。
+- `userinfo` 的 `sub` 是 INU 用户 ID；`email_verified` 表示该账号已通过 INU 的实名认证，不表示邮箱控制权验证；`entitlements` 返回 `app_key`、`plan` 与开通时间。
 
 ### AI 接入文档
 
@@ -295,7 +297,8 @@ https://pass.inumc.dpdns.org/api/auth/oauth/google/callback
 
 - **充值**：`POST /api/wallet/recharge` 创建充值单，金额 10–50000 余额，支付方式 `inu_pay` / `alipay` / `wechat`。`mock` 模式下立即入账并写入 `wallet_transactions`；`off` 模式下接口返回 `PAYMENT_UNAVAILABLE`。
 - **提现**：要求已完成实名认证并绑定手机号，单次不低于 `site.withdraw_min_cents`。申请时冻结扣减余额，状态为 `processing`；管理员「通过并打款」后变为 `paid`，「驳回并退款」会把金额退回余额并记流水。
-- **订单**：状态为 `pending_payment` / `transit` / `delivered` / `cancelled`。待支付可支付或取消，支付扣减余额并写流水；管理员可在财务页填写承运商、运单号并推进物流时间线；用户确认收货或再次购买（生成新订单）。
+- **订单**：商品可选择积分或余额结算。积分商品扣减积分并写积分流水，余额商品扣减余额并写钱包流水；实物订单为 `transit` / `delivered`，会员与应用权益兑换后立即 `delivered` 并写入权益表。待支付仅用于历史余额订单，可支付或取消；管理员可在财务页填写承运商、运单号并推进物流时间线，取消时按原支付方式退回积分或余额。
+- **余额兑换积分**：`POST /api/wallet/points/exchange` 按 `site.points_per_yuan` 扣减余额并增加积分，同时写入钱包流水与积分流水；积分兑换后不可退回余额。
 - **验证码**：手机号绑定、邮箱换绑使用 6 位验证码，10 分钟有效、最多尝试 5 次、每小时最多 5 条；`console` 模式会直接返回 `devCode` 供联调，关闭后接口拒绝。
 - **密码找回**：登录页提交邮箱后生成 `password_reset_requests` 记录（10 分钟内去重）并通知管理员；管理员在「用户管理」中重置密码后，待处理申请自动标记为已处理。接口对邮箱是否存在都返回同一句话，避免账号枚举。
 
@@ -348,7 +351,7 @@ https://pass.inumc.dpdns.org/api/auth/oauth/google/callback
 | POST | `/api/agreements/:id/sign` | 签署协议 +50 积分 |
 | GET | `/api/supply` | 积分商城聚合数据 |
 | GET | `/api/supply/orders`、`/api/supply/orders/:id` | 订单列表 / 详情与物流 |
-| POST | `/api/supply/orders` | 余额兑换下单 |
+| POST | `/api/supply/orders` | 创建订单（积分或余额结算，实物 / 会员 / 应用权益） |
 | POST | `/api/supply/orders/:id/pay` | 支付待支付订单 |
 | POST | `/api/supply/orders/:id/cancel` | 取消待支付订单并退款 |
 | POST | `/api/supply/orders/:id/confirm` | 确认收货 |
@@ -356,6 +359,7 @@ https://pass.inumc.dpdns.org/api/auth/oauth/google/callback
 | PATCH | `/api/supply/address` | 保存收货地址 |
 | GET | `/api/wallet` | 余额、流水、充值单、提现单与开关 |
 | POST | `/api/wallet/recharge` | 创建充值单（mock 模式立即到账） |
+| POST | `/api/wallet/points/exchange` | 余额兑换积分（写入双流水） |
 | POST | `/api/wallet/recharge/:id/pay`、`/cancel` | 支付 / 取消充值单 |
 | POST | `/api/wallet/withdraw` | 提交提现申请（冻结余额，等待复核） |
 | GET | `/api/oauth/authorize/context` | 读取授权请求、用户与 scope（需登录） |

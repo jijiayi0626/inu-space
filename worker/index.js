@@ -8,7 +8,6 @@ import {
   TIERS,
   TIER_MAP,
   BENEFITS,
-  PRODUCTS,
   NOTIFICATION_TYPES,
   NOTIFICATION_CHANNELS,
   SUPPLY_TIPS,
@@ -244,8 +243,50 @@ function detectDevice(c) {
   return detectClient(c).name;
 }
 
+function tierForParticles(particles) {
+  const value = Math.max(0, Number(particles) || 0);
+  return TIERS.reduce((best, item) => (value >= item.min ? item : best), TIERS[0]);
+}
+
+// 等级只升不降：同时参考已存储等级与当前积分，历史高等级不会因消费回落。
 function tierOf(userRow) {
-  return TIER_MAP[userRow.member_tier] || TIERS[0];
+  const stored = TIER_MAP[userRow.member_tier] || TIERS[0];
+  const earned = tierForParticles(userRow.particles);
+  return earned.min > stored.min ? earned : stored;
+}
+
+function higherTier(first, second) {
+  return second && second.min > first.min ? second : first;
+}
+
+function nextTierAfter(userRow, nextParticles) {
+  return higherTier(tierOf(userRow), tierForParticles(nextParticles));
+}
+
+function parsePaymentMode(value) {
+  return value === 'balance' ? 'balance' : 'points';
+}
+
+function parseProductKind(value) {
+  return ['goods', 'membership', 'app'].includes(value) ? value : 'goods';
+}
+
+function serializeProduct(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    desc: row.desc,
+    priceCents: row.price_cents,
+    pointsPrice: row.points_price || 0,
+    paymentMode: parsePaymentMode(row.payment_mode),
+    kind: parseProductKind(row.kind),
+    grantTier: row.grant_tier || '',
+    appKey: row.app_key || '',
+    icon: row.icon,
+    tag: row.tag,
+    tone: row.tone,
+    stock: row.stock,
+  };
 }
 
 function serializeUser(row, options = {}) {
@@ -392,24 +433,11 @@ async function ensureAgreementsForUser(db, userId) {
 async function listProducts(db) {
   try {
     const rows = await db.prepare('SELECT * FROM products ORDER BY sort ASC, updated_at DESC').all();
-    if (rows.results.length) {
-      return rows.results
-        .filter((row) => row.active !== 0)
-        .map((row) => ({
-          id: row.id,
-          name: row.name,
-          desc: row.desc,
-          priceCents: row.price_cents,
-          icon: row.icon,
-          tag: row.tag,
-          tone: row.tone,
-          stock: row.stock,
-        }));
-    }
+    return rows.results.filter((row) => row.active !== 0).map(serializeProduct);
   } catch {
-    /* 表尚未迁移时回退到内置商品 */
+    // 表尚未迁移时保持空货架，不再回退到内置演示商品。
+    return [];
   }
-  return PRODUCTS.map((item) => ({ ...item, stock: -1 }));
 }
 
 async function issueVerificationCode(c, user, purpose, target) {
@@ -558,8 +586,10 @@ const SITE_DEFAULTS = {
   featureAgreements: true,
   featureRegister: false,
   featureVerification: true,
+  featurePointsExchange: true,
   paymentMode: 'mock',
   verificationMode: 'console',
+  pointsPerYuan: 100,
   rechargePresets: '50,100,200,500,1000',
   withdrawMinCents: 10000,
   nameChangeDays: 30,
@@ -681,8 +711,10 @@ async function siteSettings(c) {
     featureAgreements: bool('feature_agreements', SITE_DEFAULTS.featureAgreements),
     featureRegister: bool('feature_register', SITE_DEFAULTS.featureRegister),
     featureVerification: bool('feature_verification', SITE_DEFAULTS.featureVerification),
+    featurePointsExchange: bool('feature_points_exchange', SITE_DEFAULTS.featurePointsExchange),
     paymentMode: choice('payment_mode', SITE_DEFAULTS.paymentMode, PAYMENT_MODES),
     verificationMode: choice('verification_mode', SITE_DEFAULTS.verificationMode, VERIFICATION_MODES),
+    pointsPerYuan: int('points_per_yuan', SITE_DEFAULTS.pointsPerYuan, 1, 10000),
     rechargePresets: presetList('recharge_presets', SITE_DEFAULTS.rechargePresets),
     withdrawMinCents: int('withdraw_min_cents', SITE_DEFAULTS.withdrawMinCents, 1000, 5000000),
     nameChangeDays: int('name_change_days', SITE_DEFAULTS.nameChangeDays, 0, 365),
@@ -722,7 +754,9 @@ function publicSiteSettings(settings) {
       agreements: settings.featureAgreements,
       register: settings.featureRegister,
       verification: settings.featureVerification,
+      pointsExchange: settings.featurePointsExchange,
     },
+    points: { perYuan: settings.pointsPerYuan },
     payment: { mode: settings.paymentMode },
     verification: { mode: settings.verificationMode },
     maintenance: {
@@ -1482,6 +1516,7 @@ app.get('/api/me', async (c) => {
 const INU_OAUTH_SCOPES = [
   { key: 'profile', label: '个人资料', description: '昵称、INU ID、会员等级与头像字符' },
   { key: 'email', label: '邮箱地址', description: 'INU 账号邮箱与认证状态' },
+  { key: 'entitlements', label: '应用权益', description: '查询账号已开通的应用与会员权益' },
 ];
 const INU_OAUTH_SCOPE_KEYS = INU_OAUTH_SCOPES.map((item) => item.key);
 const INU_OAUTH_CODE_TTL_MS = 5 * 60 * 1000;
@@ -2030,12 +2065,28 @@ app.get('/oauth/userinfo', async (c) => {
     payload.inu_id = user.inu_id;
     payload.orbit = user.orbit_code;
     payload.avatar_text = user.avatar_text;
-    payload.tier = user.member_tier;
+    payload.tier = tierOf(user).key;
     payload.tier_label = tierOf(user).label;
   }
   if (scopes.includes('email')) {
     payload.email = user.email;
     payload.email_verified = Boolean(user.verified);
+  }
+  if (scopes.includes('entitlements')) {
+    try {
+      const rows = await c.env.DB.prepare(
+        'SELECT app_key, plan, granted_at FROM user_entitlements WHERE user_id = ? ORDER BY granted_at DESC',
+      )
+        .bind(user.id)
+        .all();
+      payload.entitlements = rows.results.map((row) => ({
+        app_key: row.app_key,
+        plan: row.plan,
+        granted_at: row.granted_at,
+      }));
+    } catch {
+      payload.entitlements = [];
+    }
   }
   return tokenJson(c, payload);
 });
@@ -2221,6 +2272,7 @@ app.get('/api/admin', async (c) => {
           (SELECT COALESCE(SUM(star_energy_cents), 0) FROM users) AS wallet_cents,
           (SELECT COALESCE(SUM(amount_cents), 0) FROM recharge_orders WHERE status = 'paid') AS recharge_cents,
           (SELECT COALESCE(SUM(energy_cents), 0) FROM orders WHERE status != 'cancelled') AS supply_cents,
+          (SELECT COALESCE(SUM(points_spent), 0) FROM orders WHERE status != 'cancelled') AS supply_points,
           (SELECT COALESCE(SUM(amount_cents), 0) FROM withdrawals WHERE status = 'processing') AS withdraw_pending_cents,
           (SELECT COALESCE(SUM(amount_cents), 0) FROM withdrawals WHERE status = 'paid') AS withdrawn_cents,
           (SELECT COUNT(*) FROM orders) AS order_count,
@@ -2257,6 +2309,7 @@ app.get('/api/admin', async (c) => {
       walletCents: finance?.wallet_cents || 0,
       rechargeCents: finance?.recharge_cents || 0,
       supplyCents: finance?.supply_cents || 0,
+      supplyPoints: finance?.supply_points || 0,
       withdrawPendingCents: finance?.withdraw_pending_cents || 0,
       withdrawnCents: finance?.withdrawn_cents || 0,
       orderCount: finance?.order_count || 0,
@@ -2265,19 +2318,7 @@ app.get('/api/admin', async (c) => {
       agreementTotal: signStats?.total || 0,
       agreementSigned: signStats?.signed || 0,
     },
-    products: products.map((row) => ({
-      id: row.id,
-      name: row.name,
-      desc: row.desc,
-      priceCents: row.price_cents,
-      icon: row.icon,
-      tag: row.tag,
-      tone: row.tone,
-      stock: row.stock,
-      active: Boolean(row.active),
-      sort: row.sort,
-      updatedAt: row.updated_at,
-    })),
+    products: products.map(serializeAdminProduct),
     agreementTemplates: agreementTemplates.map((row) => ({
       id: row.id,
       title: row.title,
@@ -2392,6 +2433,7 @@ app.patch('/api/admin/settings', async (c) => {
     'featureAgreements',
     'featureRegister',
     'featureVerification',
+    'featurePointsExchange',
     'maintenanceEnabled',
   ];
   for (const key of boolKeys) {
@@ -2452,6 +2494,14 @@ app.patch('/api/admin/settings', async (c) => {
       return jsonError(c, 400, 'INVALID_VERIFY_MODE', '验证码通道只能是 console 或 off');
     }
     next.verificationMode = mode;
+  }
+
+  if (body.pointsPerYuan !== undefined) {
+    const value = Number(body.pointsPerYuan);
+    if (!Number.isFinite(value) || value < 1 || value > 10000) {
+      return jsonError(c, 400, 'INVALID_POINTS_RATE', '积分兑换比例需在 1–10000 积分 / 余额之间');
+    }
+    next.pointsPerYuan = Math.round(value);
   }
 
   if (body.rechargePresets !== undefined) {
@@ -2516,8 +2566,10 @@ app.patch('/api/admin/settings', async (c) => {
     boolSetting('feature_agreements', next.featureAgreements),
     boolSetting('feature_register', next.featureRegister),
     boolSetting('feature_verification', next.featureVerification),
+    boolSetting('feature_points_exchange', next.featurePointsExchange),
     saveSetting(c.env.DB, `${SITE_PREFIX}payment_mode`, next.paymentMode),
     saveSetting(c.env.DB, `${SITE_PREFIX}verification_mode`, next.verificationMode),
+    saveSetting(c.env.DB, `${SITE_PREFIX}points_per_yuan`, String(next.pointsPerYuan)),
     saveSetting(c.env.DB, `${SITE_PREFIX}recharge_presets`, next.rechargePresets.join(',')),
     saveSetting(c.env.DB, `${SITE_PREFIX}withdraw_min_cents`, String(next.withdrawMinCents)),
     saveSetting(c.env.DB, `${SITE_PREFIX}name_change_days`, String(next.nameChangeDays)),
@@ -2842,6 +2894,11 @@ function serializeAdminProduct(row) {
     name: row.name,
     desc: row.desc,
     priceCents: row.price_cents,
+    pointsPrice: row.points_price || 0,
+    paymentMode: parsePaymentMode(row.payment_mode),
+    kind: parseProductKind(row.kind),
+    grantTier: row.grant_tier || '',
+    appKey: row.app_key || '',
     icon: row.icon,
     tag: row.tag,
     tone: row.tone,
@@ -2859,10 +2916,47 @@ function readProductInput(body, base = null) {
   const desc = body.desc !== undefined ? String(body.desc).trim() : base?.desc || '';
   if ([...desc].length > 160) return { error: '商品描述最多 160 个字符' };
 
+  const kind = parseProductKind(body.kind !== undefined ? String(body.kind) : base?.kind || 'goods');
+  const paymentMode = parsePaymentMode(
+    body.paymentMode !== undefined ? String(body.paymentMode) : base?.paymentMode || 'points',
+  );
+
   const priceCents =
-    body.priceCents !== undefined ? Math.round(Number(body.priceCents)) : Number(base?.priceCents);
-  if (!Number.isFinite(priceCents) || priceCents < 100 || priceCents > 10000000) {
-    return { error: '商品价格需在 1–100000 余额之间' };
+    body.priceCents !== undefined ? Math.round(Number(body.priceCents)) : Number(base?.priceCents ?? 0);
+  if (!Number.isFinite(priceCents) || priceCents < 0 || priceCents > 10000000) {
+    return { error: '余额价格需在 0–100000 余额之间' };
+  }
+  if (paymentMode === 'balance' && priceCents < 100) {
+    return { error: '余额商品价格需在 1–100000 余额之间' };
+  }
+
+  const pointsPrice =
+    body.pointsPrice !== undefined
+      ? Math.round(Number(body.pointsPrice))
+      : Number(base?.pointsPrice ?? 0);
+  if (!Number.isFinite(pointsPrice) || pointsPrice < 0 || pointsPrice > 100000000) {
+    return { error: '积分价格需在 0–100000000 积分之间' };
+  }
+  if (paymentMode === 'points' && pointsPrice < 1) {
+    return { error: '积分商品价格至少为 1 积分' };
+  }
+
+  let grantTier = '';
+  if (kind === 'membership') {
+    grantTier = String(body.grantTier !== undefined ? body.grantTier : base?.grantTier || '');
+    if (!['silver', 'gold', 'platinum'].includes(grantTier)) {
+      return { error: '会员商品需选择白银、黄金或铂金等级' };
+    }
+  }
+
+  let appKey = '';
+  if (kind === 'app') {
+    appKey = String(body.appKey !== undefined ? body.appKey : base?.appKey || '')
+      .trim()
+      .toLowerCase();
+    if (!/^[a-z0-9][a-z0-9-]{1,39}$/.test(appKey)) {
+      return { error: '应用标识只能包含小写字母、数字与连字符（2–40 位）' };
+    }
   }
 
   const icon = body.icon !== undefined ? String(body.icon).trim() : base?.icon || 'i-box';
@@ -2885,7 +2979,24 @@ function readProductInput(body, base = null) {
   }
 
   const active = body.active !== undefined ? Boolean(body.active) : base?.active ?? true;
-  return { value: { name, desc, priceCents, icon, tag, tone, stock: stockRaw, sort: sortRaw, active } };
+  return {
+    value: {
+      name,
+      desc,
+      priceCents,
+      pointsPrice,
+      paymentMode,
+      kind,
+      grantTier,
+      appKey,
+      icon,
+      tag,
+      tone,
+      stock: stockRaw,
+      sort: sortRaw,
+      active,
+    },
+  };
 }
 
 app.post('/api/admin/products', async (c) => {
@@ -2905,14 +3016,21 @@ app.post('/api/admin/products', async (c) => {
 
   const value = parsed.value;
   await c.env.DB.prepare(
-    `INSERT INTO products (id, name, desc, price_cents, icon, tag, tone, stock, active, sort, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO products
+       (id, name, desc, price_cents, points_price, payment_mode, kind, grant_tier, app_key,
+        icon, tag, tone, stock, active, sort, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       id,
       value.name,
       value.desc,
       value.priceCents,
+      value.pointsPrice,
+      value.paymentMode,
+      value.kind,
+      value.grantTier,
+      value.appKey,
       value.icon,
       value.tag,
       value.tone,
@@ -2923,7 +3041,7 @@ app.post('/api/admin/products', async (c) => {
     )
     .run();
 
-  await addAdminAudit(c, '新增商品', `${value.name} · ${(value.priceCents / 100).toFixed(2)} 余额`);
+  await addAdminAudit(c, '新增商品', `${value.name} · ${value.paymentMode === 'points' ? `${value.pointsPrice} 积分` : `${(value.priceCents / 100).toFixed(2)} 余额`}`);
   const row = await c.env.DB.prepare('SELECT * FROM products WHERE id = ?').bind(id).first();
   return ok(c, { product: serializeAdminProduct(row) });
 });
@@ -2941,13 +3059,19 @@ app.patch('/api/admin/products/:id', async (c) => {
   const value = parsed.value;
 
   await c.env.DB.prepare(
-    `UPDATE products SET name = ?, desc = ?, price_cents = ?, icon = ?, tag = ?, tone = ?,
+    `UPDATE products SET name = ?, desc = ?, price_cents = ?, points_price = ?, payment_mode = ?,
+       kind = ?, grant_tier = ?, app_key = ?, icon = ?, tag = ?, tone = ?,
        stock = ?, active = ?, sort = ?, updated_at = ? WHERE id = ?`,
   )
     .bind(
       value.name,
       value.desc,
       value.priceCents,
+      value.pointsPrice,
+      value.paymentMode,
+      value.kind,
+      value.grantTier,
+      value.appKey,
       value.icon,
       value.tag,
       value.tone,
@@ -3201,6 +3325,7 @@ app.patch('/api/admin/orders/:id', async (c) => {
   let deliveredAt = order.delivered_at;
   let cancelledAt = order.cancelled_at;
   let refunded = 0;
+  let refundedPoints = 0;
 
   if (status === 'delivered' && !deliveredAt) deliveredAt = now;
   if (status === 'cancelled' && !cancelledAt) cancelledAt = now;
@@ -3208,26 +3333,48 @@ app.patch('/api/admin/orders/:id', async (c) => {
   if (status === 'cancelled' && order.status !== 'cancelled' && order.paid_at) {
     const user = await db.prepare('SELECT * FROM users WHERE id = ?').bind(order.user_id).first();
     if (user) {
-      const balance = user.star_energy_cents + order.energy_cents;
-      await db.prepare('UPDATE users SET star_energy_cents = ? WHERE id = ?').bind(balance, user.id).run();
-      await addWalletTransaction(db, user.id, {
-        kind: 'refund',
-        title: '订单退款',
-        detail: `订单 ${order.code} 已被取消，余额原路退回`,
-        amountCents: order.energy_cents,
-        balanceAfter: balance,
-        ref: order.code,
-        createdAt: now,
-      });
-      await pushNotification(
-        db,
-        user.id,
-        'type_supply',
-        '订单已取消',
-        `订单 ${order.code} 已取消，${(order.energy_cents / 100).toFixed(2)} 余额已退回钱包。`,
-        '/wallet',
-      );
-      refunded = order.energy_cents;
+      if (order.points_spent > 0) {
+        const particles = user.particles + order.points_spent;
+        const tier = nextTierAfter(user, particles);
+        await db
+          .prepare('UPDATE users SET particles = ?, member_tier = ? WHERE id = ?')
+          .bind(particles, tier.key, user.id)
+          .run();
+        await db
+          .prepare('INSERT INTO particle_logs (user_id, label, delta, balance, occurred_at) VALUES (?, ?, ?, ?, ?)')
+          .bind(user.id, '订单取消退回积分', order.points_spent, particles, now)
+          .run();
+        await pushNotification(
+          db,
+          user.id,
+          'type_supply',
+          '订单已取消',
+          `订单 ${order.code} 已取消，${order.points_spent} 积分已退回账户。`,
+          '/supply',
+        );
+        refundedPoints = order.points_spent;
+      } else if (order.energy_cents > 0) {
+        const balance = user.star_energy_cents + order.energy_cents;
+        await db.prepare('UPDATE users SET star_energy_cents = ? WHERE id = ?').bind(balance, user.id).run();
+        await addWalletTransaction(db, user.id, {
+          kind: 'refund',
+          title: '订单退款',
+          detail: `订单 ${order.code} 已被取消，余额原路退回`,
+          amountCents: order.energy_cents,
+          balanceAfter: balance,
+          ref: order.code,
+          createdAt: now,
+        });
+        await pushNotification(
+          db,
+          user.id,
+          'type_supply',
+          '订单已取消',
+          `订单 ${order.code} 已取消，${(order.energy_cents / 100).toFixed(2)} 余额已退回钱包。`,
+          '/wallet',
+        );
+        refunded = order.energy_cents;
+      }
     }
   }
 
@@ -3260,9 +3407,9 @@ app.patch('/api/admin/orders/:id', async (c) => {
     );
   }
 
-  await addAdminAudit(c, '更新订单', `${order.code} → ${status}${refunded ? ' · 已退款' : ''}`);
+  await addAdminAudit(c, '更新订单', `${order.code} → ${status}${refunded ? ' · 已退余额' : ''}${refundedPoints ? ' · 已退积分' : ''}`);
   const updated = await db.prepare('SELECT * FROM orders WHERE id = ?').bind(id).first();
-  return ok(c, { order: serializeOrder(updated), refunded });
+  return ok(c, { order: serializeOrder(updated), refunded, refundedPoints });
 });
 
 app.patch('/api/admin/withdrawals/:id', async (c) => {
@@ -3432,6 +3579,8 @@ app.patch('/api/admin/users/:id', async (c) => {
     nextParticles = Math.max(0, user.particles + particlesDelta);
     updates.push('particles = ?');
     binds.push(nextParticles);
+    updates.push('member_tier = ?');
+    binds.push(nextTierAfter(user, nextParticles).key);
     notes.push(`积分 ${nextParticles - user.particles >= 0 ? '+' : ''}${nextParticles - user.particles}`);
   }
 
@@ -4477,11 +4626,11 @@ app.get('/api/member', async (c) => {
     progress,
     remaining,
     estimatedDays: remaining && dailyRate > 0 ? Math.ceil(remaining / dailyRate) : null,
-    benefits: BENEFITS.map((item) => ({ ...item, unlocked: user.particles >= item.min })),
+    benefits: BENEFITS.map((item) => ({ ...item, unlocked: tier.min >= item.min })),
     tiers: TIERS.map((item) => ({
       ...item,
       current: item.key === tier.key,
-      unlocked: user.particles >= item.min,
+      unlocked: item.min <= tier.min,
     })),
     particleLogs: logs.results.map((row) => ({
       id: row.id,
@@ -4491,10 +4640,10 @@ app.get('/api/member', async (c) => {
       occurredAt: row.occurred_at,
     })),
     rules: [
-      { title: '等级如何计算', text: '会员等级由累计 积分决定：普通 0、白银 10,000、黄金 50,000、铂金 200,000。等级只升不降，积分消费不会导致降级。' },
-      { title: '积分如何获得', text: '签署协议、兑换商品、参与活动都会获得积分。商品消费按 100 余额返 5 积分计算，签署协议奖励以协议配置为准。' },
-      { title: '会员折扣', text: '积分商城结算时自动应用当前等级折扣，页面展示的会员价即最终余额价格。' },
-      { title: '有效期', text: '积分自获得之日起 12 个月内有效，过期后按 100:1 自动折算为余额，折算结果会写入钱包流水。' },
+      { title: '等级如何计算', text: '会员等级按历史最高积分判定：普通 0、白银 10,000、黄金 50,000、铂金 200,000。达到后不会因积分消费降级，购买会员商品可直接升级。' },
+      { title: '积分如何获得', text: '签署协议、参与活动可获得积分，也可以把余额按站点设置的比例兑换为积分；兑换后的积分不可退回余额。' },
+      { title: '积分与余额', text: '积分用于会员等级与积分商品，余额用于充值、提现与余额商品。两类资产相互独立，结算时按商品标注的方式扣款。' },
+      { title: '会员折扣', text: '积分商城结算时自动应用当前等级折扣，积分价与余额价都会按会员折扣计算。' },
     ],
   });
 });
@@ -4657,13 +4806,17 @@ app.post('/api/agreements/:id/sign', async (c) => {
 
   const reward = Number(agreement.template_reward ?? agreement.reward ?? 50);
   const signedAt = nowIso();
-  const particles = user.particles + reward;
+  const particles = Math.max(0, user.particles + reward);
+  const tier = nextTierAfter(user, particles);
 
   await db
     .prepare("UPDATE agreements SET status = 'signed', signed_at = ? WHERE id = ?")
     .bind(signedAt, id)
     .run();
-  await db.prepare('UPDATE users SET particles = ? WHERE id = ?').bind(particles, user.id).run();
+  await db
+    .prepare('UPDATE users SET particles = ?, member_tier = ? WHERE id = ?')
+    .bind(particles, tier.key, user.id)
+    .run();
   await db
     .prepare(
       'INSERT INTO particle_logs (user_id, label, delta, balance, occurred_at) VALUES (?, ?, ?, ?, ?)',
@@ -4690,6 +4843,8 @@ app.post('/api/agreements/:id/sign', async (c) => {
     },
     particles,
     reward,
+    tier: tier.key,
+    tierLabel: tier.label,
   });
 });
 
@@ -4711,7 +4866,10 @@ function serializeOrder(row) {
     code: row.code,
     productId: row.product_id,
     item: row.item,
-    energyCents: row.energy_cents,
+    energyCents: row.energy_cents || 0,
+    pointsSpent: row.points_spent || 0,
+    paymentMode: parsePaymentMode(row.payment_mode),
+    kind: parseProductKind(row.kind),
     status: row.status,
     createdAt: row.created_at,
     updatedAt: row.updated_at || row.created_at,
@@ -4723,7 +4881,7 @@ function serializeOrder(row) {
     address,
     canPay: row.status === 'pending_payment',
     canCancel: row.status === 'pending_payment',
-    canConfirm: row.status === 'transit',
+    canConfirm: row.status === 'transit' && parseProductKind(row.kind) === 'goods',
   };
 }
 
@@ -4733,30 +4891,54 @@ async function createSupplyOrderFor(c, user, product) {
   if (!settings.featureSupply) {
     return { error: jsonError(c, 503, 'FEATURE_DISABLED', '积分商城暂未开放') };
   }
-  if (!user.verified) {
-    const verifyClosed = !settings.featureVerification || settings.verificationMode === 'off';
-    return {
-      error: jsonError(
-        c,
-        403,
-        'VERIFY_REQUIRED',
-        verifyClosed ? '实名认证通道已关闭，请联系管理员' : '完成实名认证后才可下单',
-      ),
-    };
-  }
-  if (Number(product.stock) === 0) {
-    return { error: jsonError(c, 400, 'OUT_OF_STOCK', '该商品物资已售罄') };
-  }
 
-  const address = await db.prepare('SELECT * FROM addresses WHERE user_id = ?').bind(user.id).first();
-  if (!address) {
-    return { error: jsonError(c, 400, 'ADDRESS_REQUIRED', '请先填写收货地址后再兑换商品') };
+  const kind = parseProductKind(product.kind);
+  const isGoods = kind === 'goods';
+  let address = null;
+
+  if (isGoods) {
+    if (!user.verified) {
+      const verifyClosed = !settings.featureVerification || settings.verificationMode === 'off';
+      return {
+        error: jsonError(
+          c,
+          403,
+          'VERIFY_REQUIRED',
+          verifyClosed ? '实名认证通道已关闭，实物商品暂不可兑换' : '完成实名认证后才可兑换实物商品',
+        ),
+      };
+    }
+    if (Number(product.stock) === 0) {
+      return { error: jsonError(c, 400, 'OUT_OF_STOCK', '该商品物资已售罄') };
+    }
+    address = await db.prepare('SELECT * FROM addresses WHERE user_id = ?').bind(user.id).first();
+    if (!address) {
+      return { error: jsonError(c, 400, 'ADDRESS_REQUIRED', '请先填写收货地址后再兑换商品') };
+    }
   }
 
   const tier = tierOf(user);
-  const price = Math.round(product.priceCents * (tier.rate || 0.95));
-  if (user.star_energy_cents < price) {
-    return { error: jsonError(c, 400, 'INSUFFICIENT_FUNDS', '账户余额不足，请先补充余额') };
+  const rate = tier.rate || 1;
+  const paymentMode = parsePaymentMode(product.paymentMode);
+  const pointsCost =
+    paymentMode === 'points' ? Math.max(1, Math.round(Number(product.pointsPrice || 0) * rate)) : 0;
+  const balanceCost =
+    paymentMode === 'balance' ? Math.max(0, Math.round(Number(product.priceCents || 0) * rate)) : 0;
+
+  if (paymentMode === 'points' && user.particles < pointsCost) {
+    return { error: jsonError(c, 400, 'INSUFFICIENT_POINTS', '积分不足，可用余额兑换积分后再试') };
+  }
+  if (paymentMode === 'balance' && user.star_energy_cents < balanceCost) {
+    return { error: jsonError(c, 400, 'INSUFFICIENT_FUNDS', '账户余额不足，请先充值或选择积分商品') };
+  }
+
+  let grantedTier = null;
+  if (kind === 'membership') {
+    const wanted = TIER_MAP[product.grantTier];
+    if (wanted && wanted.min <= tier.min) {
+      return { error: jsonError(c, 409, 'TIER_ALREADY_UNLOCKED', '当前等级已不低于该会员权益，无需重复购买') };
+    }
+    if (wanted) grantedTier = wanted;
   }
 
   const now = new Date(Date.now() + 8 * 3600 * 1000);
@@ -4764,65 +4946,118 @@ async function createSupplyOrderFor(c, user, product) {
   const suffix = String(Math.floor(Math.random() * 9000) + 1000);
   const code = `INU-${stamp}-${suffix}`;
   const createdAt = nowIso();
-  const reward = Math.floor((price / 10000) * 5);
-  const balance = user.star_energy_cents - price;
-  const particles = user.particles + reward;
-  const trackingNo = `INU-EXP-${randomDigits(10)}`;
-  const snapshot = JSON.stringify({
-    receiver: address.receiver,
-    phone: address.phone,
-    region: address.region,
-    detail: address.detail,
-    updatedAt: address.updated_at,
-  });
+  const balance = user.star_energy_cents - balanceCost;
+  const particles = Math.max(0, user.particles - pointsCost);
+  const memberTier = grantedTier || tier;
+  const trackingNo = isGoods ? `INU-EXP-${randomDigits(10)}` : '';
+  const snapshot = address
+    ? JSON.stringify({
+        receiver: address.receiver,
+        phone: address.phone,
+        region: address.region,
+        detail: address.detail,
+        updatedAt: address.updated_at,
+      })
+    : '';
+  const status = isGoods ? 'transit' : 'delivered';
 
   const inserted = await db
     .prepare(
       `INSERT INTO orders
-         (user_id, code, product_id, item, energy_cents, status, created_at, address, tracking_no, carrier, updated_at, paid_at)
-       VALUES (?, ?, ?, ?, ?, 'transit', ?, ?, ?, '快递', ?, ?)`,
+         (user_id, code, product_id, item, energy_cents, points_spent, payment_mode, kind, status,
+          created_at, address, tracking_no, carrier, updated_at, paid_at, delivered_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
-    .bind(user.id, code, product.id, `${product.name} ×1`, price, createdAt, snapshot, trackingNo, createdAt, createdAt)
+    .bind(
+      user.id,
+      code,
+      product.id,
+      `${product.name} ×1`,
+      balanceCost,
+      pointsCost,
+      paymentMode,
+      kind,
+      status,
+      createdAt,
+      snapshot,
+      trackingNo || null,
+      isGoods ? '快递' : null,
+      createdAt,
+      createdAt,
+      isGoods ? null : createdAt,
+    )
     .run();
 
   await db
-    .prepare('UPDATE users SET star_energy_cents = ?, particles = ? WHERE id = ?')
-    .bind(balance, particles, user.id)
+    .prepare('UPDATE users SET star_energy_cents = ?, particles = ?, member_tier = ? WHERE id = ?')
+    .bind(balance, particles, memberTier.key, user.id)
     .run();
 
-  if (typeof product.stock === 'number' && product.stock > 0) {
+  if (isGoods && typeof product.stock === 'number' && product.stock > 0) {
     await db.prepare('UPDATE products SET stock = stock - 1 WHERE id = ? AND stock > 0').bind(product.id).run();
   }
 
-  await addWalletTransaction(db, user.id, {
-    kind: 'supply',
-    title: `兑换${product.name}`,
-    detail: `订单 ${code}`,
-    amountCents: -price,
-    balanceAfter: balance,
-    ref: code,
-    createdAt,
-  });
-  await db
-    .prepare('INSERT INTO particle_logs (user_id, label, delta, balance, occurred_at) VALUES (?, ?, ?, ?, ?)')
-    .bind(user.id, `兑换${product.name}`, reward, particles, createdAt)
-    .run();
-  await addActivity(db, user.id, '兑换商品', `${product.name} · 消耗 ${(price / 100).toFixed(2)} 余额`, 'blue', 'i-box');
-  await pushNotification(
-    db,
-    user.id,
-    'type_supply',
-    '商品已进入配送流程',
-    `${product.name} 已支付，订单 ${code} 预计 1–3 个工作日送达。`,
-    '/supply',
-  );
+  if (balanceCost) {
+    await addWalletTransaction(db, user.id, {
+      kind: 'supply',
+      title: `兑换${product.name}`,
+      detail: `订单 ${code}`,
+      amountCents: -balanceCost,
+      balanceAfter: balance,
+      ref: code,
+      createdAt,
+    });
+  }
+  if (pointsCost) {
+    await db
+      .prepare('INSERT INTO particle_logs (user_id, label, delta, balance, occurred_at) VALUES (?, ?, ?, ?, ?)')
+      .bind(user.id, `兑换${product.name}`, -pointsCost, particles, createdAt)
+      .run();
+  }
+
+  if (kind === 'app' && product.appKey) {
+    await db
+      .prepare(
+        `INSERT INTO user_entitlements (user_id, app_key, plan, order_id, granted_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(user_id, app_key) DO UPDATE SET
+           plan = excluded.plan, order_id = excluded.order_id, granted_at = excluded.granted_at`,
+      )
+      .bind(user.id, product.appKey, product.tag || '标准版', inserted.meta?.last_row_id || null, createdAt)
+      .run();
+  }
+
+  const costText =
+    paymentMode === 'points' ? `${pointsCost} 积分` : `${(balanceCost / 100).toFixed(2)} 余额`;
+  await addActivity(db, user.id, '兑换商品', `${product.name} · 消耗 ${costText}`, 'blue', 'i-box');
+  const notification =
+    kind === 'membership'
+      ? {
+          title: '会员权益已生效',
+          body: `${product.name} 已开通，当前等级为${memberTier.label}会员。`,
+        }
+      : kind === 'app'
+        ? {
+            title: '应用权益已开通',
+            body: `${product.name} 已绑定到你的账号，可在积分商城查看。`,
+          }
+        : {
+            title: '商品已进入配送流程',
+            body: `${product.name} 已兑换，订单 ${code} 预计 1–3 个工作日送达。`,
+          };
+  await pushNotification(db, user.id, 'type_supply', notification.title, notification.body, '/supply');
 
   const row = await db.prepare('SELECT * FROM orders WHERE id = ?').bind(inserted.meta?.last_row_id).first();
+  const updatedUser = await db.prepare('SELECT * FROM users WHERE id = ?').bind(user.id).first();
   return {
     order: serializeOrder(row),
+    user: await serializeUserFor(c, updatedUser),
     balanceCents: balance,
     particles,
-    reward,
+    pointsSpent: pointsCost,
+    paymentMode,
+    tier: memberTier.key,
+    tierLabel: memberTier.label,
   };
 }
 
@@ -4839,21 +5074,45 @@ app.get('/api/supply', async (c) => {
       .first(),
     db
       .prepare(
-        'SELECT COUNT(*) AS count, COALESCE(SUM(energy_cents), 0) AS spend FROM orders WHERE user_id = ? AND created_at >= ?',
+        `SELECT COUNT(*) AS count,
+                COALESCE(SUM(energy_cents), 0) AS spend_cents,
+                COALESCE(SUM(points_spent), 0) AS spend_points
+         FROM orders WHERE user_id = ? AND status != 'cancelled' AND created_at >= ?`,
       )
       .bind(user.id, monthStartIso())
       .first(),
     listProducts(db),
   ]);
   const settings = await siteSettings(c);
+  let entitlements = [];
+  try {
+    const rows = await db
+      .prepare('SELECT * FROM user_entitlements WHERE user_id = ? ORDER BY granted_at DESC')
+      .bind(user.id)
+      .all();
+    entitlements = rows.results.map((row) => ({
+      appKey: row.app_key,
+      plan: row.plan,
+      grantedAt: row.granted_at,
+    }));
+  } catch {
+    entitlements = [];
+  }
+  const rate = tier.rate || 1;
 
   return ok(c, {
     user: await serializeUserFor(c, user),
     wallet: { balanceCents: user.star_energy_cents, cardLast4: settings.walletCardLast4 },
+    points: {
+      balance: user.particles,
+      perYuan: settings.pointsPerYuan,
+      exchangeEnabled: settings.featurePointsExchange,
+    },
     counts: {
       transit: transit?.count || 0,
       monthOrders: monthly?.count || 0,
-      monthSpendCents: monthly?.spend || 0,
+      monthSpendCents: monthly?.spend_cents || 0,
+      monthSpendPoints: monthly?.spend_points || 0,
     },
     orders: orders.results.map(serializeOrder),
     address: address
@@ -4867,11 +5126,22 @@ app.get('/api/supply', async (c) => {
       : null,
     products: productList.map((item) => ({
       ...item,
-      memberPriceCents: Math.round(item.priceCents * (tier.rate || 0.95)),
+      memberPriceCents: Math.round(item.priceCents * rate),
+      memberPointsPrice: Math.max(1, Math.round(item.pointsPrice * rate)),
     })),
-    tips: SUPPLY_TIPS,
+    entitlements,
+    tips:
+      settings.featureVerification && settings.verificationMode !== 'off'
+        ? SUPPLY_TIPS
+        : SUPPLY_TIPS.map((tip) =>
+            tip.icon === 'i-box'
+              ? { icon: tip.icon, text: '实物商品兑换暂未开放，会员与应用权益可正常购买。' }
+              : tip,
+          ),
     discountLabel: tier.discount,
     verified: Boolean(user.verified),
+    verificationAvailable:
+      settings.featureVerification && settings.verificationMode !== 'off',
     supportEmail: settings.supportEmail,
     featureEnabled: settings.featureSupply,
   });
@@ -4895,10 +5165,16 @@ app.get('/api/supply/orders/:id', async (c) => {
   if (!row) return jsonError(c, 404, 'NOT_FOUND', '未找到该订单');
 
   const timeline = [{ at: row.created_at, title: '订单创建', detail: '订单已提交' }];
-  if (row.paid_at) timeline.push({ at: row.paid_at, title: '余额支付完成', detail: `${(row.energy_cents / 100).toFixed(2)} 余额已扣除` });
+  if (row.paid_at) {
+    timeline.push(
+      row.points_spent > 0
+        ? { at: row.paid_at, title: '积分支付完成', detail: `${row.points_spent} 积分已扣除` }
+        : { at: row.paid_at, title: '余额支付完成', detail: `${(row.energy_cents / 100).toFixed(2)} 余额已扣除` },
+    );
+  }
   if (row.tracking_no) timeline.push({ at: row.updated_at || row.created_at, title: '已交付快递', detail: `运单号 ${row.tracking_no}` });
   if (row.status === 'delivered' && row.delivered_at) timeline.push({ at: row.delivered_at, title: '商品已送达', detail: '订单已完成' });
-  if (row.status === 'cancelled') timeline.push({ at: row.cancelled_at || row.updated_at, title: '订单已取消', detail: '余额未扣除或已退回' });
+  if (row.status === 'cancelled') timeline.push({ at: row.cancelled_at || row.updated_at, title: '订单已取消', detail: '款项未扣除或已原路退回' });
 
   return ok(c, { order: { ...serializeOrder(row), timeline } });
 });
@@ -5107,6 +5383,86 @@ async function settleRecharge(c, user, order) {
   );
   return { balance, paidAt };
 }
+
+app.post('/api/wallet/points/exchange', async (c) => {
+  const db = c.env.DB;
+  const user = c.get('userRow');
+  const settings = await siteSettings(c);
+  if (!settings.featurePointsExchange) {
+    return jsonError(c, 503, 'FEATURE_DISABLED', '余额兑换积分暂未开放');
+  }
+
+  const body = await readJson(c);
+  if (!body) return jsonError(c, 400, 'INVALID_INPUT', '请求内容无法解析');
+  const amountCents = Math.round(Number(body.amountCents));
+  if (!Number.isFinite(amountCents) || amountCents < 100 || amountCents > 5000000) {
+    return jsonError(c, 400, 'INVALID_AMOUNT', '单次兑换需在 1–50000 余额之间');
+  }
+  if (user.star_energy_cents < amountCents) {
+    return jsonError(c, 400, 'INSUFFICIENT_FUNDS', '账户余额不足');
+  }
+
+  const points = Math.floor((amountCents / 100) * settings.pointsPerYuan);
+  if (points < 1) {
+    return jsonError(c, 400, 'INVALID_AMOUNT', '兑换金额过小，无法获得积分');
+  }
+
+  const balance = user.star_energy_cents - amountCents;
+  const particles = user.particles + points;
+  const tier = nextTierAfter(user, particles);
+  const at = nowIso();
+  const ref = `PTS-${Date.now().toString(36).toUpperCase()}`;
+
+  await db.batch([
+    db
+      .prepare('UPDATE users SET star_energy_cents = ?, particles = ?, member_tier = ? WHERE id = ?')
+      .bind(balance, particles, tier.key, user.id),
+    db
+      .prepare(
+        `INSERT INTO wallet_transactions (user_id, kind, title, detail, amount_cents, balance_after, ref, created_at)
+         VALUES (?, 'points_exchange', ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(
+        user.id,
+        '余额兑换积分',
+        `${amountCents / 100} 余额 → ${points} 积分`,
+        -amountCents,
+        balance,
+        ref,
+        at,
+      ),
+    db
+      .prepare('INSERT INTO particle_logs (user_id, label, delta, balance, occurred_at) VALUES (?, ?, ?, ?, ?)')
+      .bind(user.id, '余额兑换积分', points, particles, at),
+  ]);
+
+  await addActivity(
+    db,
+    user.id,
+    '余额兑换积分',
+    `${amountCents / 100} 余额 → ${points} 积分`,
+    'purple',
+    'i-star',
+  );
+  await pushNotification(
+    db,
+    user.id,
+    'type_member',
+    '积分兑换成功',
+    `已使用 ${amountCents / 100} 余额兑换 ${points} 积分，当前等级为${tier.label}会员。`,
+    '/supply',
+  );
+
+  return ok(c, {
+    balanceCents: balance,
+    particles,
+    points,
+    amountCents,
+    perYuan: settings.pointsPerYuan,
+    tier: tier.key,
+    tierLabel: tier.label,
+  });
+});
 
 app.get('/api/wallet', async (c) => {
   const db = c.env.DB;

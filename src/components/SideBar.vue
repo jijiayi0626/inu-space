@@ -9,9 +9,6 @@ defineEmits(['close']);
 
 const route = useRoute();
 const user = computed(() => session.user || {});
-const verificationAvailable = computed(
-  () => session.site?.features?.verification !== false && session.site?.verification?.mode !== 'off',
-);
 
 const baseGroups = [
   {
@@ -83,19 +80,5 @@ function isActive(link) {
       </nav>
     </template>
 
-    <div v-if="!user.verified && verificationAvailable" class="side-promo">
-      <div class="promo-head"><AppIcon name="idcard" /><span>解锁完整权限</span></div>
-      <p>完成实名认证，开启积分商城与余额提现能力。</p>
-      <RouterLink class="btn btn-primary btn-sm promo-btn" to="/profile#verify" @click="$emit('close')">
-        立即认证
-      </RouterLink>
-    </div>
-    <div v-else-if="user.verified" class="side-promo side-promo-done">
-      <div class="promo-head"><AppIcon name="shield" /><span>已实名认证</span></div>
-      <p>你的个人资料已完成核验，积分商城与余额权限已解锁。</p>
-      <RouterLink class="btn btn-ghost btn-sm promo-btn" to="/supply" @click="$emit('close')">
-        前往积分商城
-      </RouterLink>
-    </div>
   </aside>
 </template>

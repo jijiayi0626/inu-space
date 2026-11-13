@@ -11,7 +11,7 @@ import {
   bareIcon,
   stockLabel,
 } from '../../lib/adminHelpers';
-import { money } from '../../lib/format';
+import { money, number } from '../../lib/format';
 import { toast } from '../../lib/toast';
 
 const props = defineProps({
@@ -25,6 +25,21 @@ const templateList = computed(() => props.data?.agreementTemplates || []);
 const categoryOptions = NOTIFICATION_CATEGORIES.map((item) => ({ label: item.label, value: item.key }));
 const productIconOptions = PRODUCT_ICONS.map((icon) => ({ label: icon, value: icon }));
 const toneOptions = TONES.map((tone) => ({ label: tone, value: tone }));
+const kindOptions = [
+  { label: '实物商品', value: 'goods' },
+  { label: '会员权益', value: 'membership' },
+  { label: '应用权益', value: 'app' },
+];
+const paymentModeOptions = [
+  { label: '积分兑换', value: 'points' },
+  { label: '余额购买', value: 'balance' },
+];
+const grantTierOptions = [
+  { label: '白银会员', value: 'silver' },
+  { label: '黄金会员', value: 'gold' },
+  { label: '铂金会员', value: 'platinum' },
+];
+const kindLabels = { goods: '实物', membership: '会员', app: '应用' };
 
 /* ---------- 站内信广播 ---------- */
 
@@ -78,7 +93,12 @@ const productForm = reactive({
   id: '',
   name: '',
   desc: '',
-  priceYuan: '128',
+  kind: 'goods',
+  paymentMode: 'points',
+  priceYuan: '0',
+  pointsPrice: 1000,
+  grantTier: 'silver',
+  appKey: '',
   icon: 'i-box',
   tag: '',
   tone: 'blue',
@@ -93,7 +113,12 @@ function openCreateProduct() {
     id: '',
     name: '',
     desc: '',
-    priceYuan: '128',
+    kind: 'goods',
+    paymentMode: 'points',
+    priceYuan: '0',
+    pointsPrice: 1000,
+    grantTier: 'silver',
+    appKey: '',
     icon: 'i-box',
     tag: '',
     tone: 'blue',
@@ -111,7 +136,12 @@ function openEditProduct(product) {
     id: product.id,
     name: product.name,
     desc: product.desc || '',
-    priceYuan: (product.priceCents / 100).toFixed(2).replace(/\.?0+$/, '') || '0',
+    kind: product.kind || 'goods',
+    paymentMode: product.paymentMode || 'points',
+    priceYuan: ((product.priceCents || 0) / 100).toFixed(2).replace(/\.?0+$/, '') || '0',
+    pointsPrice: product.pointsPrice || 0,
+    grantTier: product.grantTier || 'silver',
+    appKey: product.appKey || '',
     icon: product.icon,
     tag: product.tag || '',
     tone: product.tone || 'blue',
@@ -131,14 +161,28 @@ async function submitProduct() {
     return;
   }
   const priceCents = Math.round(Number(productForm.priceYuan) * 100);
-  if (!Number.isFinite(priceCents) || priceCents < 100 || priceCents > 10000000) {
-    productError.value = '商品价格需在 1–100000 余额之间';
+  if (productForm.paymentMode === 'balance' && (!Number.isFinite(priceCents) || priceCents < 100)) {
+    productError.value = '余额商品价格需在 1–100000 余额之间';
+    return;
+  }
+  const pointsPrice = Math.round(Number(productForm.pointsPrice));
+  if (productForm.paymentMode === 'points' && (!Number.isFinite(pointsPrice) || pointsPrice < 1)) {
+    productError.value = '积分商品价格至少为 1 积分';
+    return;
+  }
+  if (productForm.kind === 'app' && !/^[a-z0-9][a-z0-9-]{1,39}$/.test(productForm.appKey.trim().toLowerCase())) {
+    productError.value = '应用标识只能包含小写字母、数字与连字符（2–40 位）';
     return;
   }
   const payload = {
     name,
     desc: productForm.desc.trim(),
-    priceCents,
+    kind: productForm.kind,
+    paymentMode: productForm.paymentMode,
+    priceCents: Number.isFinite(priceCents) ? priceCents : 0,
+    pointsPrice: Number.isFinite(pointsPrice) ? pointsPrice : 0,
+    grantTier: productForm.kind === 'membership' ? productForm.grantTier : '',
+    appKey: productForm.kind === 'app' ? productForm.appKey.trim().toLowerCase() : '',
     icon: productForm.icon,
     tag: productForm.tag.trim(),
     tone: productForm.tone,
@@ -325,7 +369,7 @@ function deleteTemplate(template) {
       <div v-if="!productList.length" class="admin-empty compact">
         <span class="admin-empty-icon"><AppIcon name="box" /></span>
         <h3>还没有商品</h3>
-        <p>新增商品后，已认证的实名用户即可在积分商城兑换。</p>
+        <p>新增商品后，用户即可在积分商城兑换；实物商品仍要求实名认证。</p>
       </div>
 
       <div v-else class="manage-list">
@@ -337,14 +381,26 @@ function deleteTemplate(template) {
             <strong>
               {{ product.name }}
               <span class="badge" :class="product.active ? 'badge-green' : 'badge-gray'">{{ product.active ? '上架' : '下架' }}</span>
+              <span class="badge badge-gray">{{ kindLabels[product.kind] || '实物' }}</span>
               <span v-if="product.tag" class="badge badge-blue">{{ product.tag }}</span>
             </strong>
             <span>{{ product.desc || '暂无描述' }}</span>
-            <em>{{ product.id }} · 排序 {{ product.sort }} · 库存 {{ stockLabel(product.stock) }}</em>
+            <em>
+              {{ product.id }} · 排序 {{ product.sort }}
+              <template v-if="product.kind === 'goods'"> · 库存 {{ stockLabel(product.stock) }}</template>
+              <template v-else-if="product.kind === 'membership'"> · 升级 {{ product.grantTier }}</template>
+              <template v-else-if="product.kind === 'app'"> · {{ product.appKey }}</template>
+            </em>
           </div>
           <div class="manage-price">
-            <strong>{{ money(product.priceCents) }}</strong>
-            <span>余额</span>
+            <template v-if="product.paymentMode === 'points'">
+              <strong>{{ number(product.pointsPrice) }}</strong>
+              <span>积分</span>
+            </template>
+            <template v-else>
+              <strong>{{ money(product.priceCents) }}</strong>
+              <span>余额</span>
+            </template>
           </div>
           <div class="manage-actions">
             <Button variant="secondary" size="sm" type="button" @click="openEditProduct(product)">编辑</Button>
@@ -400,14 +456,37 @@ function deleteTemplate(template) {
           <span class="field-label">商品名称</span>
           <Input aria-label="商品名称" v-model="productForm.name" maxlength="40" placeholder="例如：INU 帆布袋" />
         </div>
-        <div class="field">
-          <span class="field-label">价格（余额）</span>
-          <Input aria-label="价格（余额）" :model-value="productForm.priceYuan" type="number" min="1" step="0.01" @update:model-value="productForm.priceYuan = Number($event)" />
-        </div>
+        <FxField v-select-label="'商品类型'" label="商品类型">
+          <Select v-model="productForm.kind" :options="kindOptions" />
+        </FxField>
       </div>
       <div class="field">
         <span class="field-label">商品描述</span>
         <Input aria-label="商品描述" v-model="productForm.desc" maxlength="160" placeholder="一句话介绍这件商品" />
+      </div>
+      <div class="settings-fields">
+        <FxField v-select-label="'结算方式'" label="结算方式">
+          <Select v-model="productForm.paymentMode" :options="paymentModeOptions" />
+        </FxField>
+        <div class="field" v-if="productForm.paymentMode === 'points'">
+          <span class="field-label">价格（积分）</span>
+          <Input aria-label="价格（积分）" :model-value="productForm.pointsPrice" type="number" min="1" step="1" @update:model-value="productForm.pointsPrice = Number($event)" />
+        </div>
+        <div class="field" v-else>
+          <span class="field-label">价格（余额）</span>
+          <Input aria-label="价格（余额）" :model-value="productForm.priceYuan" type="number" min="1" step="0.01" @update:model-value="productForm.priceYuan = Number($event)" />
+        </div>
+      </div>
+      <div class="settings-fields" v-if="productForm.kind === 'membership'">
+        <FxField v-select-label="'升级等级'" label="升级等级">
+          <Select v-model="productForm.grantTier" :options="grantTierOptions" />
+        </FxField>
+        <p class="hint">购买后立即升级到所选等级，等级只升不降。</p>
+      </div>
+      <div class="field" v-if="productForm.kind === 'app'">
+        <span class="field-label">应用标识</span>
+        <Input aria-label="应用标识" v-model="productForm.appKey" maxlength="40" placeholder="例如：inu-drive" />
+        <p class="hint">购买后写入用户权益，第三方应用可凭该标识校验授权。</p>
       </div>
       <div class="settings-fields">
         <FxField v-select-label="'图标'" label="图标">
@@ -428,7 +507,7 @@ function deleteTemplate(template) {
         </div>
       </div>
       <div class="settings-fields">
-        <div class="field">
+        <div class="field" v-if="productForm.kind === 'goods'">
           <span class="field-label">库存（-1 表示不限）</span>
           <Input aria-label="库存（-1 表示不限）" :model-value="productForm.stock" type="number" min="-1" max="99999" @update:model-value="productForm.stock = Number($event)" />
         </div>

@@ -72,40 +72,14 @@ export const BENEFITS = [
     key: 'birthday',
     icon: 'i-star',
     title: '生日礼遇',
-    desc: '每年生日当月赠送 500 余额，可叠加使用。',
+    desc: '每年生日当月赠送 500 积分，可叠加使用。',
     min: 10000,
   },
 ];
 
-export const PRODUCTS = [
-  {
-    id: 'dust-pack',
-    name: 'INU 帆布袋',
-    desc: '加厚棉布，通勤与日常购物都合适。',
-    priceCents: 12800,
-    icon: 'i-box',
-    tag: '人气',
-    tone: 'blue',
-  },
-  {
-    id: 'coffee-beans',
-    name: '挂耳咖啡',
-    desc: '中度烘焙，柑橘与可可风味，十包装。',
-    priceCents: 9600,
-    icon: 'i-box',
-    tag: '新品',
-    tone: 'orange',
-  },
-  {
-    id: 'star-projector',
-    name: '桌面氛围灯',
-    desc: '三档色温，触摸调光，适合书桌与床头。',
-    priceCents: 26800,
-    icon: 'i-star',
-    tag: '限定',
-    tone: 'purple',
-  },
-];
+// 商城默认清空，商品统一由管理后台配置，避免空库时回退到演示数据。
+export const PRODUCTS = [];
+
 
 export const NOTIFICATION_TYPES = [
   { key: 'type_security', title: '账户安全提醒', sub: '新设备登录、密码变更与异常操作' },
@@ -123,10 +97,10 @@ export const NOTIFICATION_CHANNELS = [
 ];
 
 export const SUPPLY_TIPS = [
-  { icon: 'i-box', text: '普通会员全场 95 折，结算时自动抵扣。' },
-  { icon: 'i-clock', text: '已提交的订单预计 1–3 个工作日送达。' },
-  { icon: 'i-chart', text: '商城消费可累计积分，100 余额返 5 积分。' },
-  { icon: 'i-shield', text: '未实名账号暂不可下单，请先完成认证。' },
+  { icon: 'i-chart', text: '积分与余额相互独立：积分用于等级与积分商品，余额用于充值、提现与余额商品。' },
+  { icon: 'i-box', text: '实物商品需完成实名认证并填写收货地址，预计 1–3 个工作日送达。' },
+  { icon: 'i-wallet', text: '余额可按站点设置的比例兑换为积分，兑换后不可退回。' },
+  { icon: 'i-star', text: '会员与应用权益购买后立即生效，无需等待物流。' },
 ];
 
 export const SECURITY_ADVICE = [

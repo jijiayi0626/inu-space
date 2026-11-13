@@ -104,7 +104,7 @@ async function confirmVerify() {
     const result = await api.post('/profile/verify');
     syncUser(result.user);
     verifyOpen.value = false;
-    toast('实名认证完成，积分商城权限已解锁');
+    toast('实名认证完成，实物商品兑换权限已解锁');
   } catch (error) {
     toast(error.message, 'error');
   } finally {
@@ -217,7 +217,7 @@ const linkItems = computed(() => [
   <PageHeader title="个人资料" sub="管理你的个人资料与账号关联信息。">
     <template #meta>
       <span v-if="user.inuId" class="badge badge-blue">{{ user.inuId }}</span>
-      <span v-if="user.verified" class="badge badge-green">已认证</span>
+      <span v-if="user.verified && verificationAvailable" class="badge badge-green">已认证</span>
     </template>
   </PageHeader>
 
@@ -300,15 +300,15 @@ const linkItems = computed(() => [
         </div>
       </section>
 
-      <section id="verify" class="card">
+      <section v-if="verificationAvailable" id="verify" class="card">
         <div class="card-head">
           <h2>实名认证</h2>
-          <span class="badge" :class="user.verified ? 'badge-green' : verificationAvailable ? 'badge-red' : 'badge-gray'">
-            {{ user.verified ? '已实名' : verificationAvailable ? '未实名' : '暂未开放' }}
+          <span class="badge" :class="user.verified ? 'badge-green' : 'badge-red'">
+            {{ user.verified ? '已实名' : '未实名' }}
           </span>
         </div>
         <p class="card-desc">
-          完成认证后可解锁积分商城下单、余额提现等权限，并显著提升账户安全等级。
+          完成认证后可解锁实物商品兑换、余额提现等权限，并显著提升账户安全等级。
         </p>
 
         <div v-if="user.verified" class="verify-strip stacked">
@@ -318,7 +318,7 @@ const linkItems = computed(() => [
           </div>
           <div class="verify-item">
             <AppIcon name="shield" />
-            <span class="verify-text"><strong>权限状态</strong><em>积分商城下单、余额提现已解锁</em></span>
+            <span class="verify-text"><strong>权限状态</strong><em>实物商品兑换、余额提现已解锁</em></span>
           </div>
           <div class="verify-item">
             <AppIcon name="check" />
@@ -340,13 +340,9 @@ const linkItems = computed(() => [
           </div>
         </div>
 
-        <p v-if="!user.verified && !verificationAvailable" class="hint verify-closed">
-          管理员已关闭实名认证入口，恢复后可继续完成核验。
-        </p>
-
         <div class="card-actions">
-          <Button variant="primary" v-if="!user.verified" type="button" :disabled="!verificationAvailable" @click="openVerify">
-            {{ verificationAvailable ? '立即认证' : '认证通道已关闭' }}
+          <Button variant="primary" v-if="!user.verified" type="button" @click="openVerify">
+            立即认证
           </Button>
           <RouterLink v-else class="btn btn-ghost" to="/supply">前往积分商城</RouterLink>
           <RouterLink class="btn btn-text" to="/agreements">查看认证协议</RouterLink>
@@ -415,8 +411,8 @@ const linkItems = computed(() => [
         <div class="card-head">
           <h2>资料完善建议</h2>
         </div>
-        <div v-if="!user.verified" class="tip-item">
-          <AppIcon name="idcard" /><span>完成实名认证，可解锁积分商城下单与余额提现。</span>
+        <div v-if="!user.verified && verificationAvailable" class="tip-item">
+          <AppIcon name="idcard" /><span>完成实名认证，可解锁实物商品兑换与余额提现。</span>
         </div>
         <div v-if="!user.phone" class="tip-item">
           <AppIcon name="phone" /><span>绑定手机号，让账号找回与安全验证更可靠。</span>
@@ -447,11 +443,11 @@ const linkItems = computed(() => [
     <dl class="detail-list">
       <div class="detail-row"><dt>认证项目</dt><dd>身份证件 · 人脸识别</dd></div>
       <div class="detail-row"><dt>所属地区</dt><dd>{{ user.region }}</dd></div>
-      <div class="detail-row"><dt>解锁权限</dt><dd>积分商城下单 · 余额提现</dd></div>
+      <div class="detail-row"><dt>解锁权限</dt><dd>实物商品兑换 · 余额提现</dd></div>
     </dl>
     <p class="card-note">
       <AppIcon name="info" />
-      <span>确认后将完成身份核验，并解锁积分商城下单能力。</span>
+      <span>确认后将完成身份核验，并解锁实物商品兑换能力。</span>
     </p>
     <div class="agree-row" @click="verifyAgreed = !verifyAgreed">
       <span class="agree-check" @click.stop>
@@ -529,5 +525,4 @@ const linkItems = computed(() => [
 .tone-dot.tone-green{background:color-mix(in srgb, var(--fx-foreground) 50%, var(--fx-background))}
 .tone-dot.tone-orange{background:color-mix(in srgb, var(--fx-foreground) 34%, var(--fx-background))}
 .tone-dot.active{border-color:var(--fx-background);box-shadow:0 0 0 2px var(--fx-foreground)}
-.verify-closed{margin:0 0 var(--s-3)}
 </style>

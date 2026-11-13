@@ -17,8 +17,24 @@ const user = computed(() => data.value?.user || session.user || {});
 const wallet = computed(() => data.value?.wallet || { balanceCents: user.value.starEnergyCents || 0, cardLast4: '0721' });
 const balance = computed(() => moneyParts(wallet.value.balanceCents));
 const particles = computed(() => user.value.particles || 0);
-const progress = computed(() => Math.min(99, Math.floor((particles.value / 10000) * 100)));
-const remaining = computed(() => Math.max(0, 10000 - particles.value));
+const tierSteps = [
+  { key: 'basic', label: '普通', min: 0 },
+  { key: 'silver', label: '白银', min: 10000 },
+  { key: 'gold', label: '黄金', min: 50000 },
+  { key: 'platinum', label: '铂金', min: 200000 },
+];
+const tierIndex = computed(() => {
+  const index = tierSteps.findIndex((item) => item.key === user.value.tier);
+  return index >= 0 ? index : 0;
+});
+const nextTier = computed(() => tierSteps[tierIndex.value + 1] || null);
+const progress = computed(() => {
+  if (!nextTier.value) return 100;
+  const currentMin = tierSteps[tierIndex.value].min;
+  const span = nextTier.value.min - currentMin;
+  return Math.max(0, Math.min(99, Math.floor(((particles.value - currentMin) / span) * 100)));
+});
+const remaining = computed(() => (nextTier.value ? Math.max(0, nextTier.value.min - particles.value) : 0));
 
 const rechargeOpen = ref(false);
 const rechargeAmount = ref(0);
@@ -87,36 +103,38 @@ async function openActivities() {
   }
 }
 
-const quicks = computed(() => [
-  {
-    to: '/profile#verify',
-    icon: 'idcard',
-    title: '实名认证',
-    sub: user.value.verified
-      ? '已认证 · 权限已解锁'
-      : verificationAvailable.value
-        ? '未实名 · 立即认证'
-        : '认证通道暂未开放',
-  },
-  {
-    to: '/profile#basic',
-    icon: 'pen',
-    title: '修改昵称',
-    sub: `昵称每 ${session.site?.nameChangeDays ?? 30} 天可修改一次`,
-  },
-  {
-    to: '/devices',
-    icon: 'device',
-    title: '登录设备',
-    sub: data.value ? `${data.value.counts?.devices ?? 0} 台设备已绑定` : '正在读取…',
-  },
-  {
-    to: '/agreements',
-    icon: 'file',
-    title: '协议记录',
-    sub: data.value ? `${data.value.counts?.agreementsSigned ?? 0} 份协议已签署` : '正在读取…',
-  },
-]);
+const quicks = computed(() => {
+  const items = [];
+  if (verificationAvailable.value) {
+    items.push({
+      to: '/profile#verify',
+      icon: 'idcard',
+      title: '实名认证',
+      sub: user.value.verified ? '已认证 · 权限已解锁' : '未实名 · 立即认证',
+    });
+  }
+  items.push(
+    {
+      to: '/profile#basic',
+      icon: 'pen',
+      title: '修改昵称',
+      sub: `昵称每 ${session.site?.nameChangeDays ?? 30} 天可修改一次`,
+    },
+    {
+      to: '/devices',
+      icon: 'device',
+      title: '登录设备',
+      sub: data.value ? `${data.value.counts?.devices ?? 0} 台设备已绑定` : '正在读取…',
+    },
+    {
+      to: '/agreements',
+      icon: 'file',
+      title: '协议记录',
+      sub: data.value ? `${data.value.counts?.agreementsSigned ?? 0} 份协议已签署` : '正在读取…',
+    },
+  );
+  return items;
+});
 </script>
 
 <template>
@@ -168,7 +186,7 @@ const quicks = computed(() => [
       </div>
       <div>
         <div class="progress"><span :style="{ width: `${progress}%` }" /></div>
-        <p class="stat-foot">距离白银等级还需 {{ number(remaining) }} 积分</p>
+        <p class="stat-foot">{{ nextTier ? `距离${nextTier.label}等级还需 ${number(remaining)} 积分` : '已达到最高等级' }}</p>
       </div>
     </article>
   </div>
@@ -211,7 +229,7 @@ const quicks = computed(() => [
         <div v-if="!data?.activities?.length" class="inline-empty">
           <span class="inline-empty-icon"><AppIcon name="clock" /></span>
           <h3>动态还很安静</h3>
-          <p>完成一次认证或下单，新的记录就会出现在这里。</p>
+          <p>签署协议或兑换商品后，新的记录就会出现在这里。</p>
         </div>
       </div>
     </section>
@@ -292,7 +310,7 @@ const quicks = computed(() => [
       <div v-if="!activities.length" class="inline-empty">
         <span class="inline-empty-icon"><AppIcon name="clock" /></span>
         <h3>暂无更多动态</h3>
-        <p>完成认证、签署协议或兑换商品后，记录会出现在这里。</p>
+        <p>签署协议或兑换商品后，记录会出现在这里。</p>
       </div>
     </div>
   </BaseModal>

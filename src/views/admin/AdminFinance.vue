@@ -10,7 +10,7 @@ import {
   WITHDRAW_STATUS,
   orderStatusLabel,
 } from '../../lib/adminHelpers';
-import { dateTimeLabel, money } from '../../lib/format';
+import { dateTimeLabel, money, number } from '../../lib/format';
 import { toast } from '../../lib/toast';
 
 const props = defineProps({
@@ -24,6 +24,11 @@ const orderList = computed(() => props.data?.orders || []);
 const withdrawalList = computed(() => props.data?.withdrawals || []);
 const rechargeList = computed(() => props.data?.recharges || []);
 const orderStatusOptions = ORDER_STATUS_OPTIONS.map((item) => ({ label: item.label, value: item.key }));
+const kindLabels = { goods: '实物', membership: '会员', app: '应用' };
+
+function orderCost(order) {
+  return order.paymentMode === 'points' ? `${number(order.pointsSpent)} 积分` : `${money(order.energyCents)} 余额`;
+}
 
 /* ---------- 订单管理 ---------- */
 
@@ -52,7 +57,11 @@ async function submitOrder() {
       carrier: orderForm.carrier.trim(),
       trackingNo: orderForm.trackingNo.trim(),
     });
-    toast(result.refunded ? `订单已更新，已退回 ${money(result.refunded)} 余额` : '订单已更新');
+    const refunded = [
+      result.refunded ? `${money(result.refunded)} 余额` : '',
+      result.refundedPoints ? `${number(result.refundedPoints)} 积分` : '',
+    ].filter(Boolean);
+    toast(refunded.length ? `订单已更新，已退回 ${refunded.join(' 与 ')}` : '订单已更新');
     orderModal.value = false;
     await props.reload({ silent: true });
   } catch (error) {
@@ -99,7 +108,7 @@ async function processWithdraw(action) {
     <div class="admin-section-head">
       <div>
         <h2>财务与订单</h2>
-        <p>用户余额、充值、订单与提现复核，所有金额以余额计。</p>
+        <p>用户余额、积分、充值、订单与提现复核，积分与余额分开统计。</p>
       </div>
     </div>
 
@@ -114,7 +123,11 @@ async function processWithdraw(action) {
       </div>
       <div class="admin-stat">
         <span class="admin-stat-icon is-purple"><AppIcon name="box" /></span>
-        <div><strong>{{ money(finance.supplyCents) }}</strong><span>商品消费（{{ finance.orderCount || 0 }} 单）</span></div>
+        <div><strong>{{ number(finance.supplyPoints || 0) }} 积分</strong><span>积分商品消耗（{{ finance.orderCount || 0 }} 单）</span></div>
+      </div>
+      <div class="admin-stat">
+        <span class="admin-stat-icon is-orange"><AppIcon name="wallet" /></span>
+        <div><strong>{{ money(finance.supplyCents) }}</strong><span>余额商品消费</span></div>
       </div>
       <div class="admin-stat">
         <span class="admin-stat-icon is-orange"><AppIcon name="clock" /></span>
@@ -181,7 +194,7 @@ async function processWithdraw(action) {
               <span class="badge" :class="ORDER_STATUS_TONES[order.status] || 'badge-gray'">{{ orderStatusLabel(order.status) }}</span>
             </strong>
             <span>{{ order.userName }} · {{ order.code }}</span>
-            <em>{{ money(order.energyCents) }} 余额 · {{ dateTimeLabel(order.createdAt) }}{{ order.trackingNo ? ` · ${order.carrier || '快递'} ${order.trackingNo}` : '' }}</em>
+            <em>{{ kindLabels[order.kind] || '实物' }} · {{ orderCost(order) }} · {{ dateTimeLabel(order.createdAt) }}{{ order.trackingNo ? ` · ${order.carrier || '快递'} ${order.trackingNo}` : '' }}</em>
           </div>
           <div class="manage-actions">
             <Button variant="secondary" size="sm" type="button" @click="openOrderAdmin(order)">处理</Button>
@@ -223,11 +236,11 @@ async function processWithdraw(action) {
     <div v-if="orderTarget" class="modal-form">
       <div class="modal-summary">
         <strong>{{ orderTarget.item }}</strong>
-        <span>{{ orderTarget.code }} · {{ orderTarget.userName }} · {{ money(orderTarget.energyCents) }} 余额</span>
+        <span>{{ orderTarget.code }} · {{ orderTarget.userName }} · {{ orderCost(orderTarget) }}</span>
       </div>
       <FxField v-select-label="'订单状态'" label="订单状态">
         <Select v-model="orderForm.status" :options="orderStatusOptions" />
-        <p class="hint">取消已支付订单会自动把余额退回用户钱包；标记签收会通知用户。</p>
+        <p class="hint">取消已支付订单会按原支付方式退回积分或余额；标记签收会通知用户。</p>
       </FxField>
       <div class="settings-fields">
         <div class="field">
