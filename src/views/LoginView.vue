@@ -1,12 +1,12 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Button, Input } from 'fuxsto-design-pro';
 import { Lock, Mail } from 'lucide-vue-next';
 import AppIcon from '../components/AppIcon.vue';
 import BaseModal from '../components/BaseModal.vue';
 import { api } from '../lib/api';
-import { login } from '../lib/session';
+import { login, setUser } from '../lib/session';
 import { toast } from '../lib/toast';
 
 const route = useRoute();
@@ -22,6 +22,8 @@ const oauthLoading = ref('');
 
 const enabledProviders = computed(() => providers.value.filter((provider) => provider.enabled));
 const demoVisible = computed(() => Boolean(site.value?.demoVisible && site.value?.demo?.email));
+const registerEnabled = computed(() => site.value?.features?.register === true);
+const registerBonus = computed(() => Number(site.value?.points?.registerBonus) || 0);
 const notice = computed(() => {
   const value = site.value?.notice;
   return value?.enabled && value?.text ? value : null;
@@ -108,6 +110,54 @@ async function submit() {
     error.value = err.message || '登录失败，请稍后重试';
   } finally {
     loading.value = false;
+  }
+}
+
+const registerOpen = ref(false);
+const registering = ref(false);
+const registerError = ref('');
+const registerForm = reactive({ name: '', email: '', password: '' });
+
+function openRegister() {
+  registerError.value = '';
+  registerForm.name = '';
+  registerForm.email = email.value.trim();
+  registerForm.password = '';
+  registerOpen.value = true;
+}
+
+async function submitRegister() {
+  if (registering.value) return;
+  registerError.value = '';
+  const name = registerForm.name.trim();
+  if ([...name].length < 2 || [...name].length > 20) {
+    registerError.value = '昵称需为 2–20 个字符';
+    return;
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(registerForm.email.trim())) {
+    registerError.value = '请输入有效的邮箱地址';
+    return;
+  }
+  if (registerForm.password.length < 8 || !/[A-Za-z]/.test(registerForm.password) || !/\d/.test(registerForm.password)) {
+    registerError.value = '密码至少 8 位，且需同时包含字母与数字';
+    return;
+  }
+  registering.value = true;
+  try {
+    const data = await api.post('/auth/register', {
+      name,
+      email: registerForm.email.trim(),
+      password: registerForm.password,
+    });
+    setUser(data.user, data.site);
+    registerOpen.value = false;
+    const bonus = Number(data.site?.points?.registerBonus) || 0;
+    toast(bonus ? `注册成功，新人礼 ${bonus} 积分已到账` : '注册成功，欢迎加入 INU');
+    navigateAfterLogin(redirect.value);
+  } catch (error) {
+    registerError.value = error.message || '注册失败，请稍后重试';
+  } finally {
+    registering.value = false;
   }
 }
 
@@ -221,6 +271,9 @@ async function submitReset() {
           </div>
 
           <div class="login-row">
+            <button v-if="registerEnabled" type="button" class="btn-text login-forgot" @click="openRegister">
+              注册账号
+            </button>
             <button type="button" class="btn-text login-forgot" @click="openReset">
               忘记密码
             </button>
@@ -294,6 +347,36 @@ async function submitReset() {
     </section>
   </div>
 
+  <BaseModal v-model="registerOpen" title="注册 INU 账号" width="460px">
+    <form id="registerForm" @submit.prevent="submitRegister">
+      <div class="reset-form">
+        <p class="reset-lead">
+          注册后可管理资料、登录设备与积分权益。新账号即赠
+          <strong>{{ registerBonus }} 积分</strong>，可在会员中心每日签到累积。
+        </p>
+        <div class="field">
+          <span class="field-label">昵称</span>
+          <Input aria-label="昵称" v-model="registerForm.name" type="text" maxlength="20" placeholder="2–20 个字符" :disabled="registering" />
+        </div>
+        <div class="field">
+          <span class="field-label">邮箱</span>
+          <Input aria-label="注册邮箱地址" v-model="registerForm.email" type="email" autocomplete="username" placeholder="you@inu.space" :disabled="registering" />
+        </div>
+        <div class="field">
+          <span class="field-label">密码</span>
+          <Input aria-label="注册密码" v-model="registerForm.password" type="password" autocomplete="new-password" placeholder="至少 8 位，含字母与数字" :disabled="registering" />
+        </div>
+        <p v-if="registerError" class="reset-message">{{ registerError }}</p>
+      </div>
+    </form>
+    <template #footer>
+      <Button variant="secondary" type="button" @click="registerOpen = false">取消</Button>
+      <Button variant="primary" type="button" :loading="registering" loading-text="注册中…" @click="submitRegister">
+        注册并登录
+      </Button>
+    </template>
+  </BaseModal>
+
   <BaseModal v-model="resetOpen" title="找回密码" width="440px">
     <div class="reset-form">
       <p class="reset-lead">
@@ -336,6 +419,7 @@ async function submitReset() {
 .reset-lead a{color:var(--fx-foreground);text-decoration:underline;text-underline-offset:3px}
 .reset-message{padding:var(--s-2) var(--s-3);border-radius:var(--r-sm);font-size:var(--fx-text-xs);line-height:1.6;color:var(--fx-warning);background:color-mix(in srgb, var(--fx-warning) 10%, transparent)}
 .reset-message.done{color:var(--fx-success);background:color-mix(in srgb, var(--fx-success) 10%, transparent)}
+.login-forgot+.login-forgot{margin-left:auto}
 .login-notice{
   display:flex;align-items:flex-start;gap:var(--s-2);margin:var(--s-4) 0 0;
   padding:var(--s-2) var(--s-3);border-radius:var(--r-sm);font-size:var(--fx-text-xs);line-height:1.65;
